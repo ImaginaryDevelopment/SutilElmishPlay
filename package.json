@@ -8,6 +8,7 @@
     "build": "dotnet fable       src/App --run webpack --mode production"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.1.0",
     "webpack": "^5.11.0",
     "webpack-cli": "^4.2.0",
     "webpack-dev-server": "^3.11.0"
