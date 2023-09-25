@@ -1,18 +1,42 @@
 module App
 
+open Browser.Types
 open Sutil
 open Sutil.CoreElements
+
 
 type Model = { Counter : int }
 
 // Model helpers
 let getCounter m = m.Counter
 
+let console = Browser.Dom.console
+let window = Browser.Dom.window
+
 type Message =
     | Increment
     | Decrement
 
-let init () : Model = { Counter = 0 }
+let init () : Model =
+
+    let msalC =
+        Msal.createConfig "" ""
+        // |> Adapters.Msal.createPublicClientApplication
+        // |> Adapters.Msal.PublicClientApplication.Create
+        |> Adapters.Msal.PublicClientApplication
+    console.log msalC
+
+    msalC.initialize().``then``(fun x ->
+        printfn "Finished initialize"
+        console.log x
+
+        msalC.loginPopup(null).``then``(fun v ->
+            printfn "Finished popup"
+            console.log v
+        )
+
+    )
+    { Counter = 0 }
 
 let update (msg : Message) (model : Model) : Model =
     match msg with
