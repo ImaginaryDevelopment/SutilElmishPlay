@@ -1,47 +1,60 @@
 module App
 
 open Browser.Types
+open Fable.Core
+
 open Sutil
 open Sutil.CoreElements
+open Adapters.Msal
 
 
-type Model = { Counter : int }
+type Model = {
+    Counter : int
+    AuthInfo: Result<AuthenticationResult,exn> option
+}
 
 // Model helpers
 let getCounter m = m.Counter
+let getAuthInfo m = m.AuthInfo
 
 let console = Browser.Dom.console
 let window = Browser.Dom.window
 
 type Message =
+    | AuthFinished of Result<AuthenticationResult,exn>
     | Increment
     | Decrement
 
-let init () : Model =
+let init () : Model * Cmd<Message> =
 
     let msalC =
-        Msal.createConfig "" ""
+        Msal.createConfig "" "" window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
         // |> Adapters.Msal.PublicClientApplication.Create
         |> Adapters.Msal.PublicClientApplication
     console.log msalC
 
-    msalC.initialize().``then``(fun x ->
-        printfn "Finished initialize"
-        console.log x
-
-        msalC.loginPopup(null).``then``(fun v ->
+    let msalSetup () =
+        promise {
+            let! _ = msalC.initialize()
+            printfn "Finished initialize"
+            let! ar = msalC.loginPopup(null)
             printfn "Finished popup"
-            console.log v
-        )
+            console.log ar
+            return ar
+        }
 
-    )
-    { Counter = 0 }
+    { Counter = 0; AuthInfo = None }, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
-let update (msg : Message) (model : Model) : Model =
+let update (msg : Message) (model : Model) : Model * Cmd<Message> =
     match msg with
-    |Increment -> { model with Counter = model.Counter + 1 }
-    |Decrement -> { model with Counter = model.Counter - 1 }
+    | Increment -> { model with Counter = model.Counter + 1 }, Cmd.none
+    | Decrement -> { model with Counter = model.Counter - 1 }, Cmd.none
+    | AuthFinished x ->
+        match x with
+        | Error exn -> console.error exn
+        | _ -> ()
+        {model with AuthInfo = Some x}, Cmd.none
 
 // In Sutil, the view() function is called *once*
 let view() =
@@ -49,8 +62,7 @@ let view() =
     // model is an IStore<ModeL>
     // This means we can write to it if we want, but when we're adopting
     // Elmish, we treat it like an IObservable<Model>
-    let model, dispatch = () |> Store.makeElmishSimple init update ignore
-
+    let model, dispatch = () |> Store.makeElmish init update ignore
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ model ]
@@ -65,6 +77,19 @@ let view() =
         // text $"Counter = {model.counter}"
         Bind.el (model |> Store.map getCounter, fun n ->
             text $"Counter = {n}" )
+        Bind.el(model |> Store.map getAuthInfo, fun ai ->
+            match ai with
+            | None ->
+                Html.div [ text "Authorizing via popup..."]
+            | Some (Ok auth) ->
+                Html.div [
+                    text $"Welcome {auth.account.name}"
+                ]
+            | Some (Error exn) ->
+                Html.div[
+                    text "Failed auth"
+                ]
+        )
 
         Html.div [
             Html.button [
