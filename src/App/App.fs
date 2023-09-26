@@ -13,6 +13,11 @@ type Model = {
     AuthInfo: Result<AuthenticationResult,exn> option
 }
 
+[<RequireQualifiedAccess>]
+type MsalMode =
+    | Popup
+    | Redirect
+
 // Model helpers
 let getCounter m = m.Counter
 let getAuthInfo m = m.AuthInfo
@@ -25,8 +30,9 @@ type Message =
     | Increment
     | Decrement
 
-let init () : Model * Cmd<Message> =
+let msalMode = MsalMode.Redirect
 
+let init () : Model * Cmd<Message> =
     let msalC =
         Msal.createConfig "" "" window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
@@ -35,14 +41,32 @@ let init () : Model * Cmd<Message> =
     console.log msalC
 
     let msalSetup () =
-        promise {
-            let! _ = msalC.initialize()
-            printfn "Finished initialize"
-            let! ar = msalC.loginPopup(null)
-            printfn "Finished popup"
-            console.log ar
-            return ar
-        }
+            promise {
+                let! _ = msalC.initialize()
+                printfn "Finished initialize"
+                match msalMode with
+                | MsalMode.Popup ->
+                    let! ar = msalC.loginPopup(null)
+                    printfn "Finished popup"
+                    console.log ar
+                    return ar
+                | MsalMode.Redirect ->
+                    console.log "Redirect Promise"
+                    let! unk = msalC.handleRedirectPromise() 
+                    console.log "unk"
+                    console.log unk
+                    match unk with
+                    | null -> 
+                        let! ar = msalC.loginRedirect(
+                            {| scopes = [| "openid";"api://c9814d6d-c09a-4903-a776-533922c6c8fb/API.Access";
+                                "user.readbasic.all" |] |})
+                        console.log "ar"
+                        console.log ar
+                        invalidOp "Hello world"
+                        return ar :?> AuthenticationResult
+                    | v ->
+                        return v :?> AuthenticationResult
+            }
 
     { Counter = 0; AuthInfo = None }, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
@@ -77,10 +101,15 @@ let view() =
         // text $"Counter = {model.counter}"
         Bind.el (model |> Store.map getCounter, fun n ->
             text $"Counter = {n}" )
+
         Bind.el(model |> Store.map getAuthInfo, fun ai ->
             match ai with
             | None ->
-                Html.div [ text "Authorizing via popup..."]
+                match msalMode with
+                | MsalMode.Popup ->
+                    Html.div [ text "Authorizing via popup..."]
+                | MsalMode.Redirect ->
+                    Html.div [ text "Checking authorization..."]
             | Some (Ok auth) ->
                 Html.div [
                     text $"Welcome {auth.account.name}"

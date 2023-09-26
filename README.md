@@ -1,6 +1,7 @@
 ## Sutil Template for Elmish
 
 The simplest Sutil Elmish application. This gives you a development area and shows how a single page Elmish application is constructed and mounted with minimal styling. See
+
 - src/App/App.fs.
 - public/index.html
 
@@ -12,4 +13,11 @@ The simplest Sutil Elmish application. This gives you a development area and sho
     dotnet tool restore
     npm install
     npm run start
+```
+
+
+### Build
+
+```
+npm run build
 ```

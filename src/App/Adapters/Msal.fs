@@ -49,6 +49,8 @@ type PublicClientApplication(conf:obj)=
     class
         member _.initialize() : Promise<obj> = jsNative // appears to return an option type?
         member _.loginPopup (reqConfig:obj) : Promise<AuthenticationResult> = jsNative
+        member _.loginRedirect(loginRequestConfig: obj) : Promise<AuthenticationResult> = jsNative
+        member _.handleRedirectPromise() : Promise<obj> = jsNative
     end
 
 // @azure/msal-browser - msal-browser.js
