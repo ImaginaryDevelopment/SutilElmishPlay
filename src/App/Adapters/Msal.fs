@@ -1,4 +1,4 @@
-module Adapters.Msal
+module App.Adapters.Msal
 
 open Fable.Core
 open Fable.Core.JS
@@ -33,6 +33,10 @@ type AuthenticationResult = // AuthenticationResult.ts
     abstract scopes: string[]
     abstract tokenType: string
 
+type TokenRequestResult =
+    abstract accessToken: string
+    // new Date(res.expiresOn)
+    abstract expiresOn: obj
 
 // [<Emit("new PublicClientApplication($1)")>]
 // let createPublicClientApplication (msalConfig: obj) : obj = jsNative
@@ -51,6 +55,8 @@ type PublicClientApplication(conf:obj)=
         member _.loginPopup (reqConfig:obj) : Promise<AuthenticationResult> = jsNative
         member _.loginRedirect(loginRequestConfig: obj) : Promise<AuthenticationResult> = jsNative
         member _.handleRedirectPromise() : Promise<obj> = jsNative
+        member _.acquireTokenSilent(request:obj) : Promise<TokenRequestResult> = jsNative
+        member _.getAllAccounts() : AccountInfo[] = jsNative
     end
 
 // @azure/msal-browser - msal-browser.js

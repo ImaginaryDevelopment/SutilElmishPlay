@@ -5,12 +5,13 @@ open Fable.Core
 
 open Sutil
 open Sutil.CoreElements
-open Adapters.Msal
 
+open App.Adapters
+open App.Adapters.Msal
 
 type Model = {
     Counter : int
-    AuthInfo: Result<AuthenticationResult,exn> option
+    AuthInfo: Result<AuthenticationResult*TokenRequestResult,exn> option
 }
 
 [<RequireQualifiedAccess>]
@@ -26,7 +27,7 @@ let console = Browser.Dom.console
 let window = Browser.Dom.window
 
 type Message =
-    | AuthFinished of Result<AuthenticationResult,exn>
+    | AuthFinished of Result<AuthenticationResult*TokenRequestResult,exn>
     | Increment
     | Decrement
 
@@ -34,38 +35,50 @@ let msalMode = MsalMode.Redirect
 
 let init () : Model * Cmd<Message> =
     let msalC =
-        Msal.createConfig "" "" window.location.origin
+        Msal.createConfig App.Adapters.Config.appGuid Config.appAuth window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
         // |> Adapters.Msal.PublicClientApplication.Create
-        |> Adapters.Msal.PublicClientApplication
+        |> Msal.PublicClientApplication
     console.log msalC
 
     let msalSetup () =
             promise {
                 let! _ = msalC.initialize()
                 printfn "Finished initialize"
-                match msalMode with
-                | MsalMode.Popup ->
-                    let! ar = msalC.loginPopup(null)
-                    printfn "Finished popup"
-                    console.log ar
-                    return ar
-                | MsalMode.Redirect ->
-                    console.log "Redirect Promise"
-                    let! unk = msalC.handleRedirectPromise() 
-                    console.log "unk"
-                    console.log unk
-                    match unk with
-                    | null -> 
-                        let! ar = msalC.loginRedirect(
-                            {| scopes = [| "openid";"api://c9814d6d-c09a-4903-a776-533922c6c8fb/API.Access";
-                                "user.readbasic.all" |] |})
-                        console.log "ar"
-                        console.log ar
-                        invalidOp "Hello world"
-                        return ar :?> AuthenticationResult
-                    | v ->
-                        return v :?> AuthenticationResult
+                let! ar =
+                    promise {
+                        match msalMode with
+                        | MsalMode.Popup ->
+                            let! ar = msalC.loginPopup(null)
+                            printfn "Finished popup"
+                            console.log ar
+                            return ar
+                        | MsalMode.Redirect ->
+                            console.log "Redirect Promise"
+                            let! unk = msalC.handleRedirectPromise() 
+                            console.log "unk"
+                            console.log unk
+                            match unk with
+                            | null -> 
+                                let! ar = msalC.loginRedirect(
+                                    {|
+                                        scopes = [| "openid"; Config.apiScope ;
+                                        "user.readbasic.all" |]
+                                        extraQueryParameters = {| domain_hint= Config.apiDomainHint |}|})
+                                console.log "ar"
+                                console.log ar
+                                invalidOp "Hello world"
+                                return ar :?> AuthenticationResult
+                            | v ->
+                                return v :?> AuthenticationResult
+                    }
+                match msalC.getAllAccounts() |> List.ofArray with
+                | [] ->
+                    eprintfn "No Accounts found"
+                    return invalidOp "No accounts found"
+                | h :: _ -> 
+                    let! token = msalC.acquireTokenSilent({| account= h|})
+                    return (ar,token)
             }
 
     { Counter = 0; AuthInfo = None }, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
@@ -96,6 +109,13 @@ let view() =
             Css.fontFamily "Arial, Helvetica, sans-serif"
             Css.margin 20
         ]
+        let mustAuthEl f =
+            Bind.el(model |> Store.map getAuthInfo, fun ai ->
+                match ai with
+                | Some (Ok auth) ->
+                    Html.div [ f auth ]
+                | None -> Html.div []
+            )
 
         // Think of this line as
         // text $"Counter = {model.counter}"
@@ -110,7 +130,7 @@ let view() =
                     Html.div [ text "Authorizing via popup..."]
                 | MsalMode.Redirect ->
                     Html.div [ text "Checking authorization..."]
-            | Some (Ok auth) ->
+            | Some (Ok (auth,token)) ->
                 Html.div [
                     text $"Welcome {auth.account.name}"
                 ]
@@ -118,6 +138,10 @@ let view() =
                 Html.div[
                     text "Failed auth"
                 ]
+        )
+        mustAuthEl (fun (ai,token)->
+            // text $"yay auth"
+            App.Components.Diag.view token.accessToken
         )
 
         Html.div [
