@@ -9,7 +9,7 @@ open Fable.Core.JsInterop
 let fetch<'t> token relPath arg =
     async{
         let! response =
-            fetch (App.Adapters.apiBase + relPath) [
+            fetch (App.Adapters.Config.apiBase + relPath) [
                 requestHeaders [
                     HttpRequestHeaders.Authorization $"Bearer %s{token}"
                 ]] |> Async.AwaitPromise
