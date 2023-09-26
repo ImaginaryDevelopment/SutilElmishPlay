@@ -3,6 +3,7 @@ module App.Components.Diag
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Html
 open App.Adapters.Api
 
 type ErrorType = exn
@@ -64,8 +65,9 @@ let view token =
                 ]
             | RemoteData.Responded(Ok(data)) ->
                 Html.div [
-                    text "yay data?"
                     Html.pre [
+                        // prop.custom("data-status","200")
+                        data_ "status" "200"
                         text (Core.pretty data)
                     ]
                 ]
