@@ -3,6 +3,8 @@ module App.Components.Diag
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Api
+
 type ErrorType = exn
 type RemoteData<'t> =
     | NotRequested
@@ -15,12 +17,12 @@ type RemoteMsg<'tReq, 'tResp> =
 
 type Model = {
     AccessToken: string
-    MyInfoState: RemoteData<obj>
+    MyInfoState: RemoteData<MyInfoResponse>
 }
 
 let getMyInfoState x = x.MyInfoState
 type Msg =
-    | MyInfo of RemoteMsg<unit, obj>
+    | MyInfo of RemoteMsg<unit, MyInfoResponse>
 
 let init token () =
     {AccessToken= token; MyInfoState = NotRequested}, Cmd.none
@@ -29,15 +31,14 @@ module Commands =
     let getMyInfo token =
         async {
             let! resp = App.Adapters.Api.getMyInfo token
-            match resp with
-            | Choice1Of2 value -> return Msg.MyInfo (Response(Ok value))
-            | Choice2Of2 err -> return Msg.MyInfo (Response(Error err))
+            return Msg.MyInfo(Response resp)
         }
 
 let update msg model : Model * Cmd<Msg> =
     match msg,model with
     | MyInfo (Request _), {MyInfoState= InFlight} -> model, Cmd.none // no spamming requests
     | MyInfo (Request x), _ -> {model with MyInfoState = InFlight}, Cmd.OfAsync.perform Commands.getMyInfo model.AccessToken id
+    | MyInfo (Response x ), _ -> {model with MyInfoState = Responded x}, Cmd.none
 
 let view token =
     let (model:IStore<Model>, dispatch) = () |> Store.makeElmish (init token) update ignore
@@ -64,6 +65,13 @@ let view token =
             | RemoteData.Responded(Ok(data)) ->
                 Html.div [
                     text "yay data?"
+                    Html.pre [
+                        text (Core.pretty data)
+                    ]
+                ]
+            | RemoteData.Responded(Error exn) ->
+                Html.divc "error" [
+                    text (Core.pretty exn)
                 ]
         )
     ]
