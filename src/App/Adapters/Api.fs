@@ -2,9 +2,12 @@ module App.Adapters.Api
 
 open Fetch
 open Fetch.Types
+
 open Fable.Core
 open Fable.Core.JsInterop
+
 open Browser
+
 type MyInfoResponse = {
     ObjectID: string
     DisplayName: string

@@ -68,7 +68,7 @@ let init () : Model * Cmd<Message> =
                                 console.log "ar"
                                 console.log ar
                                 invalidOp "Hello world"
-                                return ar :?> AuthenticationResult
+                                return ar
                             | v ->
                                 return v :?> AuthenticationResult
                     }
@@ -114,6 +114,8 @@ let view() =
                 match ai with
                 | Some (Ok auth) ->
                     Html.div [ f auth ]
+                | Some (Error exn) ->
+                    Html.pre [ text (string exn)]
                 | None -> Html.div []
             )
 
