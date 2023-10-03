@@ -3,6 +3,8 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="BReusable.fs" />
+
     <Compile Include="Adapters/Js.fs" />
     <Compile Include="Adapters/Html.fs" />
     <Compile Include="Adapters/Config.fs" />

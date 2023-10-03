@@ -8,7 +8,7 @@ let pretty<'t> (x:'t) =
     JS.JSON.stringify(x, Unchecked.defaultof<_>," ") //JSON.stringify(data, null, "  ") 
 
 let mutable debug = false
-let tryParse<'t> title (x:string) =
+let tryParse<'t> title (x:string) : Result<'t,exn> =
     try
         let parsed = JS.JSON.parse(x)
         if debug then printfn $"%s{title}: Parsed"
