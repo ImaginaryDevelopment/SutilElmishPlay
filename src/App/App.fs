@@ -8,6 +8,7 @@ open Sutil.CoreElements
 
 open App.Adapters
 open App.Adapters.Msal
+open App.Components.Gen
 
 type Model = {
     Counter : int
@@ -33,7 +34,21 @@ type Message =
 
 let msalMode = MsalMode.Redirect
 
+// consider https://stackoverflow.com/questions/68970069/how-to-make-svelte-re-use-a-component-instance-somewhere-else-in-the-dom-instead
+// let mutable components = null
+
+let mustAuthEl model f =
+    Bind.el(model |> Store.map getAuthInfo, fun ai ->
+        match ai with
+        | Some (Ok auth) ->
+            Html.div [ f auth ]
+        | Some (Error exn) ->
+            Html.pre [ text (string exn)]
+        | None -> Html.div []
+)
+
 let init () : Model * Cmd<Message> =
+
     let msalC =
         Msal.createConfig App.Adapters.Config.appGuid Config.appAuth window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
@@ -80,8 +95,7 @@ let init () : Model * Cmd<Message> =
                     let! token = msalC.acquireTokenSilent({| account= h|})
                     return (ar,token)
             }
-
-    { Counter = 0; AuthInfo = None }, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
+    { Counter = 0; AuthInfo = None;}, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
 let update (msg : Message) (model : Model) : Model * Cmd<Message> =
     match msg with
@@ -100,6 +114,33 @@ let view() =
     // This means we can write to it if we want, but when we're adopting
     // Elmish, we treat it like an IObservable<Model>
     let model, dispatch = () |> Store.makeElmish init update ignore
+    let tabStore =
+        let tabParent =
+            {
+                ActiveTab= 0
+                Tabs = [|
+                    {
+                        Label="Root"
+                        Value=0
+                        Component= 
+                            mustAuthEl model (fun (ai,token) ->
+                                App.Components.Root.view token.accessToken
+
+                            )
+                    }
+                    {
+                        Label= "Diag"
+                        Value= 1
+                        Component =
+                            mustAuthEl model (fun (ai,token) ->
+                                App.Components.Diag.view token.accessToken
+                            )
+                    }
+
+                |]
+            }
+        () |> Store.makeElmishSimple (fun _ -> tabParent) Tabs.update ignore
+
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ model ]
@@ -142,8 +183,18 @@ let view() =
                 ]
         )
         mustAuthEl (fun (ai,token)->
+            Html.div [
+                text "Tabs?"
+                App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
+            ]
+        )
+        // this element seems to get reset when the model changes
+        mustAuthEl (fun (ai,token)->
             // text $"yay auth"
-            App.Components.Diag.view token.accessToken
+            Html.div[
+                App.Components.Root.view token.accessToken
+                App.Components.Diag.view token.accessToken
+            ]
         )
 
         Html.div [

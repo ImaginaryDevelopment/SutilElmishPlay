@@ -11,6 +11,8 @@
     <Compile Include="Adapters/Api.fs" />
     <Compile Include="Adapters/Msal.fs" />
 
+    <Compile Include="Components/Gen.fs" />
+    <Compile Include="Components/Root.fs" />
     <Compile Include="Components/Diag.fs" />
 
     <Compile Include="Msal.fs" />
