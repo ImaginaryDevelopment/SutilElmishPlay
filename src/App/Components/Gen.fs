@@ -113,6 +113,7 @@ module Tabs =
             Css.border(px 1., solid, gColor)
             Css.custom("border-radius","0 0 .5rem .5rem")
             Css.borderTopWidth 0
+            Css.width (perc 100.0)
         ]
         rule "ul" [
             Css.displayFlex
@@ -177,6 +178,7 @@ module Tabs =
                     for tab in store.Value.Tabs do
                         if tabValue = tab.Value then
                             Html.li [
+                                Attr.className "box"
                                 tab.Component
                             ]
                 ]

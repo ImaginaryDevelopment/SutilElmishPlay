@@ -188,14 +188,6 @@ let view() =
                 App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
             ]
         )
-        // this element seems to get reset when the model changes
-        mustAuthEl (fun (ai,token)->
-            // text $"yay auth"
-            Html.div[
-                App.Components.Root.view token.accessToken
-                App.Components.Diag.view token.accessToken
-            ]
-        )
 
         Html.div [
             Html.button [
