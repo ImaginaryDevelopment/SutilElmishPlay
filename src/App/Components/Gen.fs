@@ -137,7 +137,7 @@ module Tabs =
         rule "span:hover" [
             Css.borderColor $"#e9ecef #e9ecef {gColor}"
         ]
-        rule "li.active > span" [
+        rule "li.active>span" [
             Css.color "#495057"
             Css.backgroundColor "#fff"
             Css.borderColor $"{gColor} {gColor} #fff"
@@ -167,7 +167,8 @@ module Tabs =
                             if tab.Value = tabValue then
                                 Attr.className "active"
                             Html.span [
-                                if tab.Value <> tabValue then onClick (fun _ -> Msg.TabClick tab.Value |> dispatch) []
+                                if tab.Value <> tabValue then
+                                    onClick (fun _ -> Msg.TabClick tab.Value |> dispatch) []
                                 text tab.Label
                             ]
                         ]

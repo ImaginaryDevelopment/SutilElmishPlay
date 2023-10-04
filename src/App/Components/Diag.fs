@@ -109,7 +109,7 @@ let navRootArr =
         GetState= fun model -> model.States.NavRootState
         SetState= fun model next -> setAState (fun states -> {states with NavRootState = next}) model
         Fetch= App.Adapters.Api.getNavRoot
-        WrapMsg= fun m -> Msg.NavRoot m
+        WrapMsg= Msg.NavRoot
     }
 ()
 
@@ -153,6 +153,49 @@ let update (msg:Msg) (model:Model) : Model * Cmd<Msg> =
 
 let view token =
     let (store:IStore<Model>, dispatch) = () |> Store.makeElmish (init token) update ignore
+    let tabStore =
+        let tabParent =
+            let myInfoComponent =
+                Gen.GenericFetcher.createView {
+                            Title= "MyInfo"
+                            Gma= {
+                                GetState= fun model -> model.States.MyInfoState
+                                WrapMsg= Msg.MyInfo
+                            }
+                            GetObserver= fun store f -> store |> Store.map f
+                            GetReqArg= fun _ -> ()
+                        } (store,dispatch)
+            {
+                ActiveTab= 0
+                Tabs = [|
+                    {
+                        Label="MyInfo"
+                        Value=1
+                        Component= myInfoComponent
+                    }
+                    {
+                        Label="Root"
+                        Value=1
+                        Component= App.Components.Root.view token
+                    }
+                    {
+                        Label= "Acls"
+                        Value= 1
+                        Component = Gen.GenericFetcher.createView {
+                            Title= "Acls"
+                            Gma= {
+                                GetState= fun model -> model.States.AclState
+                                WrapMsg= Msg.Acl
+                            }
+                            GetObserver= fun store f -> store |> Store.map f
+                            GetReqArg= fun _ -> ()
+                        } (store,dispatch)
+                    }
+
+                |]
+            }
+        () |> Store.makeElmishSimple (fun _ -> tabParent) Tabs.update ignore
+
     let _,v = navRootArr
 
 
@@ -162,6 +205,7 @@ let view token =
         Html.div [
             text "Hello diag"
         ]
+        App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
         Bind.el(store |> Store.map getMyInfoState, fun mis ->
             let buttonText = text "My Info"
             match mis with

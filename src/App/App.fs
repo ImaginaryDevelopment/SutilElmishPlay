@@ -122,7 +122,7 @@ let view() =
                     {
                         Label="Root"
                         Value=0
-                        Component= 
+                        Component=
                             mustAuthEl model (fun (ai,token) ->
                                 App.Components.Root.view token.accessToken
 
