@@ -98,6 +98,7 @@ let init () : Model * Cmd<Message> =
     { Counter = 0; AuthInfo = None;}, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
 let update (msg : Message) (model : Model) : Model * Cmd<Message> =
+    printfn "App msg update"
     match msg with
     | Increment -> { model with Counter = model.Counter + 1 }, Cmd.none
     | Decrement -> { model with Counter = model.Counter - 1 }, Cmd.none
@@ -117,15 +118,15 @@ let view() =
     let tabStore =
         let tabParent =
             {
+                Name="AppRoot"
                 ActiveTab= 0
                 Tabs = [|
                     {
-                        Label="Root"
-                        Value=0
+                        Label= "Root"
+                        Value= 0
                         Component=
                             mustAuthEl model (fun (ai,token) ->
                                 App.Components.Root.view token.accessToken
-
                             )
                     }
                     {
@@ -133,7 +134,7 @@ let view() =
                         Value= 1
                         Component =
                             mustAuthEl model (fun (ai,token) ->
-                                App.Components.Diag.view token.accessToken
+                                App.Components.Diag.view { Token = token.accessToken }
                             )
                     }
 
@@ -160,11 +161,6 @@ let view() =
                 | None -> Html.div []
             )
 
-        // Think of this line as
-        // text $"Counter = {model.counter}"
-        Bind.el (model |> Store.map getCounter, fun n ->
-            text $"Counter = {n}" )
-
         Bind.el(model |> Store.map getAuthInfo, fun ai ->
             match ai with
             | None ->
@@ -184,10 +180,14 @@ let view() =
         )
         mustAuthEl (fun (ai,token)->
             Html.div [
-                text "Tabs?"
                 App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
             ]
         )
+
+        // Think of this line as
+        // text $"Counter = {model.counter}"
+        Bind.el (model |> Store.map getCounter, fun n ->
+            text $"Counter = {n}" )
 
         Html.div [
             Html.button [

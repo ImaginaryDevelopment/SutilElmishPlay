@@ -93,6 +93,7 @@ type Tab = {
 }
 
 type TabParent = {
+    Name: string
     ActiveTab: int
     Tabs: Tab[]
 }
@@ -109,7 +110,7 @@ module Tabs =
         let gColor = "#dee2e6"
         rule ".box" [
             Css.marginBottom 10
-            Css.padding 40
+            Css.padding 20
             Css.border(px 1., solid, gColor)
             Css.custom("border-radius","0 0 .5rem .5rem")
             Css.borderTopWidth 0
@@ -147,42 +148,66 @@ module Tabs =
     type Msg =
         | TabClick of int
 
-    let update msg model =
+    let update msg (model: TabParent) =
+        printfn "Tab update: %s" model.Name
         match msg with
         | TabClick i -> {model with ActiveTab=i}
+    let private viewOk (store:IStore<TabParent>) tabValue dispatch =
+        printfn "viewOk:%i" tabValue
+        let menu =
+            Html.ul [
+                data_ "t" "TabView"
+                for tab in store.Value.Tabs do
+                    Html.li [
+                        if tab.Value = tabValue then
+                            Attr.className "active"
+                        Html.span [
+                            if tab.Value <> tabValue then
+                                onClick (fun _ -> Msg.TabClick tab.Value |> dispatch) []
+                            text tab.Label
+                        ]
+                    ]
+            ]
+        Html.div [
+            menu
+            Html.ul [
+                for tab in store.Value.Tabs do
+                    if tabValue = tab.Value then
+                        Html.li [
+                            Attr.className "box"
+                            tab.Component
+                        ]
+            ]
+        ]
+    let private viewDupes (model:TabParent) dupes =
+        Html.ul [
+            data_ "name" model.Name
+            for dupe in dupes do
+                Html.li [text dupe]
+        ]
     // trying to let the parent hold the store, to see if that helps with data loss on rerender
     let view (store:Choice<TabParent,IStore<TabParent>*Dispatch<Msg>>) =
+        let findDupes (tabs: Tab[]) =
+            tabs
+            |> Seq.groupBy(fun v -> v.Value)
+            |> Seq.map(fun (g,v) -> g, v |> List.ofSeq)
+            |> Seq.filter(fun (g,v) -> v.Length > 1)
+            |> Seq.collect snd
+            |> Seq.map(fun v -> v.Label)
+            |> List.ofSeq
+
         let store, dispatch =
             match store with
             | Choice1Of2 tp ->
                 let result = () |> Store.makeElmishSimple (fun _ -> tp) update ignore
                 result
             | Choice2Of2 store -> store
-        Bind.el(store |> Store.map(fun v -> v.ActiveTab), fun tabValue ->
-            let menu =
-                Html.ul [
-                    data_ "t" "TabView"
-                    for tab in store.Value.Tabs do
-                        Html.li [
-                            if tab.Value = tabValue then
-                                Attr.className "active"
-                            Html.span [
-                                if tab.Value <> tabValue then
-                                    onClick (fun _ -> Msg.TabClick tab.Value |> dispatch) []
-                                text tab.Label
-                            ]
-                        ]
-                ]
-            Html.div [
-                menu
-                Html.ul [
-                    for tab in store.Value.Tabs do
-                        if tabValue = tab.Value then
-                            Html.li [
-                                Attr.className "box"
-                                tab.Component
-                            ]
-                ]
-            ]
-        )
-        |> withStyle css
+        match findDupes store.Value.Tabs with
+        | [] -> 
+            Bind.el(store |> Store.map(fun v -> v.ActiveTab), fun tabValue ->
+                viewOk store tabValue dispatch
+            )
+            |> withStyle css
+        | dupes ->
+            viewDupes store.Value dupes
+

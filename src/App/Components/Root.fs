@@ -35,8 +35,9 @@ let update msg model : Model * Cmd<Msg> =
     | NavRootMsg (Request x), _ -> {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot model.AccessToken id
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
+
 let view token =
-    let (model:IStore<Model>, dispatch) = () |> Store.makeElmish (init token) update ignore
+    let model, dispatch = () |> Store.makeElmish (init token) update ignore
 
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
