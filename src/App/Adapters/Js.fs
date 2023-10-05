@@ -7,6 +7,8 @@ open Fable.Core
 let pretty<'t> (x:'t) =
     JS.JSON.stringify(x, Unchecked.defaultof<_>," ") //JSON.stringify(data, null, "  ") 
 
+let serialize<'t> (x:'t) = JS.JSON.stringify(x) //JSON.stringify(data, null, "  ") 
+
 let mutable debug = false
 let tryParse<'t> title (x:string) : Result<'t,exn> =
     try
