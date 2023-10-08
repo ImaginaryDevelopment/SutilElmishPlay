@@ -91,7 +91,21 @@ let view appMode =
                         text (Core.pretty data)
                     ]
                     Html.div[
-                        Bulma.FontAwesome.fa "user fab-user fab"
+                        Html.ul[
+                            Html.li[
+                                Bulma.FontAwesome.fa "user fab-user fab"
+                            ]
+                            Html.li [
+                                Html.ic "fab fab-user fab-solid" []
+
+                            ]
+                            Html.li [
+                                Html.parse """<i class="fa fa-Link"></i>"""
+                            ]
+                            Html.li [
+                                Html.parse """<i class="fa-solid fa-user"></i>"""
+                            ]
+                        ]
                         text "Icon?"
                     ]
                 ]

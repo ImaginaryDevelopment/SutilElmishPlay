@@ -16,4 +16,20 @@ module.exports = {
         contentBase: "./public",
         port: 8080,
     },
+    module: {
+        rules: [
+            {
+                test: /\.(sass|scss|css)$/,
+                oneOf: [
+                    {
+                        test: /\.css$/,
+                        use: [
+                            // MiniCssExtractPlugin.loader,
+                            'css-loader'
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }
