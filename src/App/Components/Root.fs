@@ -10,6 +10,8 @@ open App.Adapters.Api
 
 open App.Components.Gen
 
+let console = Fable.Core.JS.console
+
 type Model = {
     AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
@@ -60,6 +62,15 @@ let update msg model : Model * Cmd<Msg> =
             {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot accessToken id
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
+let tryIcon name =
+    match App.Init.icon { prefix="fab";iconName=name} with
+    | None ->
+        text $"icon not found:{name}"
+    | Some v ->
+        if v.html.Length <> 1 then
+            eprintfn "Unexpected fa html len: %i" v.html.Length
+        let html = v.html[0]
+        Html.parse html
 
 let view appMode =
     let model, dispatch = appMode |> Store.makeElmish init update ignore
@@ -93,16 +104,19 @@ let view appMode =
                     Html.div[
                         Html.ul[
                             Html.li[
-                                Bulma.FontAwesome.fa "user fab-user fab"
+                                Bulma.FontAwesome.fa "monero"
                             ]
                             Html.li [
-                                Html.ic "fab fab-user fab-solid" []
+                                Html.ic "fab fab-ello" []
                             ]
                             Html.li [
-                                Html.parse """<i class="fa fa-Link"></i>"""
+                                tryIcon "Link"
                             ]
                             Html.li [
-                                Html.parse """<i class="fa-solid fa-user"></i>"""
+                                tryIcon "intercom"
+                            ]
+                            Html.li [
+                                tryIcon "fort-awesome"
                             ]
                         ]
                         text "Icon?"
