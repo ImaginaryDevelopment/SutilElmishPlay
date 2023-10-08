@@ -90,6 +90,10 @@ let view appMode =
                         data_ "status" "200"
                         text (Core.pretty data)
                     ]
+                    Html.div[
+                        Bulma.FontAwesome.fa "user fab-user fab"
+                        text "Icon?"
+                    ]
                 ]
             | RemoteData.Responded(Error exn) ->
                 Html.divc "error" [
