@@ -11,7 +11,33 @@ let console = Fable.Core.JS.console
 
 [<Literal>]
 let iconPackagePath = "@fortawesome/free-brands-svg-icons"
+[<Literal>]
+let muiIconPackagePath = "@mui/icons-material"
 
+let private mui:obj = importAll muiIconPackagePath
+
+let allMuiIcons = lazy(
+    keys mui
+    |> Seq.truncate 4
+    |> Seq.map(fun k ->
+        console.log(k)
+        let v : obj = getValue mui k
+        let g : obj = getValue v "type"
+        let elem : obj = getValue g "render" ()
+        let props : obj = getValue elem "props"
+        let children : obj = getValue props "children"
+        let props2 : obj = getValue children "props"
+        let d : string = getValue props2 "d"
+        console.log(d)
+        // console.log(k,Core.pretty v)
+        k,d
+    )
+    |> Map.ofSeq
+    )
+
+// printfn "Mui: %A" allMuiIcons.Value
+let getMuiIcon (name:string) =
+    allMuiIcons.Value |> Map.tryFind name
 
     // "@fortawesome/fontawesome-svg-core": "^6.4.2",
     // "@fortawesome/free-brands-svg-icons": "^6.4.2",
@@ -48,7 +74,7 @@ type IconDescriptor = { prefix: string; iconName: string}
 let icon' (_:obj) : IconDefinition option = import "icon" "@fortawesome/fontawesome-svg-core"
 library.add(fab)
 
-let allIcons = lazy(
+let allFAIcons = lazy(
     keys fab
     |> Seq.map(fun k ->
         // console.log(k)
@@ -59,11 +85,12 @@ let allIcons = lazy(
     |> Set.ofSeq
     )
 // printfn "Printing icon list"
-allIcons.Value|> printfn "%A"
+allFAIcons.Value|> printfn "%A"
 // printfn "Done"
 
 let icon (iconDescriptor: IconDescriptor) =
-    if not (allIcons.Value |> Set.contains iconDescriptor.iconName) then
+
+    if not (allFAIcons.Value |> Set.contains iconDescriptor.iconName) then
         printfn "Warning: %s was not found in icon list" iconDescriptor.iconName
 
     icon' iconDescriptor
