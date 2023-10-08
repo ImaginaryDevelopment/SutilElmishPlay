@@ -223,5 +223,6 @@ let view() =
             ]
         ]]
 
+App.Init.dom |> ignore
 // Start the app
 view() |> Program.mount

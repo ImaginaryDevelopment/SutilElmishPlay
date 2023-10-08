@@ -97,7 +97,6 @@ let view appMode =
                             ]
                             Html.li [
                                 Html.ic "fab fab-user fab-solid" []
-
                             ]
                             Html.li [
                                 Html.parse """<i class="fa fa-Link"></i>"""
