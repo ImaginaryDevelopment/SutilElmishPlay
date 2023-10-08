@@ -62,15 +62,19 @@ let update msg model : Model * Cmd<Msg> =
             {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot accessToken id
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
-let tryIcon name =
-    match App.Init.icon { prefix="fab";iconName=name} with
+let tryIcon x =
+    match App.Init.icon x with
     | None ->
-        text $"icon not found:{name}"
-    | Some v ->
+        text $"icon not found:{x}"
+    | Some (App.Init.FaResult v) ->
         if v.html.Length <> 1 then
             eprintfn "Unexpected fa html len: %i" v.html.Length
         let html = v.html[0]
         Html.parse html
+    | Some (App.Init.MuiResult dPath) ->
+        Svg.path [
+            Attr.path dPath
+        ]
 
 let view appMode =
     let model, dispatch = appMode |> Store.makeElmish init update ignore
@@ -110,13 +114,13 @@ let view appMode =
                                 Html.ic "fab fab-ello" []
                             ]
                             Html.li [
-                                tryIcon "Link"
+                                tryIcon (App.Init.MuiIcon "Link")
                             ]
                             Html.li [
-                                tryIcon "intercom"
+                                tryIcon (App.Init.FAIcon "intercom")
                             ]
                             Html.li [
-                                tryIcon "fort-awesome"
+                                tryIcon (App.Init.FAIcon "fort-awesome")
                             ]
                         ]
                         text "Icon?"

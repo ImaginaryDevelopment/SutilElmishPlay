@@ -14,9 +14,14 @@ let iconPackagePath = "@fortawesome/free-brands-svg-icons"
 [<Literal>]
 let muiIconPackagePath = "@mui/icons-material"
 
+type IconSearchType =
+    | FAIcon of string
+    | MuiIcon of string
+
 let private mui:obj = importAll muiIconPackagePath
 
 let allMuiIcons = lazy(
+    // App.Adapters.Mui.all
     keys mui
     |> Seq.truncate 4
     |> Seq.map(fun k ->
@@ -33,7 +38,7 @@ let allMuiIcons = lazy(
         k,d
     )
     |> Map.ofSeq
-    )
+)
 
 // printfn "Mui: %A" allMuiIcons.Value
 let getMuiIcon (name:string) =
@@ -70,7 +75,13 @@ type IconDefinition =
     abstract iconName: string
     abstract icon: obj[]
     abstract member html: string[]
+
+type IconResultType =
+    | FaResult of IconDefinition
+    | MuiResult of string
+
 type IconDescriptor = { prefix: string; iconName: string}
+
 let icon' (_:obj) : IconDefinition option = import "icon" "@fortawesome/fontawesome-svg-core"
 library.add(fab)
 
@@ -85,14 +96,23 @@ let allFAIcons = lazy(
     |> Set.ofSeq
     )
 // printfn "Printing icon list"
-allFAIcons.Value|> printfn "%A"
+// allFAIcons.Value|> printfn "%A"
 // printfn "Done"
 
-let icon (iconDescriptor: IconDescriptor) =
+let icon =
+    function
+    | FAIcon iconName ->
+        if not (allFAIcons.Value |> Set.contains iconName) then
+            printfn "Warning: %s was not found in fa icon list" iconName
+        icon' {prefix= "fab"; iconName= iconName}
+        |> Option.map FaResult
+    | MuiIcon name ->
+        match allMuiIcons.Value |> Map.tryFind name with
+        | None ->
+            eprintfn "Warning: %s was not found in mui icon list" name
+            None
+        | Some d ->
+            Some (MuiResult d)
 
-    if not (allFAIcons.Value |> Set.contains iconDescriptor.iconName) then
-        printfn "Warning: %s was not found in icon list" iconDescriptor.iconName
-
-    icon' iconDescriptor
 // dom.i2svg()
 dom.watch()

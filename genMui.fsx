@@ -61,7 +61,9 @@ targets
     //     appendLine($"// {f}")
     //     appendLine($"let {k}=@\"{v}\"")
     // )
-    appendLine "let all = dict["
+    appendLine "module App.Adapters.Mui"
+    appendLine ""
+    appendLine "let all = Map.ofSeq ["
     m |> Map.iter(fun f (k,v)->
         appendLine($"    // {f}")
         appendLine $"    \"{k}\",\"{v}\""
