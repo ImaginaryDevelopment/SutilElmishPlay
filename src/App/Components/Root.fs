@@ -4,13 +4,14 @@ module App.Components.Root
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Config
 open App.Adapters.Html
 open App.Adapters.Api
 
 open App.Components.Gen
 
 type Model = {
-    AccessToken: string
+    AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
 }
 
@@ -18,8 +19,27 @@ let getNavRootState x = x.NavRootState
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
 
-let init token () =
-    {AccessToken= token; NavRootState = NotRequested}, Cmd.none
+let dummyData: NavRootResponse[] =
+    Array.ofList [
+        {
+            Id="1"
+            Path="Path"
+            Parent="Parent"
+            Type="IDK"
+            Name="Name"
+            Description="Description"
+            Icon="user"
+            Weight=0
+            Url="url"
+            HasUrlKey= false
+            Acls= Array.empty
+        }
+
+
+    ]
+
+let init appMode =
+    {AppMode = appMode; NavRootState = NotRequested}, Cmd.none
 
 module Commands =
     let getNavRoot token =
@@ -32,12 +52,17 @@ module Commands =
 let update msg model : Model * Cmd<Msg> =
     match msg,model with
     | NavRootMsg (Request _), {NavRootState= InFlight} -> model, Cmd.none // no spamming requests
-    | NavRootMsg (Request x), _ -> {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot model.AccessToken id
+    | NavRootMsg (Request x), _ ->
+        match model.AppMode with
+        | ConfigType.Demo ->
+            {model with NavRootState=Responded (Ok dummyData)}, Cmd.none
+        | ConfigType.Auth accessToken ->
+            {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot accessToken id
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
 
-let view token =
-    let model, dispatch = () |> Store.makeElmish (init token) update ignore
+let view appMode =
+    let model, dispatch = appMode |> Store.makeElmish init update ignore
 
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.

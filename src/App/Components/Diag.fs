@@ -3,6 +3,9 @@ module App.Components.Diag
 open Sutil
 open Sutil.CoreElements
 
+open BReusable
+
+open App.Adapters.Config
 open App.Adapters.Html
 open App.Adapters.Api
 
@@ -16,7 +19,7 @@ type RemoteStates = {
 }
 
 type Model = {
-    AccessToken: string
+    AppMode: ConfigType<string>
     States: RemoteStates
 }
 
@@ -28,12 +31,13 @@ type Msg =
 // enable mass scaffolding of api endpoint testers
 
 let getMyInfoState x = x.States.MyInfoState
-type DiagInitArgs= {
-    Token: string
+
+type DiagInitArgs = {
+    AppMode: ConfigType<string>
 }
 
-let init dia =
-    {AccessToken=dia.Token;States={MyInfoState=NotRequested;NavRootState=NotRequested;AclState=NotRequested}}, Cmd.none
+let init (dia: DiagInitArgs) =
+    {AppMode=dia.AppMode;States={MyInfoState=NotRequested;NavRootState=NotRequested;AclState=NotRequested}}, Cmd.none
 
 module Commands =
     let getMyInfo token =
@@ -58,8 +62,11 @@ let updateNavRoot, viewNavRoot =
         Gen.GenericFetcher.createUpdate {
             Gma= gma
             SetState= fun (model:Model) next -> model |> setAState (fun states -> {states with NavRootState= next})// 'tModel -> RemoteData<'t> -> 'tModel
-            GetArgs= fun model -> model.AccessToken
-            Fetch= App.Adapters.Api.getNavRoot
+            GetArgs= fun model -> model.AppMode
+            Fetch=
+                function
+                | ConfigType.Auth token -> App.Adapters.Api.getNavRoot token
+                | ConfigType.Demo -> Async.ofResult (Ok Root.dummyData)
         }
     let view =
         Gen.GenericFetcher.createView {
@@ -80,8 +87,11 @@ let updateAcl, viewAcls =
         Gen.GenericFetcher.createUpdate {
             Gma= gma
             SetState= fun (model:Model) next -> model |> setAState (fun states -> {states with AclState= next})// 'tModel -> RemoteData<'t> -> 'tModel
-            GetArgs= fun model -> model.AccessToken
-            Fetch= App.Adapters.Api.getAcls // 'tFetchArg -> Async<Result<'t,ErrorType>>
+            GetArgs= fun model -> model.AppMode
+            Fetch=
+                function
+                | Demo -> Async.ofResult (Ok Array.empty)
+                | Auth token -> App.Adapters.Api.getAcls token // 'tFetchArg -> Async<Result<'t,ErrorType>>
         }
     let view =
         Gen.GenericFetcher.createView
@@ -97,7 +107,12 @@ let update (msg:Msg) (model:Model) : Model * Cmd<Msg> =
     printfn "Diag update"
     match msg, model with
     | MyInfo (Request _), {States={MyInfoState= InFlight}} -> model, Cmd.none // no spamming requests
-    | MyInfo (Request _), _ -> model |> setAState (fun states -> {states with MyInfoState = InFlight}), Cmd.OfAsync.perform Commands.getMyInfo model.AccessToken id
+    | MyInfo (Request _), _ ->
+        match model.AppMode with
+        | Auth token ->
+            model |> setAState (fun states -> {states with MyInfoState = InFlight}), Cmd.OfAsync.perform Commands.getMyInfo token id
+        | Demo ->
+            model |> setAState (fun states -> {states with MyInfoState = Responded (Error (System.Exception("Not Implemented")))}), Cmd.none
     | MyInfo (Response x ), _ -> model |> setAState (fun states -> {states with MyInfoState = Responded x}), Cmd.none
 
     | NavRoot rr, model ->

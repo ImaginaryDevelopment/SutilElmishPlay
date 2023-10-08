@@ -7,6 +7,7 @@ open Sutil
 open Sutil.CoreElements
 
 open App.Adapters
+open App.Adapters.Config
 open App.Adapters.Msal
 open App.Components.Gen
 
@@ -14,6 +15,8 @@ type Model = {
     Counter : int
     AuthInfo: Result<AuthenticationResult*TokenRequestResult,exn> option
 }
+
+let appMode = App.Adapters.Config.ConfigType.Demo
 
 [<RequireQualifiedAccess>]
 type MsalMode =
@@ -38,13 +41,19 @@ let msalMode = MsalMode.Redirect
 // let mutable components = null
 
 let mustAuthEl model f =
-    Bind.el(model |> Store.map getAuthInfo, fun ai ->
-        match ai with
-        | Some (Ok auth) ->
-            Html.div [ f auth ]
-        | Some (Error exn) ->
-            Html.pre [ text (string exn)]
-        | None -> Html.div []
+    match appMode with
+    | Demo ->
+        Html.div [
+            f Demo
+        ]
+    | ConfigType.Auth _ ->
+        Bind.el(model |> Store.map getAuthInfo, fun ai ->
+            match ai with
+            | Some (Ok auth) ->
+                Html.div [ f (Auth auth) ]
+            | Some (Error exn) ->
+                Html.pre [ text (string exn)]
+            | None -> Html.div []
 )
 
 let init () : Model * Cmd<Message> =
@@ -70,11 +79,11 @@ let init () : Model * Cmd<Message> =
                             return ar
                         | MsalMode.Redirect ->
                             console.log "Redirect Promise"
-                            let! unk = msalC.handleRedirectPromise() 
+                            let! unk = msalC.handleRedirectPromise()
                             console.log "unk"
                             console.log unk
                             match unk with
-                            | null -> 
+                            | null ->
                                 let! ar = msalC.loginRedirect(
                                     {|
                                         scopes = [| "openid"; Config.apiScope ;
@@ -91,7 +100,7 @@ let init () : Model * Cmd<Message> =
                 | [] ->
                     eprintfn "No Accounts found"
                     return invalidOp "No accounts found"
-                | h :: _ -> 
+                | h :: _ ->
                     let! token = msalC.acquireTokenSilent({| account= h|})
                     return (ar,token)
             }
@@ -125,16 +134,24 @@ let view() =
                         Label= "Root"
                         Value= 0
                         Component=
-                            mustAuthEl model (fun (ai,token) ->
-                                App.Components.Root.view token.accessToken
+                            mustAuthEl model (
+                                function
+                                | Auth (ai,token) ->
+                                    App.Components.Root.view (Auth token.accessToken)
+                                | Demo ->
+                                    App.Components.Root.view Demo
                             )
                     }
                     {
                         Label= "Diag"
                         Value= 1
                         Component =
-                            mustAuthEl model (fun (ai,token) ->
-                                App.Components.Diag.view { Token = token.accessToken }
+                            mustAuthEl model (
+                                function
+                                | Auth (ai,token) ->
+                                    App.Components.Diag.view { AppMode = Auth token.accessToken }
+                                | Demo ->
+                                    App.Components.Diag.view { AppMode = Demo }
                             )
                     }
 
@@ -176,6 +193,7 @@ let view() =
             | Some (Error exn) ->
                 Html.div[
                     text "Failed auth"
+                    App.Components.Root.view ConfigType.Demo
                 ]
         )
         mustAuthEl (fun (ai,token)->

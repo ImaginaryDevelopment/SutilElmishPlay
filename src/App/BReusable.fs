@@ -15,3 +15,7 @@ module Async =
         x
         |> Async.Catch
         |> map Result.ofChoice
+    let ofResult x =
+        async {
+            return x
+        }
