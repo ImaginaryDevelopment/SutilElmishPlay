@@ -65,17 +65,9 @@ module FA =
 
     library.add fab
 
-
-module UIFab =
-    let initialize () =
-        import "initializeIcons"
-
 type IconResultType =
     | FaResult of FAIconDefinition
     | MuiResult of string
-
-
-
 
 
 let tryFindIcon (value:string) =
