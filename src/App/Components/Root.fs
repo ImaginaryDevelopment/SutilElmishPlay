@@ -37,12 +37,10 @@ let dummyData: NavRootResponse[] =
             HasUrlKey= false
             Acls= Array.empty
         }
-
-
     ]
 
 let init appMode =
-    {AppMode = appMode; NavRootState = NotRequested}, Cmd.none
+    {AppMode = appMode; NavRootState = NotRequested; FocusedItem = None}, Cmd.none
 
 module Commands =
     let getNavRoot token =
@@ -73,13 +71,17 @@ let tryIcon x =
         let html = v.html[0]
         Html.parse html
     | Some (App.Init.MuiResult dPath) ->
-        Svg.path [
-            Attr.path dPath
+        printfn "using dPath = '%s'" dPath
+
+        Svg.svg [
+                Svg.path [
+                    Attr.d dPath
+                ]
         ]
 
 let view appMode =
     let model, dispatch = appMode |> Store.makeElmish init update ignore
-
+    let selected : IStore<NavRootResponse option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ model ]
@@ -99,7 +101,7 @@ let view appMode =
                     Attr.disabled true
                     buttonText
                 ]
-            | RemoteData.Responded(Ok(data)) ->
+            | RemoteData.Responded(Ok data) ->
                 Html.div [
                     Html.pre [
                         // prop.custom("data-status","200")

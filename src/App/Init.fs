@@ -20,38 +20,11 @@ type IconSearchType =
 
 let private mui:obj = importAll muiIconPackagePath
 
-let allMuiIcons = lazy(
-    // App.Adapters.Mui.all
-    keys mui
-    |> Seq.truncate 4
-    |> Seq.map(fun k ->
-        console.log(k)
-        let v : obj = getValue mui k
-        let g : obj = getValue v "type"
-        let elem : obj = getValue g "render" ()
-        let props : obj = getValue elem "props"
-        let children : obj = getValue props "children"
-        let props2 : obj = getValue children "props"
-        let d : string = getValue props2 "d"
-        console.log(d)
-        // console.log(k,Core.pretty v)
-        k,d
-    )
-    |> Map.ofSeq
-)
+let allMuiIcons = App.Adapters.Mui.all
 
 // printfn "Mui: %A" allMuiIcons.Value
 let getMuiIcon (name:string) =
-    allMuiIcons.Value |> Map.tryFind name
-
-    // "@fortawesome/fontawesome-svg-core": "^6.4.2",
-    // "@fortawesome/free-brands-svg-icons": "^6.4.2",
-// importAll "@fortawesome/fontawesome-svg-core"
-// importAll "@fortawesome/free-brands-svg-icons"
-// importAll "@fortawesome/fontawesome-free/js/all.min.js"
-// import { library } from '@fortawesome/fontawesome-svg-core'
-// importAll "@fortawesome/fontawesome-svg-core\\styles.css"
-// let fab:obj = import "fab" "@fortawesome/free-brands-svg-icons"
+    allMuiIcons |> Map.tryFind name
 
 let private fab: obj = import "fab" iconPackagePath
 type FALib =
@@ -64,11 +37,6 @@ type FADom =
 
 // https://stackoverflow.com/questions/52376720/how-to-make-font-awesome-5-work-with-webpack
 let dom:FADom = import "dom" "@fortawesome/fontawesome-svg-core"
-// // node_modules/@fortawesome/fontawesome-free/css/all.css
-// Fable.Core.JsInterop.importAll "@fortawesome/fontawesome-free/css/all.css"
-
-// needs css-loader:
-// Fable.Core.JsInterop.importAll "@fortawesome/fontawesome-svg-core/styles.css"
 
 let library : FALib = import "library" "@fortawesome/fontawesome-svg-core"
 
@@ -97,19 +65,16 @@ let allFAIcons = lazy(
     )
     |> Set.ofSeq
     )
-// printfn "Printing icon list"
-// allFAIcons.Value|> printfn "%A"
-// printfn "Done"
 
 let icon =
     function
     | FAIcon iconName ->
         if not (allFAIcons.Value |> Set.contains iconName) then
-            printfn "Warning: %s was not found in fa icon list" iconName
+            eprintfn "Warning: %s was not found in fa icon list" iconName
         icon' {prefix= "fab"; iconName= iconName}
         |> Option.map FaResult
     | MuiIcon name ->
-        match allMuiIcons.Value |> Map.tryFind name with
+        match allMuiIcons |> Map.tryFind name with
         | None ->
             eprintfn "Warning: %s was not found in mui icon list" name
             None
