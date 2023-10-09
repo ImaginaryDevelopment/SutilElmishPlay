@@ -16,13 +16,20 @@ let console = Fable.Core.JS.console
 type Model = {
     AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
+    NavPathState : RemoteData<string*NavRootResponse[]>
     FocusedItem : NavRootResponse option
+    // this should not be able to change while a request is in flight
+    Path: string
 }
 
 let getNavRootState x = x.NavRootState
 let getFocusedItem x = x.FocusedItem
+let getNavPathState x = x.NavPathState
+let getPath x = x.Path
+
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
+    | NavPathMsg of RemoteMsg<unit, NavRootResponse[]>
 
 let dummyData: NavRootResponse[] =
     Array.ofList [
@@ -50,17 +57,29 @@ module Commands =
                 return Msg.NavRootMsg resp2
             }
         Cmd.OfAsync.perform a () id
+    let getNavPath (token,path) =
+        let a () =
+            async {
+                let! resp = App.Adapters.Api.getNavPath token path
+                let resp2 = Response resp // |> Result.map(fun items -> path,items) |> Response
+                return Msg.NavPathMsg resp2
+            }
+        Cmd.OfAsync.perform a () id
 
 let init appMode =
     let cmd: Cmd<Msg> = 
         match appMode with
         | Demo -> Cmd.none
         | Auth token -> Commands.getNavRoot token
-    {AppMode = appMode; NavRootState = NotRequested; FocusedItem = None}, cmd
+    {AppMode = appMode; NavRootState = NotRequested; NavPathState = NotRequested; FocusedItem = None; Path = ""}, cmd
 
 let update msg model : Model * Cmd<Msg> =
     match msg,model with
+    // block actions
     | NavRootMsg (Request _), {NavRootState= InFlight} -> model, Cmd.none // no spamming requests
+    | NavPathMsg (Request _), {NavPathState= InFlight} -> model, Cmd.none
+
+    // actions
     | NavRootMsg (Request x), _ ->
         match model.AppMode with
         | ConfigType.Demo ->
@@ -68,6 +87,17 @@ let update msg model : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken ->
             {model with NavRootState= InFlight}, Commands.getNavRoot accessToken
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
+
+    | NavPathMsg (Request ()), _ ->
+        match model.AppMode with
+        | ConfigType.Demo ->
+            {model with NavPathState= Responded(Ok (model.Path,dummyData))}, Cmd.none
+        | ConfigType.Auth accessToken ->
+            {model with NavPathState= InFlight}, Commands.getNavPath (accessToken, model.Path)
+    | NavPathMsg (Response x), _ ->
+        let v = x |> Result.map(fun items -> model.Path, items)
+        {model with NavPathState= Responded v}, Cmd.none
+
 
 module Renders =
 
@@ -77,8 +107,6 @@ module Renders =
     let renderRootView items =
         Html.div [
             // https://fontawesome.com/docs/web/setup/get-started
-            Html.parse """<i class="fa-solid fa-user"></i>"""
-            Html.parse """<p><i class="fa fa-solid fa-lastfm"></i></p>"""
             Html.ul [
                 for item in items do
                     Html.li [
@@ -115,13 +143,41 @@ module Renders =
 
 let view appMode =
     let model, dispatch = appMode |> Store.makeElmish init update ignore
-    let selected : IStore<NavRootResponse option> = Store.make( None )
+
+    // let selected : IStore<NavRootResponse option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ model ]
         data_ "file" "Root"
         Html.div [
-            text "Hello root"
+            Html.label [
+                text "Path:"
+            ]
+            // display the path input properly based on current state
+            Bind.el(model |> Store.map getNavPathState,
+                function
+                | InFlight ->
+                    Html.input [
+                        type' "text"
+                        // Attr.value path
+                        Bind.attr ("value", model |> Store.map getPath)
+                    ]
+
+                | Responded (Error _)
+                | NotRequested ->
+                    Html.input [
+                        type' "text"
+                        autofocus
+                        Bind.attr ("value", model |> Store.map getPath)
+                    ]
+
+                | Responded(Ok(path,_ )) ->
+                    Html.input [
+                        type' "text"
+                        // Attr.value path
+                        Bind.attr ("value", model |> Store.map getPath)
+                    ]
+            )
         ]
         Bind.el(model |> Store.map getNavRootState, fun mis ->
             let buttonText = text "Nav Root"
