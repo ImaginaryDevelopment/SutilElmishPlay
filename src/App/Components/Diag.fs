@@ -10,6 +10,7 @@ open App.Adapters.Html
 open App.Adapters.Api
 
 open App.Components.Gen
+open App.Components.Gen.Icons
 
 
 type RemoteStates = {
@@ -166,5 +167,25 @@ let view dia =
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ store; di ]
+        Html.ul[
+            Html.li[
+                data_ "icon" "intentionally missing"
+                Bulma.FontAwesome.fa "monero"
+            ]
+            Html.li [
+                Html.div [
+                    tryIcon (App.Init.MuiIcon "Link")
+                ]
+            ]
+            Html.li [
+                tryIcon (App.Init.FAIcon "intercom")
+            ]
+            Html.li [
+                Html.div [
+                    data_ "icon" "fort-awesome"
+                    tryIcon (App.Init.FAIcon "fort-awesome")
+                ]
+            ]
+        ]
         App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
     ]

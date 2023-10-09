@@ -93,27 +93,6 @@ let view appMode =
                         text (Core.pretty data)
                     ]
                     Html.div[
-                        Html.ul[
-                            Html.li[
-                                Bulma.FontAwesome.fa "monero"
-                            ]
-                            Html.li [
-                                Html.ic "fab fab-ello" []
-                            ]
-                            Html.li [
-                                Html.div [
-                                    tryIcon (App.Init.MuiIcon "Link")
-                                ]
-                            ]
-                            Html.li [
-                                tryIcon (App.Init.FAIcon "intercom")
-                            ]
-                            Html.li [
-                                Html.div [
-                                    tryIcon (App.Init.FAIcon "fort-awesome")
-                                ]
-                            ]
-                        ]
                         text "Icon?"
                     ]
                 ]
