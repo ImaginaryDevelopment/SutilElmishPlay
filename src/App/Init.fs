@@ -66,7 +66,9 @@ type FADom =
 let dom:FADom = import "dom" "@fortawesome/fontawesome-svg-core"
 // // node_modules/@fortawesome/fontawesome-free/css/all.css
 // Fable.Core.JsInterop.importAll "@fortawesome/fontawesome-free/css/all.css"
-Fable.Core.JsInterop.importAll "@fortawesome/fontawesome-svg-core/styles.css"
+
+// needs css-loader:
+// Fable.Core.JsInterop.importAll "@fortawesome/fontawesome-svg-core/styles.css"
 
 let library : FALib = import "library" "@fortawesome/fontawesome-svg-core"
 

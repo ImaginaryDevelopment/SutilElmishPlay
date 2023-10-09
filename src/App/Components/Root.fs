@@ -15,6 +15,7 @@ let console = Fable.Core.JS.console
 type Model = {
     AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
+    FocusedItem : NavRootResponse option
 }
 
 let getNavRootState x = x.NavRootState

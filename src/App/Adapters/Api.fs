@@ -77,7 +77,7 @@ let fetch fetchArgs f =
             |> Option.defaultValue fetchArgs.RelPath
 
         let! response =
-            fetch (App.Adapters.Config.apiBase + relUrl) [
+            fetch (App.Adapters.Config.authConfig.ApiBase + relUrl) [
                 requestHeaders [
                     HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}"
                 ]] |> Async.AwaitPromise

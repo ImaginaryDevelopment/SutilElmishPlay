@@ -55,11 +55,11 @@ let mustAuthEl model f =
                 Html.pre [ text (string exn)]
             | None -> Html.div []
 )
-
+App.Adapters.Mui.all |> ignore
 let init () : Model * Cmd<Message> =
 
     let msalC =
-        Msal.createConfig App.Adapters.Config.appGuid Config.appAuth window.location.origin
+        Msal.createConfig App.Adapters.Config.authConfig.AppGuid Config.authConfig.AppAuth window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
         // |> Adapters.Msal.PublicClientApplication.Create
         |> Msal.PublicClientApplication
@@ -86,9 +86,9 @@ let init () : Model * Cmd<Message> =
                             | null ->
                                 let! ar = msalC.loginRedirect(
                                     {|
-                                        scopes = [| "openid"; Config.apiScope ;
+                                        scopes = [| "openid"; Config.authConfig.ApiScope;
                                         "user.readbasic.all" |]
-                                        extraQueryParameters = {| domain_hint= Config.apiDomainHint |}|})
+                                        extraQueryParameters = {| domain_hint= Config.authConfig.ApiDomainHint |}|})
                                 console.log "ar"
                                 console.log ar
                                 invalidOp "Hello world"
