@@ -16,7 +16,7 @@ type Model = {
     AuthInfo: Result<AuthenticationResult*TokenRequestResult,exn> option
 }
 
-let appMode = App.Adapters.Config.ConfigType.Demo
+let appMode = App.Adapters.Config.ConfigType.Auth Config.authConfig // App.Adapters.Config.ConfigType.Demo
 
 [<RequireQualifiedAccess>]
 type MsalMode =

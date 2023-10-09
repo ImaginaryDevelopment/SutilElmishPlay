@@ -5,6 +5,7 @@
         "fortawesome",
         "Msal",
         "perc",
-        "Sutil"
+        "Sutil",
+        "uifabric"
     ]
 }

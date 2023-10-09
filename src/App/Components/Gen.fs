@@ -105,7 +105,7 @@ module Icons =
     let tryIcon x =
         match App.Init.icon x with
         | None ->
-            text $"icon not found:{x}"
+            text $"missing:{x}"
         | Some (App.Init.FaResult v) ->
             if v.html.Length <> 1 then
                 eprintfn "Unexpected fa html len: %i" v.html.Length

@@ -41,9 +41,6 @@ let dummyData: NavRootResponse[] =
         }
     ]
 
-let init appMode =
-    {AppMode = appMode; NavRootState = NotRequested; FocusedItem = None}, Cmd.none
-
 module Commands =
     let getNavRoot token =
         let a () =
@@ -54,9 +51,12 @@ module Commands =
             }
         Cmd.OfAsync.perform a () id
 
-let init token =
-    let cmd: Cmd<Msg> = Commands.getNavRoot token
-    {AccessToken= token; NavRootState= InFlight; FocusedItem= None}, cmd
+let init appMode =
+    let cmd: Cmd<Msg> = 
+        match appMode with
+        | Demo -> Cmd.none
+        | Auth token -> Commands.getNavRoot token
+    {AppMode = appMode; NavRootState = NotRequested; FocusedItem = None}, cmd
 
 let update msg model : Model * Cmd<Msg> =
     match msg,model with
@@ -66,13 +66,14 @@ let update msg model : Model * Cmd<Msg> =
         | ConfigType.Demo ->
             {model with NavRootState=Responded (Ok dummyData)}, Cmd.none
         | ConfigType.Auth accessToken ->
-            {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot accessToken id
+            {model with NavRootState= InFlight}, Commands.getNavRoot accessToken
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
 module Renders =
 
     let renderLabeledField name value =
         Html.div [ Html.label [text name]; Html.pre [text value]]
+
     let renderRootView items =
         Html.div [
             // https://fontawesome.com/docs/web/setup/get-started
@@ -81,9 +82,10 @@ module Renders =
             Html.ul [
                 for item in items do
                     Html.li [
+                        data_ "rootItem.Icon" item.Icon
                         data_ "rootItem" (Core.serialize item)
                         for (name,v) in
-                            [   
+                            [
                                 "Id", string item.Id
                                 "Name", string item.Name
                                 "Path", string item.Path
@@ -93,7 +95,10 @@ module Renders =
                                 "Icon", string item.Icon
                                 "Weight", string item.Weight
                             ] do
-                            Bulma.FontAwesome.fa item.Icon
+                            // assuming they are all mui
+                            tryIcon (App.Init.tryFindIcon item.Icon |> Option.defaultWith (fun () -> App.Init.IconSearchType.FAIcon item.Icon))
+
+                            // Bulma.FontAwesome.fa item.Icon
                             renderLabeledField name v
                         for acl in item.Acls do
                             Html.ul [
@@ -102,6 +107,7 @@ module Renders =
                     ]
             ]
         ]
+
     let renderEditor (value:NavRootResponse) (dispatch: Dispatch<Msg>) = 
         Html.div [
             text (Core.pretty value)
@@ -137,17 +143,6 @@ let view appMode =
                     | Some v ->
                         Renders.renderEditor v dispatch
                 )
-            // | RemoteData.Responded(Ok data) ->
-            //     Html.div [
-            //         Html.pre [
-            //             // prop.custom("data-status","200")
-            //             data_ "status" "200"
-            //             text (Core.pretty data)
-            //         ]
-            //         Html.div[
-            //             text "Icon?"
-            //         ]
-            //     ]
             | RemoteData.Responded(Error exn) ->
                 Html.divc "error" [
                     text (Core.pretty exn)
