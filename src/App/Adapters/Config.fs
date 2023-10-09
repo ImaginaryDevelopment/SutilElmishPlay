@@ -1,8 +1,22 @@
 //cspell: ignore: duvalschools
 module App.Adapters.Config
 
-let appGuid = ""
-let appAuth = ""
-let apiScope = ""
-let apiDomainHint = ""
-let apiBase = ""
+type AuthArgs = {
+    AppGuid: string
+    AppAuth: string
+    ApiScope: string
+    ApiDomainHint: string
+    ApiBase: string
+}
+
+type ConfigType<'t> =
+    | Auth of 't
+    | Demo
+
+let authConfig = {
+    AppGuid= ""
+    AppAuth= ""
+    ApiScope= ""
+    ApiDomainHint= ""
+    ApiBase= ""
+}

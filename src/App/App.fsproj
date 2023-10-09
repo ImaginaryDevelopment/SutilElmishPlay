@@ -10,6 +10,9 @@
     <Compile Include="Adapters/Config.fs" />
     <Compile Include="Adapters/Api.fs" />
     <Compile Include="Adapters/Msal.fs" />
+    <Compile Include="Adapters/Mui.generated.fs" />
+
+    <Compile Include="Init.fs" />
 
     <Compile Include="Components/Gen.fs" />
     <Compile Include="Components/Root.fs" />

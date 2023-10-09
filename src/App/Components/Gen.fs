@@ -83,6 +83,43 @@ module GenericFetcher =
                     ]
             )
         view
+module Icons =
+
+    open Sutil.Styling
+    open type Feliz.length
+
+    let css = [
+        // rule based on nav menu
+        rule "svg.mui" [
+            // Css.maxWidth (px 24)
+            // Css.maxHeight (px 24)
+            Css.height (em 1.0)
+            Css.width (em 1.0)
+            Css.fontSize (rem 1.5)
+            Css.flexShrink 0
+            Css.color ("rgb(61, 60, 65)")
+            // Css.padding (px 15.0)
+        ]
+    ]
+
+    let tryIcon x =
+        match App.Init.icon x with
+        | None ->
+            text $"icon not found:{x}"
+        | Some (App.Init.FaResult v) ->
+            if v.html.Length <> 1 then
+                eprintfn "Unexpected fa html len: %i" v.html.Length
+            let html = v.html[0]
+            Html.parse html
+        | Some (App.Init.MuiResult dPath) ->
+
+            Svg.svg [
+                Attr.className "mui"
+                Svg.path [
+                    Attr.d dPath
+                ]
+            ]
+            |> withStyle css
 
 // https://svelte.dev/repl/cf05bd4a4ca14fb8ace8b6cdebbb58da?version=3.17.0
 type Tab = {
