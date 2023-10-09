@@ -9,6 +9,7 @@ open App.Adapters.Html
 open App.Adapters.Api
 
 open App.Components.Gen
+open App.Components.Gen.Icons
 
 let console = Fable.Core.JS.console
 
@@ -61,23 +62,6 @@ let update msg model : Model * Cmd<Msg> =
             {model with NavRootState= InFlight}, Cmd.OfAsync.perform Commands.getNavRoot accessToken id
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
-let tryIcon x =
-    match App.Init.icon x with
-    | None ->
-        text $"icon not found:{x}"
-    | Some (App.Init.FaResult v) ->
-        if v.html.Length <> 1 then
-            eprintfn "Unexpected fa html len: %i" v.html.Length
-        let html = v.html[0]
-        Html.parse html
-    | Some (App.Init.MuiResult dPath) ->
-        printfn "using dPath = '%s'" dPath
-
-        Svg.svg [
-                Svg.path [
-                    Attr.d dPath
-                ]
-        ]
 
 let view appMode =
     let model, dispatch = appMode |> Store.makeElmish init update ignore
@@ -117,13 +101,17 @@ let view appMode =
                                 Html.ic "fab fab-ello" []
                             ]
                             Html.li [
-                                tryIcon (App.Init.MuiIcon "Link")
+                                Html.div [
+                                    tryIcon (App.Init.MuiIcon "Link")
+                                ]
                             ]
                             Html.li [
                                 tryIcon (App.Init.FAIcon "intercom")
                             ]
                             Html.li [
-                                tryIcon (App.Init.FAIcon "fort-awesome")
+                                Html.div [
+                                    tryIcon (App.Init.FAIcon "fort-awesome")
+                                ]
                             ]
                         ]
                         text "Icon?"
