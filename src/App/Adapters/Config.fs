@@ -13,8 +13,10 @@ type ConfigType<'t> =
     | Auth of 't
     | Demo
 
-let appGuid = ""
-let appAuth = ""
-let apiScope = ""
-let apiDomainHint = ""
-let apiBase = ""
+let authConfig = {
+    AppGuid= ""
+    AppAuth= ""
+    ApiScope= ""
+    ApiDomainHint= ""
+    ApiBase= ""
+}
