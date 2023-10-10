@@ -51,6 +51,7 @@ type Msg =
     | NavPathMsg of RemoteMsg<unit, NavRootResponse[]>
     | TabChange of RootTabs
     | EditorMsg of EditorMsgType
+    | PathClick of string
     | PathChange of string
     | PathReq
 
@@ -110,6 +111,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | PathReq, {NavPathState= InFlight} -> block "PathReq InFlight"
     | PathReq, {NavPathState= _; Path= NonValueString _} -> block "PathReq NoPath"
     | PathChange _, {NavPathState=InFlight} -> model, Cmd.none
+    | PathClick _, {NavPathState=InFlight} -> model, Cmd.none
     | TabChange v, {RootTab= y} when v = y -> model, Cmd.none
 
     // actions
@@ -117,9 +119,15 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | EditorMsg(EditorMsgType.ChangeFocus None), _ -> {model with FocusedItem = None}, Cmd.none
     | EditorMsg(EditorMsgType.ChangeFocus (Some item)), _ -> {model with FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
     | EditorMsg(EditorMsgType.EditProp(name,value)), _ -> model, Cmd.none
+    | PathClick next, _ ->
+        printfn "PathClick '%s' to '%s'" model.Path next
+        match model.AppMode with
+        | ConfigType.Demo -> model, Cmd.none
+        | ConfigType.Auth accessToken ->
+            {model with Path= next; RootTab= RootTabs.RootSub; NavPathState=InFlight}, Commands.getNavPath(accessToken, model.Path)
     | PathChange next, _ ->
         printfn "PathChange '%s' to '%s'" model.Path next
-        {model with Path= next}, Cmd.none
+        {model with Path= next; RootTab= RootTabs.RootSub}, Cmd.none
     | PathReq, _ ->
         printfn "Requesting '%s'" model.Path
         match model.AppMode with
@@ -154,6 +162,12 @@ module Renders =
     let renderItemView (item:NavRootResponse) (dispatch: Dispatch<Msg>) =  
         let stripped = cloneExcept(item, ["Acls"])
         Html.divc "columns" [
+            Html.divc "column is-one-fifth buttonColumn" [
+                if item.Type = "Folder" then
+                    tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
+                    onClick (fun _ -> item.Name |> PathChange |> dispatch) List.empty
+
+            ]
             Html.divc "column is-one-fifth buttonColumn" [
                 Html.button [
                     tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
