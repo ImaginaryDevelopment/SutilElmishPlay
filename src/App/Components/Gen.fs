@@ -95,31 +95,36 @@ module Icons =
             // Css.maxHeight (px 24)
             Css.height (em 1.0)
             Css.width (em 1.0)
-            Css.fontSize (rem 1.5)
             Css.flexShrink 0
+            Css.fontSize (rem 1.5)
             Css.color ("rgb(61, 60, 65)")
             // Css.padding (px 15.0)
         ]
     ]
 
     let tryIcon x =
-        match App.Init.icon x with
-        | None ->
-            text $"missing:{x}"
-        | Some (App.Init.FaResult v) ->
-            if v.html.Length <> 1 then
-                eprintfn "Unexpected fa html len: %i" v.html.Length
-            let html = v.html[0]
-            Html.parse html
-        | Some (App.Init.MuiResult dPath) ->
+        // bulma icon class
+        Html.spanc "icon" [
+            match App.Init.icon x, x with
+            | None, App.Init.IconSearchType.FAIcon x 
+            | None, App.Init.IconSearchType.MuiIcon x ->
+                // text $"missing:{x}"
+                Bulma.FontAwesome.fa x
+            | Some (App.Init.FaResult v), _ ->
+                if v.html.Length <> 1 then
+                    eprintfn "Unexpected fa html len: %i" v.html.Length
+                let html = v.html[0]
+                Html.parse html
+            | Some (App.Init.MuiResult dPath), _ ->
 
-            Svg.svg [
-                Attr.className "mui"
-                Svg.path [
-                    Attr.d dPath
+                Svg.svg [
+                    Attr.className "mui"
+                    Svg.path [
+                        Attr.d dPath
+                    ]
                 ]
-            ]
-            |> withStyle css
+                |> withStyle css
+        ]
 
 // https://svelte.dev/repl/cf05bd4a4ca14fb8ace8b6cdebbb58da?version=3.17.0
 type Tab = {

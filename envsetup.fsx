@@ -18,11 +18,11 @@ module Map =
             m |> Map.fold (fun acc key value -> Map.add key value acc) m2
         )
 
-let (|ValueString|_|) value =
+let (|ValueString|NonValueString|) value =
     if String.IsNullOrWhiteSpace value then
-        None
+        NonValueString ()
     else
-        Some value
+        ValueString value
 
 let (|StrEqualsI|_|) delimiter (value:string) =
     if String.IsNullOrEmpty delimiter then

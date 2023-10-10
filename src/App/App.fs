@@ -131,7 +131,7 @@ let view() =
                 ActiveTab= 0
                 Tabs = [|
                     {
-                        Label= "Root"
+                        Label= "Admin"
                         Value= 0
                         Component=
                             mustAuthEl model (

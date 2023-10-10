@@ -23,6 +23,8 @@ module Mui =
 
     let allMuiIcons = App.Adapters.Mui.all
 
+    toGlobal "getMuiIcons" (fun () -> allMuiIcons.Keys |> Array.ofSeq)
+
     // printfn "Mui: %A" allMuiIcons.Value
     let getMuiIcon (name:string) =
         allMuiIcons |> Map.tryFind name
@@ -61,6 +63,8 @@ module FA =
         |> Set.ofSeq
     )
 
+    toGlobal "getFaIcons" (fun () -> Set.toArray allFAIcons.Value)
+
     let icon' (_:obj) : FAIconDefinition option = import "icon" "@fortawesome/fontawesome-svg-core"
 
     library.add fab
@@ -68,6 +72,8 @@ module FA =
 type IconResultType =
     | FaResult of FAIconDefinition
     | MuiResult of string
+
+
 
 
 let tryFindIcon (value:string) =
@@ -78,6 +84,7 @@ let tryFindIcon (value:string) =
     else
         eprintfn "Could not find icon '%s'" value
         None
+
 
 let icon =
     function

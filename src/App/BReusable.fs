@@ -1,5 +1,12 @@
 module BReusable
 
+
+let (|ValueString|NonValueString|) value =
+    if System.String.IsNullOrWhiteSpace value then
+        NonValueString ()
+    else
+        ValueString value
+
 module Result =
     let ofChoice =
         function
