@@ -3,7 +3,7 @@ module Core
 open Fable.Core
 open Fable.Core.JsInterop
 
-let private log x = Browser.Dom.console.log(x)
+let log x = Browser.Dom.console.log(x)
 
 // https://medium.com/@zaid.naom/f-interop-with-javascript-in-fable-the-complete-guide-ccc5b896a59f
 [<Emit("JSON.stringify($0,null,\" \")")>]

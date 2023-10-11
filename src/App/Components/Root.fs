@@ -113,21 +113,30 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | PathChange _, {NavPathState=InFlight} -> model, Cmd.none
     | PathClick _, {NavPathState=InFlight} -> model, Cmd.none
     | TabChange v, {RootTab= y} when v = y -> model, Cmd.none
+    | EditorMsg(EditorMsgType.EditProp _), {FocusedItem = None} -> block "No FocusedItem for edit"
 
     // actions
     | TabChange v, _ -> {model with RootTab= v}, Cmd.none
     | EditorMsg(EditorMsgType.ChangeFocus None), _ -> {model with FocusedItem = None}, Cmd.none
-    | EditorMsg(EditorMsgType.ChangeFocus (Some item)), _ -> {model with FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
-    | EditorMsg(EditorMsgType.EditProp(name,value)), _ -> model, Cmd.none
+    | EditorMsg(EditorMsgType.ChangeFocus (Some item)), _ ->
+        {model with RootTab= RootTabs.RootEditor; FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
+
+    | EditorMsg(EditorMsgType.EditProp(name,value)), {FocusedItem = Some item} ->
+        let nextItem = clone item
+        (?) nextItem name <- value
+        {model with FocusedItem = Some nextItem}, Cmd.none
+
     | PathClick next, _ ->
         printfn "PathClick '%s' to '%s'" model.Path next
         match model.AppMode with
         | ConfigType.Demo -> model, Cmd.none
         | ConfigType.Auth accessToken ->
             {model with Path= next; RootTab= RootTabs.RootSub; NavPathState=InFlight}, Commands.getNavPath(accessToken, model.Path)
+
     | PathChange next, _ ->
         printfn "PathChange '%s' to '%s'" model.Path next
         {model with Path= next; RootTab= RootTabs.RootSub}, Cmd.none
+
     | PathReq, _ ->
         printfn "Requesting '%s'" model.Path
         match model.AppMode with
@@ -135,6 +144,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken ->
             printfn "Requesting '%s'" model.Path
             {model with NavPathState= InFlight}, Commands.getNavPath(accessToken, model.Path)
+
     | NavRootMsg (Request _), _ ->
         match model.AppMode with
         | ConfigType.Demo ->
@@ -202,18 +212,13 @@ module Renders =
             ]
         ]
 
-    let renderIconEditor (name: string) (dispatch: Dispatch<Msg>) =
-        Html.divc "box" [
-            tryIcon (App.Init.IconSearchType.MuiIcon name)
-            formField [ text "Icon Name"] [
-                Html.inputc "input" [
-                    type' "text"
-                    Attr.value name
-                    Handlers.onValueChange dispatch (fun v -> EditProp("Name",v) |> Msg.EditorMsg)
-                ]
-            ]
-
-        ]
+    let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<Msg>) =
+        let dispatch2 =
+            function
+            | App.Components.IconEditor.IconEditorMsg.NameChange(propName,value) ->
+                dispatch (EditProp(propName,value) |> Msg.EditorMsg)
+            
+        App.Components.IconEditor.renderIconEditor (propName, propObs) value dispatch2
 
     let renderPathInput (model: IStore<Model>) dispatch =
                 function
@@ -243,19 +248,22 @@ module Renders =
                     ]
 
     // renames will go a different route, no path editing
-    let renderEditor (value:NavRootResponse) (dispatch: Dispatch<Msg>) = 
+    let renderEditor (value:NavRootResponse, obs: System.IObservable<NavRootResponse option>) (dispatch: Dispatch<Msg>) = 
         Html.divc "panel" [
             // path
             Html.pc "panel-heading" [ text $"{value.Name}: {value.Path}"]
-            // columns2 [ Html.labelc "label" [ text "Path" ]] [Html.divc "control" [ text ]]
             Html.divc "panel-block" [
                 // formField [ text "hello"] []
-                formField [text "Icon"] [
-                    renderIconEditor value.Icon dispatch
+                Html.divc "tile" [
+                    formField [text "Icon"] [
+                        renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch
+                    ]
                 ]
-                Html.buttonc "button" [
-                    text "Cancel"
-                    onClick (fun _ -> EditorMsgType.ChangeFocus None |> Msg.EditorMsg |> dispatch) []
+                Html.divc "tile" [
+                    Html.buttonc "button" [
+                        text "Cancel"
+                        onClick (fun _ -> EditorMsgType.ChangeFocus None |> Msg.EditorMsg |> dispatch) []
+                    ]
                 ]
             ]
             text (Core.pretty value)
@@ -354,7 +362,7 @@ let view appMode =
                             Bind.el(store |> Store.map MLens.getFocusedItem, 
                                 function
                                 | None -> Html.div []
-                                | Some item -> Renders.renderEditor item dispatch
+                                | Some item -> Renders.renderEditor (item, store |> Store.map MLens.getFocusedItem ) dispatch
                             )
 
                 }
