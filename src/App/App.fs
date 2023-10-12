@@ -12,7 +12,6 @@ open App.Adapters.Msal
 open App.Components.Gen
 
 type Model = {
-    Counter : int
     AuthInfo: Result<AuthenticationResult*TokenRequestResult,exn> option
 }
 
@@ -24,7 +23,6 @@ type MsalMode =
     | Redirect
 
 // Model helpers
-let getCounter m = m.Counter
 let getAuthInfo m = m.AuthInfo
 
 let console = Browser.Dom.console
@@ -32,8 +30,6 @@ let window = Browser.Dom.window
 
 type Message =
     | AuthFinished of Result<AuthenticationResult*TokenRequestResult,exn>
-    | Increment
-    | Decrement
 
 let msalMode = MsalMode.Redirect
 
@@ -55,7 +51,10 @@ let mustAuthEl model f =
                 Html.pre [ text (string exn)]
             | None -> Html.div []
 )
+
+// make sure the module loads and is not tree-shaken out
 App.Adapters.Mui.all |> ignore
+
 let init () : Model * Cmd<Message> =
 
     let msalC =
@@ -63,54 +62,52 @@ let init () : Model * Cmd<Message> =
         // |> Adapters.Msal.createPublicClientApplication
         // |> Adapters.Msal.PublicClientApplication.Create
         |> Msal.PublicClientApplication
-    console.log msalC
+    // console.log msalC
 
     let msalSetup () =
-            promise {
-                let! _ = msalC.initialize()
-                printfn "Finished initialize"
-                let! ar =
-                    promise {
-                        match msalMode with
-                        | MsalMode.Popup ->
-                            let! ar = msalC.loginPopup(null)
-                            printfn "Finished popup"
+        promise {
+            let! _ = msalC.initialize()
+            printfn "Finished initialize"
+            let! ar =
+                promise {
+                    match msalMode with
+                    | MsalMode.Popup ->
+                        let! ar = msalC.loginPopup(null)
+                        printfn "Finished popup"
+                        console.log ar
+                        return ar
+                    | MsalMode.Redirect ->
+                        console.log "Redirect Promise"
+                        let! unk = msalC.handleRedirectPromise()
+                        console.log "unk"
+                        console.log unk
+                        match unk with
+                        | null ->
+                            let! ar = msalC.loginRedirect(
+                                {|
+                                    scopes = [| "openid"; Config.authConfig.ApiScope;
+                                    "user.readbasic.all" |]
+                                    extraQueryParameters = {| domain_hint= Config.authConfig.ApiDomainHint |}|})
+                            console.log "ar"
                             console.log ar
+                            invalidOp "Hello world"
                             return ar
-                        | MsalMode.Redirect ->
-                            console.log "Redirect Promise"
-                            let! unk = msalC.handleRedirectPromise()
-                            console.log "unk"
-                            console.log unk
-                            match unk with
-                            | null ->
-                                let! ar = msalC.loginRedirect(
-                                    {|
-                                        scopes = [| "openid"; Config.authConfig.ApiScope;
-                                        "user.readbasic.all" |]
-                                        extraQueryParameters = {| domain_hint= Config.authConfig.ApiDomainHint |}|})
-                                console.log "ar"
-                                console.log ar
-                                invalidOp "Hello world"
-                                return ar
-                            | v ->
-                                return v :?> AuthenticationResult
-                    }
-                match msalC.getAllAccounts() |> List.ofArray with
-                | [] ->
-                    eprintfn "No Accounts found"
-                    return invalidOp "No accounts found"
-                | h :: _ ->
-                    let! token = msalC.acquireTokenSilent({| account= h|})
-                    return (ar,token)
-            }
-    { Counter = 0; AuthInfo = None;}, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
+                        | v ->
+                            return v :?> AuthenticationResult
+                }
+            match msalC.getAllAccounts() |> List.ofArray with
+            | [] ->
+                eprintfn "No Accounts found"
+                return invalidOp "No accounts found"
+            | h :: _ ->
+                let! token = msalC.acquireTokenSilent({| account= h|})
+                return (ar,token)
+        }
+    { AuthInfo = None;}, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
 let update (msg : Message) (model : Model) : Model * Cmd<Message> =
     printfn "App msg update"
     match msg with
-    | Increment -> { model with Counter = model.Counter + 1 }, Cmd.none
-    | Decrement -> { model with Counter = model.Counter - 1 }, Cmd.none
     | AuthFinished x ->
         match x with
         | Error exn -> console.error exn
@@ -154,7 +151,6 @@ let view() =
                                     App.Components.Diag.view { AppMode = Demo }
                             )
                     }
-
                 |]
             }
         () |> Store.makeElmishSimple (fun _ -> tabParent) Tabs.update ignore
@@ -168,6 +164,7 @@ let view() =
             Css.fontFamily "Arial, Helvetica, sans-serif"
             Css.margin 20
         ]
+
         let mustAuthEl f =
             Bind.el(model |> Store.map getAuthInfo, fun ai ->
                 match ai with
@@ -196,32 +193,14 @@ let view() =
                     App.Components.Root.view ConfigType.Demo
                 ]
         )
+
         mustAuthEl (fun (ai,token)->
             Html.div [
                 App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
             ]
         )
 
-        // Think of this line as
-        // text $"Counter = {model.counter}"
-        Bind.el (model |> Store.map getCounter, fun n ->
-            text $"Counter = {n}" )
-
-        Html.div [
-            Html.button [
-                Attr.className "button" // Bulma styling, included in index.html
-
-                // Dispatching is as for normal ELmish. Sutil event handlers take an extra options array though
-                Ev.onClick (fun _ -> dispatch Decrement)
-                text "-"
-            ]
-
-            Html.button [
-                Attr.className "button"
-                Ev.onClick (fun _ -> dispatch Increment)
-                text "+"
-            ]
-        ]]
+    ]
 
 App.Init.FA.dom |> ignore
 // Start the app

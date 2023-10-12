@@ -18,11 +18,13 @@ type MyInfoResponse = {
     Email: string
     IsImperator: bool
 }
+
 type Acl = {
     Name:string
     ParameterType: string
     MultiValue: bool option
     Searchable: bool option
+    SelectableParameters: string[] option
 }
 
 type AclRef = {

@@ -17,6 +17,7 @@ open App.Adapters.Api
 
 module Handlers = App.Adapters.Html.Handlers
 
+open App.Components.AclEditor
 open App.Components.Gen
 open App.Components.Gen.Icons
 
@@ -29,16 +30,19 @@ type Model = {
     AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
     NavPathState : RemoteData<string*NavRootResponse[]>
+    AclTypeState : RemoteData<Acl[]>
     FocusedItem : NavRootResponse option
     RootTab: RootTabs
     // this should not be able to change while a request is in flight
     Path: string
 }
 
+[<RequireQualifiedAccess>]
 module MLens =
     let getNavRootState x = x.NavRootState
     let getFocusedItem x = x.FocusedItem
     let getNavPathState x = x.NavPathState
+    let getAclTypeState x = x.AclTypeState
     let getPath x = x.Path
     let getRootTab x = x.RootTab
 
@@ -49,6 +53,7 @@ type EditorMsgType =
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
     | NavPathMsg of RemoteMsg<unit, NavRootResponse[]>
+    | AclStateMsg of RemoteMsg<unit, Acl[]>
     | TabChange of RootTabs
     | EditorMsg of EditorMsgType
     | PathClick of string
@@ -92,12 +97,31 @@ module Commands =
             }
         Cmd.OfAsync.perform a () id
 
+    let getAcls token =
+        let a () =
+            async {
+                let! resp = App.Adapters.Api.getAcls token
+                let resp2 = Response resp // |> Result.map(fun items -> path,items) |> Response
+                return Msg.AclStateMsg resp2
+            }
+        Cmd.OfAsync.perform a () id
+
 let init appMode =
-    let cmd: Cmd<Msg> = 
+    let (iState, cmd: Cmd<Msg>) = 
         match appMode with
-        | Demo -> Cmd.none
-        | Auth token -> Commands.getNavRoot token
-    {AppMode = appMode; NavRootState = NotRequested; NavPathState = NotRequested; FocusedItem = None; RootTab= RootTabs.RootMain; Path = ""}, cmd
+        | Demo -> NotRequested,Cmd.none
+        | Auth token ->
+            let cmd1:Cmd<Msg> = Commands.getNavRoot token
+            let cmd2:Cmd<Msg> = Commands.getAcls token
+            InFlight, Cmd.batch [ cmd1;cmd2 ]
+
+    {   AppMode = appMode;
+        NavRootState = if iState = InFlight then InFlight else NotRequested
+        NavPathState = NotRequested
+        AclTypeState = if iState = InFlight then InFlight else NotRequested
+        FocusedItem = None
+        RootTab= RootTabs.RootMain
+        Path = ""}, cmd
 
 let update msg (model:Model) : Model * Cmd<Msg> =
     printfn "Root Update running: %A ('%s')" msg model.Path
@@ -257,6 +281,9 @@ module Renders =
                 Html.divc "tile" [
                     formField [text "Icon"] [
                         renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch
+                    ]
+                    formField [ text "Acls"] [
+                        // renderEditor mod
                     ]
                 ]
                 Html.divc "tile" [

@@ -13,9 +13,9 @@ open App.Adapters.Bulma
 module Handlers = App.Adapters.Html.Handlers
 
 open App.Components.Gen.Icons
+
 type IconEditorMsg = NameChange of propName:string * value:string
 
-()
 let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<IconEditorMsg>) =
     Html.divc "box" [
         tryIcon (App.Init.IconSearchType.MuiIcon value)

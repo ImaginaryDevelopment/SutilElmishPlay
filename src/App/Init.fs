@@ -4,8 +4,7 @@ open System
 open Fable.Core.JsInterop
 open Core
 
-let console = Fable.Core.JS.console
-
+let mutable initIconDiag = false
 // might be able to do it without the parent lib:
 // see also: https://fontawesome.com/v5/docs/apis/javascript/icon-library
 
@@ -55,9 +54,9 @@ module FA =
     let allFAIcons = lazy(
         keys fab
         |> Seq.map(fun k ->
-            // console.log(k)
+            // log(k)
             let v : FAIconDescriptor = getValue fab k
-            // console.log(k,Core.pretty v)
+            // log(k,Core.pretty v)
             v.iconName
         )
         |> Set.ofSeq
@@ -73,30 +72,28 @@ type IconResultType =
     | FaResult of FAIconDefinition
     | MuiResult of string
 
-
-
-
 let tryFindIcon (value:string) =
     if Mui.allMuiIcons |> Map.containsKey value then
         Some (MuiIcon value)
     elif FA.allFAIcons.Value |> Set.contains value then
         Some (FAIcon value)
     else
-        eprintfn "Could not find icon '%s'" value
+        if initIconDiag then
+            eprintfn "Could not find icon '%s'" value
         None
-
 
 let icon =
     function
     | FAIcon iconName ->
-        if not (FA.allFAIcons.Value |> Set.contains iconName) then
+        if initIconDiag && not (FA.allFAIcons.Value |> Set.contains iconName) then
             eprintfn "Warning: %s was not found in fa icon list" iconName
         FA.icon' {prefix= "fab"; iconName= iconName}
         |> Option.map FaResult
     | MuiIcon name ->
         match Mui.allMuiIcons |> Map.tryFind name with
         | None ->
-            eprintfn "Warning: %s was not found in mui icon list" name
+            if initIconDiag then
+                eprintfn "Warning: %s was not found in mui icon list" name
             None
         | Some d ->
             Some (MuiResult d)
