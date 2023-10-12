@@ -17,7 +17,7 @@ open App.Components.Gen.Icons
 type IconEditorMsg = NameChange of propName:string * value:string
 
 let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<IconEditorMsg>) =
-    Html.divc "box" [
+    Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon value)
         formField [ text "Icon Name"] [
             Html.inputc "input" [
@@ -35,7 +35,10 @@ let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<Ico
                         let first = toLower iconPath.[0]
                         Html.select [
                             Attr.className "select" 
-                            Handlers.onValueChange dispatch (fun v -> NameChange(propName,v))
+                            Handlers.onValueChangeIf dispatch (function | ValueString v -> NameChange(propName,v) |> Some | _ -> None)
+                            Html.option [
+                                text ""
+                            ]
                             for o in Mui.all.Keys |> Seq.filter(fun k -> toLower k.[0] = first) do
                                 Html.option [
                                     Attr.value o
@@ -44,9 +47,7 @@ let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<Ico
                                         Attr.selected true
                                 ]
                         ]
-                    | _ -> 
-                        Html.div []
-
+                    | _ -> Html.div []
                 )
             ]
         ]

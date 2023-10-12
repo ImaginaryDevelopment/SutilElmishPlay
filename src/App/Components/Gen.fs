@@ -2,6 +2,7 @@ module App.Components.Gen
 
 open Sutil
 open Sutil.Core
+open Sutil.CoreElements
 
 type ErrorType = exn
 
@@ -9,6 +10,11 @@ type RemoteData<'t> =
     | NotRequested
     | InFlight
     | Responded of Result<'t,ErrorType>
+    with
+        static member TryGet (remoteData:RemoteData<'t>) =
+            match remoteData with
+            | Responded (Ok x ) -> Some x
+            | _ -> None
 
 type RemoteMsg<'tReq, 'tResp> =
     | Request of 'tReq
@@ -140,6 +146,7 @@ type TabParent = {
     Tabs: Tab[]
 }
 
+// Svelte non-bulma tabs
 module Tabs =
     open Sutil.Styling
     open type Feliz.length

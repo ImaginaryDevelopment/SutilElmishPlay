@@ -4,6 +4,7 @@ open BReusable
 open Core
 
 open Fable.Core.JsInterop
+
 open Sutil
 open Sutil.CoreElements
 open Sutil.Styling
@@ -20,6 +21,7 @@ module Handlers = App.Adapters.Html.Handlers
 open App.Components.AclEditor
 open App.Components.Gen
 open App.Components.Gen.Icons
+open Sutil.Core
 
 type RootTabs =
     | RootMain
@@ -43,19 +45,17 @@ module MLens =
     let getFocusedItem x = x.FocusedItem
     let getNavPathState x = x.NavPathState
     let getAclTypeState x = x.AclTypeState
+    let getAclTypes x = x.AclTypeState |> RemoteData.TryGet
     let getPath x = x.Path
     let getRootTab x = x.RootTab
-
-type EditorMsgType =
-    | ChangeFocus of NavRootResponse option
-    | EditProp of prop:string * nextValue :string
 
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
     | NavPathMsg of RemoteMsg<unit, NavRootResponse[]>
     | AclStateMsg of RemoteMsg<unit, Acl[]>
     | TabChange of RootTabs
-    | EditorMsg of EditorMsgType
+    | EditorMsg of NavEditor.ParentMsg
+    | FocusItem of NavRootResponse
     | PathClick of string
     | PathChange of string
     | PathReq
@@ -128,27 +128,44 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     let block title =
         printfn "Blocked: %s (%A)" title msg
         model, Cmd.none
+
     match msg, model with
     // block actions
     | NavRootMsg (Request _), {NavRootState= InFlight} -> block "InFlight NavRootMsg"
-    | NavPathMsg (Request _), {NavPathState= InFlight} -> model, Cmd.none
-    | PathReq, {NavPathState= InFlight} -> block "PathReq InFlight"
+    | NavPathMsg (Request _), {NavPathState= InFlight} -> block "InFlight NavPathMsg"
+    | AclStateMsg (Request _), {AclTypeState= InFlight} -> block "InFlight AclStateMsg"
+    | PathReq, {NavPathState= InFlight} -> block "InFlight PathReq"
+    | PathChange _, {NavPathState=InFlight} -> block "InFlight PathChange"
+    | PathClick _, {NavPathState=InFlight} -> block "InFlight PathClick"
+
     | PathReq, {NavPathState= _; Path= NonValueString _} -> block "PathReq NoPath"
-    | PathChange _, {NavPathState=InFlight} -> model, Cmd.none
-    | PathClick _, {NavPathState=InFlight} -> model, Cmd.none
-    | TabChange v, {RootTab= y} when v = y -> model, Cmd.none
-    | EditorMsg(EditorMsgType.EditProp _), {FocusedItem = None} -> block "No FocusedItem for edit"
+    | TabChange v, {RootTab= y} when v = y -> block "already selected tab change"
+    | EditorMsg(NavEditor.ParentMsg.Cancel), {FocusedItem = None} -> block "No FocusedItem for edit"
+
 
     // actions
+
+    // consider a confirm dialog for navigating from the editor?
     | TabChange v, _ -> {model with RootTab= v}, Cmd.none
-    | EditorMsg(EditorMsgType.ChangeFocus None), _ -> {model with FocusedItem = None}, Cmd.none
-    | EditorMsg(EditorMsgType.ChangeFocus (Some item)), _ ->
+
+    | Msg.EditorMsg (NavEditor.ParentMsg.Cancel), _ -> {model with FocusedItem = None}, Cmd.none
+    | FocusItem item, _ ->
         {model with RootTab= RootTabs.RootEditor; FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
 
-    | EditorMsg(EditorMsgType.EditProp(name,value)), {FocusedItem = Some item} ->
-        let nextItem = clone item
-        (?) nextItem name <- value
-        {model with FocusedItem = Some nextItem}, Cmd.none
+    | PathChange next, _ ->
+        printfn "PathChange '%s' to '%s'" model.Path next
+        {model with Path= next; RootTab= RootTabs.RootSub}, Cmd.none
+
+    // responses:
+
+    | AclStateMsg (Response x), _ -> {model with AclTypeState= Responded x}, Cmd.none
+    | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
+
+    | NavPathMsg (Response x), _ ->
+        let v = x |> Result.map(fun items -> model.Path, items)
+        {model with NavPathState= Responded v}, Cmd.none
+
+    // requests for remotes:
 
     | PathClick next, _ ->
         printfn "PathClick '%s' to '%s'" model.Path next
@@ -156,10 +173,6 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         | ConfigType.Demo -> model, Cmd.none
         | ConfigType.Auth accessToken ->
             {model with Path= next; RootTab= RootTabs.RootSub; NavPathState=InFlight}, Commands.getNavPath(accessToken, model.Path)
-
-    | PathChange next, _ ->
-        printfn "PathChange '%s' to '%s'" model.Path next
-        {model with Path= next; RootTab= RootTabs.RootSub}, Cmd.none
 
     | PathReq, _ ->
         printfn "Requesting '%s'" model.Path
@@ -175,7 +188,6 @@ let update msg (model:Model) : Model * Cmd<Msg> =
             {model with NavRootState=Responded (Ok dummyData)}, Cmd.none
         | ConfigType.Auth accessToken ->
             {model with NavRootState= InFlight}, Commands.getNavRoot accessToken
-    | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
     | NavPathMsg (Request ()), _ ->
         match model.AppMode with
@@ -184,14 +196,42 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken ->
             printfn "Requesting Path '%s'" model.Path
             {model with NavPathState= InFlight}, Commands.getNavPath (accessToken, model.Path)
-    | NavPathMsg (Response x), _ ->
-        let v = x |> Result.map(fun items -> model.Path, items)
-        {model with NavPathState= Responded v}, Cmd.none
 
-module Renders =
+    | AclStateMsg (Request ()), _ ->
+        match model.AppMode with
+        | ConfigType.Demo -> block "no dummy acl data"
+        | ConfigType.Auth accessToken ->
+            printfn "Requesting Path '%s'" model.Path
+            {model with AclTypeState= InFlight}, Commands.getAcls accessToken
+
+module Renderers =
 
     let renderLabeledField name value =
         Html.div [ Html.label [text name]; Html.pre [text value]]
+
+    let renderPathInput (model: IStore<Model>) dispatch =
+        function
+        | InFlight ->
+            Html.input [
+                type' "text"
+                Attr.value model.Value.Path
+                Attr.disabled true
+            ]
+        | Responded _
+        | NotRequested  ->
+            Html.div [
+
+                Html.input [
+                    type' "text"
+                    autofocus
+                    Bind.attr ("value", model |> Store.map MLens.getPath)
+                    Handlers.onValueChange dispatch PathChange
+                ]
+                Html.button [
+                    text "Fetch"
+                    onClick(fun _ -> printfn "Dispatching pathReq"; dispatch Msg.PathReq) List.empty
+                ]
+            ]
 
     let renderItemView (item:NavRootResponse) (dispatch: Dispatch<Msg>) =  
         let stripped = cloneExcept(item, ["Acls"])
@@ -205,7 +245,7 @@ module Renders =
             Html.divc "column is-one-fifth buttonColumn" [
                 Html.button [
                     tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
-                    onClick (fun _ -> item |> Some |> ChangeFocus |> Msg.EditorMsg  |> dispatch) List.empty
+                    onClick (fun _ -> item |> Msg.FocusItem |> dispatch) List.empty
                 ]
             ]
             Html.divc "column is-one-fifth iconColumn" [
@@ -234,66 +274,6 @@ module Renders =
                     renderItemView item dispatch
                 ]
             ]
-        ]
-
-    let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<Msg>) =
-        let dispatch2 =
-            function
-            | App.Components.IconEditor.IconEditorMsg.NameChange(propName,value) ->
-                dispatch (EditProp(propName,value) |> Msg.EditorMsg)
-            
-        App.Components.IconEditor.renderIconEditor (propName, propObs) value dispatch2
-
-    let renderPathInput (model: IStore<Model>) dispatch =
-                function
-                | InFlight ->
-                    Html.input [
-                        type' "text"
-                        Attr.value model.Value.Path
-                        Attr.disabled true
-                        // Bind.attr ("value", model |> Store.map getPath)
-                    ]
-
-                | Responded _
-                | NotRequested  ->
-                    Html.div [
-
-                        Html.input [
-                            type' "text"
-                            autofocus
-                            Bind.attr ("value", model |> Store.map MLens.getPath)
-                            Handlers.onValueChange dispatch PathChange
-                            // on "change" (Handlers.getValue >> PathChange >> dispatch) List.empty
-                        ]
-                        Html.button [
-                            text "Fetch"
-                            onClick(fun _ -> printfn "Dispatching pathReq"; dispatch Msg.PathReq) List.empty
-                        ]
-                    ]
-
-    // renames will go a different route, no path editing
-    let renderEditor (value:NavRootResponse, obs: System.IObservable<NavRootResponse option>) (dispatch: Dispatch<Msg>) = 
-        Html.divc "panel" [
-            // path
-            Html.pc "panel-heading" [ text $"{value.Name}: {value.Path}"]
-            Html.divc "panel-block" [
-                // formField [ text "hello"] []
-                Html.divc "tile" [
-                    formField [text "Icon"] [
-                        renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch
-                    ]
-                    formField [ text "Acls"] [
-                        // renderEditor mod
-                    ]
-                ]
-                Html.divc "tile" [
-                    Html.buttonc "button" [
-                        text "Cancel"
-                        onClick (fun _ -> EditorMsgType.ChangeFocus None |> Msg.EditorMsg |> dispatch) []
-                    ]
-                ]
-            ]
-            text (Core.pretty value)
         ]
 
     let renderRemote title rdState reqMsg okRenderer (dispatch:Dispatch<Msg>) =
@@ -334,6 +314,12 @@ let css = [
         Css.width (em 2.5)
         Css.flexShrink 0
     ]
+    rule ".tile .field" [
+        Css.marginRight (px 5)
+    ]
+    rule ".tile .field .control .box" [
+        Css.minWidth (px 450)
+    ]
 ]
 
 let view appMode =
@@ -351,10 +337,10 @@ let view appMode =
                     TabClickMsg= Msg.TabChange RootTabs.RootMain
                     IsActive= rt = RootTabs.RootMain
                     Render=
-                        let r data = Renders.renderRootView "" data dispatch
+                        let r data = Renderers.renderRootView "" data dispatch
                         fun () ->
                             Bind.el(store |> Store.map MLens.getNavRootState, fun nrs ->
-                                Renders.renderRemote "Root" nrs (RemoteMsg.Request () |> Msg.NavRootMsg) r dispatch
+                                Renderers.renderRemote "Root" nrs (RemoteMsg.Request () |> Msg.NavRootMsg) r dispatch
                             )
                 }
             let pathTab =
@@ -367,16 +353,17 @@ let view appMode =
                             Html.div [
                                 // display the path input properly based on current state
                                 Bind.el(store |> Store.map MLens.getNavPathState,
-                                    Renders.renderPathInput store dispatch
+                                    Renderers.renderPathInput store dispatch
                                 )
                                 Bind.el(store |> Store.map MLens.getNavPathState,
                                     (fun nps ->
-                                        let r (path,data)= Renders.renderRootView $"Sub:{path}" data dispatch
-                                        Renders.renderRemote $"Path:{store.Value.Path}" nps (RemoteMsg.Request () |> Msg.NavPathMsg) r dispatch
+                                        let r (path,data)= Renderers.renderRootView $"Sub:{path}" data dispatch
+                                        Renderers.renderRemote $"Path:{store.Value.Path}" nps (RemoteMsg.Request () |> Msg.NavPathMsg) r dispatch
                                     )
                                 )
                             ]
                 }
+            // bulma tabs
             tabs [
                 rootTab
                 pathTab
@@ -385,12 +372,17 @@ let view appMode =
                     TabClickMsg= Msg.TabChange RootTabs.RootEditor
                     IsActive= rt = RootTabs.RootEditor
                     Render=
-                        fun () ->
-                            Bind.el(store |> Store.map MLens.getFocusedItem, 
+                        let gfi= store |> Store.map MLens.getFocusedItem
+                        let gAcl= store |> Store.map MLens.getAclTypes
+                        let r : _ -> SutilElement =
                                 function
-                                | None -> Html.div []
-                                | Some item -> Renders.renderEditor (item, store |> Store.map MLens.getFocusedItem ) dispatch
-                            )
+                                | _, None
+                                | None, _ -> Html.div []
+                                | Some item, Some aclTypes ->
+                                    let r = NavEditor.renderEditor aclTypes (item, store |> Store.map MLens.getFocusedItem) (Msg.EditorMsg >> dispatch)
+                                    r
+                        fun () ->
+                            Bind.el2 gfi gAcl r
 
                 }
             ] dispatch

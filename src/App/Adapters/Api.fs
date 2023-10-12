@@ -121,3 +121,11 @@ let getNavPath token (path: string) : Async<Result<NavRootResponse[],exn>> =
 
 let getAcls token : Async<Result<Acl[],exn>> =
     fetchJson<_> "Acl[]" {Token=token;RelPath="/api/Navigation/Acls"; Arg=None}
+
+// for selecting parameters for a new acl
+let getAclRefValues token name search =
+    fetchJson<_> "AclRef?" {Token=token;RelPath= $"/api/Navigation/Acls?Name={name}&search={search}"; Arg=None}
+
+// for doing a lookup of the parameters in an existing acl for display
+let getAclResolve token name objId =
+    fetchJson<_> "AclResolve?" {Token=token;RelPath= $"/api/Navigation/Acl?Name={name}&resolve={objId}"; Arg=None}

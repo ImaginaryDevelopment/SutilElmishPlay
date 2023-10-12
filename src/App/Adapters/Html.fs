@@ -19,6 +19,8 @@ let columns3 col1 col2 col3 =
 module Handlers =
     let onValueChange<'t> (dispatch:'t -> unit) f = 
         Sutil.CoreElements.on "change" (Core.Handlers.getValue >> f >> dispatch) List.empty
+    let onValueChangeIf<'t> (dispatch:'t -> unit) f = 
+        Sutil.CoreElements.on "change" (Core.Handlers.getValue >> f >> Option.iter dispatch) List.empty
     let onValueInput<'t> (dispatch: 't -> unit) f =
         Sutil.CoreElements.on "input" (Core.Handlers.getValue >> f >> dispatch) List.empty
 

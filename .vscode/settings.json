@@ -1,14 +1,19 @@
 {
     "cSpell.words": [
         "autofocus",
+        "buttonc",
         "divc",
         "fontawesome",
         "fortawesome",
+        "inputc",
         "labelc",
         "Msal",
         "perc",
         "spanc",
         "Sutil",
         "uifabric"
-    ]
+    ],
+    "FSharp.inlayHints.typeAnnotations": false,
+    "FSharp.inlayHints.parameterNames": false,
+    "editor.inlayHints.enabled": "offUnlessPressed"
 }

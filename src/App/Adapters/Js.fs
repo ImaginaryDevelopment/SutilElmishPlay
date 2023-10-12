@@ -19,7 +19,7 @@ let keys x : string[] = jsNative
 // let assign<'t> (target:obj, [<System.ParamArray>] items: obj): 't = jsNative
 
 [<Emit("Object.assign({},$0)")>]
-let clone<'t>(source:obj): 't = jsNative
+let clone<'t>(source:'t): 't = jsNative
 
 
 [<Emit("delete $0[$1]")>]

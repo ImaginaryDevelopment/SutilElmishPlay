@@ -7,6 +7,20 @@ let (|ValueString|NonValueString|) value =
     else
         ValueString value
 
+
+module Option =
+    let ofValueString =
+        function
+        | ValueString v -> Some v
+        | _ -> None
+
+[<RequireQualifiedAccess>]
+module String =
+    let toLower =
+        function
+        | ValueString v -> v.ToLowerInvariant()
+        | v -> v
+        
 module Result =
     let ofChoice =
         function
