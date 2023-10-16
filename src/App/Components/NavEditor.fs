@@ -20,19 +20,25 @@ type EditorTabs =
     | IconTab
     | AclTab
 
+type NavEditorErrorType = string
+
 type Model = {
     Tab: EditorTabs
     Item: NavRootResponse
+    Error: (NavEditorErrorType * System.DateTime) option
 }
+
 type ParentMsg =
     | Cancel
-    | Save of NavRootResponse
+    | Saved of NavRootResponse
 
 type EditorMsgType =
     | EditProp of prop:string * nextValue :string
     | EditAcl of AclEditor.AclParentMsg
     | TabChange of EditorTabs
     | IconMsg of IconEditor.IconEditorMsg
+    | Save
+    | SaveError of NavEditorErrorType
 
 module Renderers =
     let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<EditorMsgType>) =
@@ -42,7 +48,7 @@ module Renderers =
                 dispatch (EditProp(propName,value))
         App.Components.IconEditor.renderIconEditor (propName, propObs) value dispatch2
 
-    let renderEditorFrame (value:NavRootResponse) core dispatch =
+    let renderEditorFrame (value:NavRootResponse) core (lDispatch:Dispatch<EditorMsgType>) (pDispatch: Dispatch<ParentMsg>) =
         Html.divc "panel" [
             // path
             Html.pc "panel-heading" [
@@ -52,41 +58,18 @@ module Renderers =
                     text $"{value.Name}: {value.Path}"
                 ]
             ]
+
             Html.divc "panel-block" core
-                // tabs [
-                //     {
-                //         Name= "Icon"
-                //         TabClickMsg= Msg.TabChange RootTabs.RootEditor
-                //         IsActive= rt = RootTabs.RootEditor
-                //         Render=
-                //             fun () -> renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch // viewNavRoot (store,dispatch)
-                //     }
-                //     {
-                //         Name= "Acls"
-                //         TabClickMsg= Msg.TabChange RootTabs.RootEditor
-                //         IsActive= rt = RootTabs.RootEditor
-                //         Render = fun () ->
-                //             renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> Msg.EditorMsg |> dispatch)
-                //     }
-                // ] dispatch
-                // // formField [ text "hello"] []
-                // Html.divc "tile" [
-                //     formField [text "Icon"] [
-                //         Html.divc "box" [
-                //             renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch
-                //         ]
-                //     ]
-                //     formField [ text "Acls"] [
-                //         Html.divc "box" [
-                //             renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> Msg.EditorMsg |> dispatch)
-                //         ]
-                //     ]
-                // ]
+
             Html.divc "panel-block" [
                 Html.divc "left-left" [
                     Html.buttonc "button" [
+                        text "Save"
+                        onClick (fun _ -> ParentMsg.Saved value |> pDispatch) []
+                    ]
+                    Html.buttonc "button" [
                         text "Cancel"
-                        onClick (fun _ -> Cancel |> dispatch) []
+                        onClick (fun _ -> Cancel |> pDispatch) []
                     ]
                 ]
             ]
@@ -97,8 +80,9 @@ module Renderers =
 
 let init item =
     {
-        Tab=IconTab
+        Tab= IconTab
         Item= item
+        Error= None
     }
 
 let update msg model =
@@ -108,8 +92,16 @@ let update msg model =
         let nextItem = clone model.Item
         (?) nextItem name <- value
         {model with Item= nextItem}
-    | EditAcl aclMsg ->
-        model  //of AclEditor.AclParentMsg
+    // TODO: Not implemented
+    | EditAcl aclMsg -> model  // of AclEditor.AclParentMsg
+    // TODO: Not implemented
+    | IconMsg iMsg -> model
+    // TODO: Not implemented
+    | Save -> model
+    // TODO: Not implemented
+    | SaveError e -> {model with Error = Some (e, System.DateTime.Now)}
+
+()
 
 // renames will go a different route, no path editing
 let renderEditor aclTypes (value:NavRootResponse, obs: System.IObservable<NavRootResponse option>) (dispatchParent: Dispatch<ParentMsg>) = 
@@ -150,4 +142,4 @@ let renderEditor aclTypes (value:NavRootResponse, obs: System.IObservable<NavRoo
     Renderers.renderEditorFrame value [
         core
         oldCore
-    ] dispatchParent
+    ] dispatch dispatchParent

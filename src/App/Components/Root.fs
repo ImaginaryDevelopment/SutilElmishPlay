@@ -31,13 +31,23 @@ type RootTabs =
 type Model = {
     AppMode: ConfigType<string>
     NavRootState : RemoteData<NavRootResponse[]>
-    NavPathState : RemoteData<string*NavRootResponse[]>
+    NavPathState : RemoteData<NavPathResponse>
     AclTypeState : RemoteData<Acl[]>
     FocusedItem : NavRootResponse option
     RootTab: RootTabs
     // this should not be able to change while a request is in flight
     Path: string
 }
+    with
+        static member tryFindNavRootItem itemId model =
+            model.NavRootState |> RemoteData.TryGet |> Option.bind(fun x -> x |> Array.tryFind(fun item -> item.Id = itemId))
+        static member tryFindNavPathItem itemId model =
+            model.NavPathState |> RemoteData.TryGet |> Option.bind(fun x -> x.Items |> Array.tryFind(fun item -> item.Id = itemId))
+        static member tryFindNavItem itemId model =
+            model |> Model.tryFindNavRootItem itemId
+            |> Option.orElseWith(fun () ->
+                model |> Model.tryFindNavPathItem itemId
+            )
 
 [<RequireQualifiedAccess>]
 module MLens =
@@ -51,7 +61,7 @@ module MLens =
 
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
-    | NavPathMsg of RemoteMsg<unit, NavRootResponse[]>
+    | NavPathMsg of RemoteMsg<unit, NavPathResponse>
     | AclStateMsg of RemoteMsg<unit, Acl[]>
     | TabChange of RootTabs
     | EditorMsg of NavEditor.ParentMsg
@@ -149,6 +159,19 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | TabChange v, _ -> {model with RootTab= v}, Cmd.none
 
     | Msg.EditorMsg (NavEditor.ParentMsg.Cancel), _ -> {model with FocusedItem = None}, Cmd.none
+
+    | Msg.EditorMsg (NavEditor.Saved value), _ ->
+        // TODO: post updated value back to api
+        let runSave () =
+            model, Cmd.none
+
+        match model |> Model.tryFindNavItem value.Id with
+        | None ->
+            eprintfn "Item to update not found: '%A' ('%A')" value.Id value.Name
+            // TODO: report error up to user, although this case should never happen
+            model, Cmd.none
+        | Some _old -> // disable saves and save button, don't navigate away while we try to save
+            runSave()
     | FocusItem item, _ ->
         {model with RootTab= RootTabs.RootEditor; FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
 
@@ -162,8 +185,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
 
     | NavPathMsg (Response x), _ ->
-        let v = x |> Result.map(fun items -> model.Path, items)
-        {model with NavPathState= Responded v}, Cmd.none
+        {model with NavPathState= Responded x}, Cmd.none
 
     // requests for remotes:
 
@@ -192,7 +214,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | NavPathMsg (Request ()), _ ->
         match model.AppMode with
         | ConfigType.Demo ->
-            {model with NavPathState= Responded(Ok (model.Path,dummyData))}, Cmd.none
+            {model with NavPathState= Responded(Ok {Path= model.Path; Items= dummyData})}, Cmd.none
         | ConfigType.Auth accessToken ->
             printfn "Requesting Path '%s'" model.Path
             {model with NavPathState= InFlight}, Commands.getNavPath (accessToken, model.Path)
@@ -343,6 +365,7 @@ let view appMode =
                                 Renderers.renderRemote "Root" nrs (RemoteMsg.Request () |> Msg.NavRootMsg) r dispatch
                             )
                 }
+
             let pathTab =
                 {
                     Name="Path"
@@ -357,12 +380,13 @@ let view appMode =
                                 )
                                 Bind.el(store |> Store.map MLens.getNavPathState,
                                     (fun nps ->
-                                        let r (path,data)= Renderers.renderRootView $"Sub:{path}" data dispatch
+                                        let r (x:NavPathResponse) = Renderers.renderRootView $"Sub:{x.Path}" x.Items dispatch
                                         Renderers.renderRemote $"Path:{store.Value.Path}" nps (RemoteMsg.Request () |> Msg.NavPathMsg) r dispatch
                                     )
                                 )
                             ]
                 }
+
             // bulma tabs
             tabs [
                 rootTab
@@ -388,30 +412,5 @@ let view appMode =
             ] dispatch
         )
 
-        // Bind.el(store |> Store.map MLens.getNavRootState, fun mis ->
-        //     let buttonText = text "Nav Root"
-        //     match mis with
-        //     | RemoteData.NotRequested ->
-        //         Html.button [
-        //             buttonText
-        //             onClick(fun e -> dispatch (Msg.NavRootMsg (RemoteMsg.Request ()))) []
-        //         ]
-        //     | RemoteData.InFlight ->
-        //         Html.button [
-        //             Attr.disabled true
-        //             buttonText
-        //         ]
-        //     | RemoteData.Responded(Ok(data)) ->
-        //         Bind.el(store |> Store.map MLens.getFocusedItem, 
-        //             function
-        //             | None -> Renders.renderRootView data dispatch
-        //             | Some v ->
-        //                 Renders.renderEditor v dispatch
-        //         )
-        //     | RemoteData.Responded(Error exn) ->
-        //         Html.divc "error" [
-        //             text (Core.pretty exn)
-        //         ]
-        // )
     ]
     |> withStyle css

@@ -46,6 +46,11 @@ type NavRootResponse = {
     Acls: AclRef []
 }
 
+type NavPathResponse = {
+    Path: string
+    Items: NavRootResponse[]
+}
+
 // maybe headers too?
 type  FetchParams = {
     QueryValues: Map<string,string> option
@@ -110,13 +115,14 @@ let getMyInfo token: Async<Result<MyInfoResponse,exn>> =
 let getNavRoot token : Async<Result<NavRootResponse[],exn>> =
     fetchJson<_> "NavRootResponse[]" {Token=token;RelPath="/api/navigation/root"; Arg=None}
 
-let getNavPath token (path: string) : Async<Result<NavRootResponse[],exn>> =
+let getNavPath token (path: string) : Async<Result<NavPathResponse,exn>> =
     let path =
         if path.StartsWith "/" then
             "/api/navigation/root" + path
         else
             "/api/navigation/root/" + path
-    fetchJson<_> "NavRootResponse'[]" {Token=token;RelPath=path;Arg=None}
+    fetchJson<NavRootResponse[]> "NavRootResponse'[]" {Token=token;RelPath=path;Arg=None}
+    |> Async.map (Result.map(fun items -> {Path=path;Items=items}))
 
 
 let getAcls token : Async<Result<Acl[],exn>> =

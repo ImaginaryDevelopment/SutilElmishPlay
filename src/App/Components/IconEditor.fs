@@ -26,6 +26,7 @@ let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<Ico
                 Attr.value value
                 Handlers.onValueInput dispatch (fun v -> NameChange(propName,v))
             ]
+
             Html.divc "select" [
                 Bind.el(propObs,
                     function
