@@ -112,9 +112,19 @@ module LocalStorage =
                 toGlobal "self" Browser.Dom.self
                 Error(ex.Message)
 
+    type IAccessor<'t> = // 
+        abstract member GetValue : unit -> 't option
+        abstract member TryGetValue : unit -> 't option
+        abstract member TrySetValue : 't option -> Result<unit,string>
+
     // assumes we never want to clear a key entirely
     // assumes the serializer/deserializer works well enough
     type StorageAccess<'t when 't : equality >(name) =
+        let get() = Internal.TryGet<'t> name
+        do
+            toGlobal $"storageAccess_{name}" get
+            ()
+
         static member CreateStorage (name) = StorageAccess(name)
         member inline this.TryGet() =
             try this.Get()
@@ -123,5 +133,23 @@ module LocalStorage =
                 log ex
                 None
 
-        member inline _.Get() =  Internal.TryGet<'t>(name)
+        member inline _.Get() = get()
         member inline _.Save(x:'t option) = Internal.TrySave (name,x)
+
+        interface IAccessor<'t> with
+            override this.GetValue () = this.Get()
+            override this.TryGetValue () = this.TryGet()
+            override this.TrySetValue valueOpt = this.Save valueOpt
+
+    type TypeMapper<'t1,'t2> = {
+        Setter: 't1 -> 't2
+        Getter: 't2 -> 't1
+    }
+
+    type StorageAccessor<'t,'tRest when 'tRest : equality >(name: string, fMaps:TypeMapper<'t,'tRest>) =
+        let sa: StorageAccess<'tRest> = StorageAccess.CreateStorage name
+
+        interface IAccessor<'t> with
+            override _.GetValue () = sa.Get() |> Option.map fMaps.Getter
+            override _.TryGetValue () = sa.TryGet() |> Option.map fMaps.Getter
+            override _.TrySetValue valueOpt = valueOpt |> Option.map fMaps.Setter |> sa.Save

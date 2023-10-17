@@ -27,6 +27,7 @@ type Acl = {
     SelectableParameters: string[] option
 }
 
+/// 
 type AclRef = {
     Name:string
     Parameters: string[]
@@ -173,4 +174,4 @@ type NavAclResolve = {
 
 // for doing a lookup of the parameters in an existing acl for display
 let getNavAclResolve token nar =
-    fetchJson<NavAclResolveResponse> "???" {Token=token; RelPath= $"/api/Navigation/Acls?Resolve={nar.NavId}&Acl={nar.AclName}&"; Arg=None}
+    fetchJson<NavAclResolveResponse> "???" {Token=token; RelPath= $"/api/Navigation/Acls?Resolve={nar.NavId}&Acl={nar.AclName}"; Arg=None}

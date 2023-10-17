@@ -108,22 +108,8 @@ let update msg model =
 ()
 
 // renames will go a different route, no path editing
-let renderEditor aclTypes (value:NavItem, obs: System.IObservable<NavItem option>) (dispatchParent: Dispatch<ParentMsg>) = 
+let renderEditor resolvedParams aclTypes (value:NavItem, obs: System.IObservable<NavItem option>) (dispatchParent: Dispatch<ParentMsg>) = 
     let store, dispatch = value |> Store.makeElmishSimple init update ignore
-
-    let oldCore =
-        Html.divc "tile" [
-            formField [text "Icon"] [
-                Html.divc "box" [
-                    Renderers.renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon dispatch
-                ]
-            ]
-            formField [ text "Acls"] [
-                Html.divc "box" [
-                    AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
-                ]
-            ]
-        ]
 
     let core =
         Bind.el(store |> Store.map MLens.getTab, fun tab ->
@@ -140,7 +126,8 @@ let renderEditor aclTypes (value:NavItem, obs: System.IObservable<NavItem option
                     TabClickMsg= TabChange AclTab
                     IsActive= tab = AclTab
                     Render = fun () ->
-                        AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
+                        AclEditor.renderAclsEditor { ItemAcls= value.Acls; AclTypes=aclTypes; ResolvedParams = resolvedParams } (fun msg -> msg |> EditAcl |> dispatch)
+                        // AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
                 }
             ] dispatch
         )

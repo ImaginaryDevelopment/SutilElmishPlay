@@ -20,7 +20,11 @@ type AclType =
     | Selectable of values: string[] option * multiValue: bool
     | Reference of multiValue: bool
 
+type AclRefState =
+    | Requested
+    | Response of Result<AclDisplay,Gen.ErrorType>
 type AclParentMsg =
+    // which Acl Type is highlighted
     // None is a valid option
     | AclTypeChange of AclType option
 
@@ -88,20 +92,20 @@ module Renderers =
                 ]
         ]
 
-    let renderAclParams (idMap:Map<string,RemoteData<string>>) (aclType: Acl) (item: AclRef) =
+    let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
         Html.div [
             Html.ul [
                 for p in item.Parameters do
                     Html.li [
                         match idMap |> Map.tryFind p with
-                        | Some NotRequested
-                        | Some InFlight
+                        | Some AclRefState.Requested
                         | None ->
                             text p
-                        | Some (Responded(Ok display)) ->
                             Attr.title p
-                            text display
-                        | Some (Responded(Error e)) ->
+                        | Some (AclRefState.Response(Ok x)) ->
+                            Attr.title x.Reference
+                            text x.DisplayName
+                        | Some (AclRefState.Response(Error e)) ->
                             Attr.title (string e)
                             text p
                     ]
@@ -184,27 +188,48 @@ let css = [
     ]
 ]
 
+type AclEditorArgs = {
+    ItemAcls: AclRef seq
+    AclTypes: Acl seq
+    ResolvedParams: System.IObservable<Map<string, AclDisplay>>
+}
+
 // allow them to edit or create one
-let renderAclsEditor (itemAcls:AclRef seq) (aclTypes:Acl seq) (dispatchParent:Dispatch<AclParentMsg>) =
+let renderAclsEditor (aea:AclEditorArgs) (dispatchParent:Dispatch<AclParentMsg>) =
     let store, dispatch =
-        itemAcls
+        aea.ItemAcls
         |> Seq.tryHead
         |> Option.map (fun v -> {IsNew=false;AclRef=v})
-        |> Store.makeElmish init (update itemAcls) ignore
+        |> Store.makeElmish init (update aea.ItemAcls) ignore
+    let m = aea.ResolvedParams |> Observable.map(fun m ->
+        m
+        |> Map.map(fun k v -> AclRefState.Response (Ok v))
+
+    )
 
     Html.div [
         disposeOnUnmount [ store ]
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
 
-        Bind.el(store |> Store.map MLens.getFocusedAcl, fun focusOpt ->
-            let selectedType = focusOpt |> Option.map(fun item -> item.AclRef.Name) |> Option.defaultValue "" // String.toLower store.Value.FocusedAcl.Name
-            let selectedAclType = aclTypes |> Seq.tryFind(fun v -> v.Name = selectedType)
+        Bind.el(store |> Store.map MLens.getFocusedAcl, fun focusAclOpt ->
+            let selectedType = focusAclOpt |> Option.map(fun item -> item.AclRef.Name) |> Option.defaultValue "" // String.toLower store.Value.FocusedAcl.Name
+            let selectedAclType = aea.AclTypes |> Seq.tryFind(fun v -> v.Name = selectedType)
             Html.div [
-                Renderers.renderAclTypeSelector aclTypes selectedType (Option.isSome focusOpt) dispatch
-                match focusOpt with
-                | Some item ->
-                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty item)]
+                Renderers.renderAclTypeSelector aea.AclTypes selectedType (Option.isSome focusAclOpt) dispatch
+                match focusAclOpt with
+                | Some focusedAcl ->
+                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty focusedAcl)]
                     Html.spanc "info" [ text "*"; Attr.title (Core.pretty selectedAclType)]
+                    Html.div [
+                        // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
+                        match selectedAclType with
+                        | Some selectedAclType ->
+                            Bind.el(m, fun m ->
+                                Renderers.renderAclParams m selectedAclType focusedAcl.AclRef 
+                            )
+                        | None ->
+                            ()
+                    ]
                 | None ->
                     ()
             ]
@@ -214,7 +239,7 @@ let renderAclsEditor (itemAcls:AclRef seq) (aclTypes:Acl seq) (dispatchParent:Di
         Bind.el(store |> Store.map MLens.getFocusedAcl, fun focusOpt ->
             let selectedType = focusOpt |> Option.map(fun item -> item.AclRef.Name) |> Option.defaultValue "" // String.toLower store.Value.FocusedAcl.Name
             Html.div [
-                for (i,acl) in itemAcls |> Seq.indexed do
+                for (i,acl) in aea.ItemAcls |> Seq.indexed do
                     Html.div [
                         if i % 2 = 0 then
                             Attr.className "has-background-link-light"

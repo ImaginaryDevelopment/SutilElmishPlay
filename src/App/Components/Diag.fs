@@ -170,7 +170,7 @@ let view dia =
         Html.ul[
             Html.li[
                 data_ "icon" "intentionally missing"
-                Bulma.FontAwesome.fa "monero"
+                Bulma.FontAwesome.fa "mo"
             ]
             Html.li [
                 Html.div [

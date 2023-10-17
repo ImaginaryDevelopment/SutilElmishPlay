@@ -35,7 +35,7 @@ type Model = {
     NavPathState : RemoteData<NavPathResponse>
     // we don't need to track not requested, in flight is implied by (value, None)
     AclResolutions : string list
-    ResolvedAcls : Map<string,string>
+    ResolvedAcls : Map<string,AclDisplay>
     AclTypeState : RemoteData<Acl[]>
     FocusedItem : NavItem option
     RootTab: RootTabs
@@ -64,6 +64,7 @@ module private MLens =
     let getPath x = x.Path
     let getRootTab x = x.RootTab
     let getErrors x = x.Errors
+    let getResolvedAcls x = x.ResolvedAcls
 
 type Msg =
     | NavRootMsg of RemoteMsg<unit, NavItem[]>
@@ -135,17 +136,19 @@ module Commands =
         Cmd.OfAsync.perform a () id
         // | _ -> Cmd.none
 
-let resolveAclsAccess = Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
+let resolveAclsAccess =
+    //Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
+    Core.LocalStorage.StorageAccessor<Map<string,string>,_>("Root_AclsAccess", {Getter=Map.ofArray; Setter=Map.toArray}) :> Core.LocalStorage.IAccessor<_>
 
 let init appMode =
-    let (iState, cmd: Cmd<Msg>) = 
+    let (iState, cmd: Cmd<Msg>) =
         match appMode with
         | Demo -> NotRequested,Cmd.none
         | Auth token ->
             let cmd1:Cmd<Msg> = Commands.getNavRoot token
             let cmd2:Cmd<Msg> = Commands.getAcls token
             InFlight, Cmd.batch [ cmd1;cmd2 ]
-    let resolvedAcls = resolveAclsAccess.TryGet()
+    let resolvedAcls = resolveAclsAccess.TryGetValue()
 
     {   AppMode = appMode;
         NavRootState = if iState = InFlight then InFlight else NotRequested
@@ -156,7 +159,7 @@ let init appMode =
         Path = ""
         Errors = List.empty
         AclResolutions = List.empty
-        ResolvedAcls = resolvedAcls |> Option.defaultValue Map.empty}
+        ResolvedAcls = resolvedAcls |> Option.map(Map.map(fun k v -> {AclDisplay.DisplayName= v; AclDisplay.Reference = k})) |> Option.defaultValue Map.empty}
         , cmd
 
 module SideEffects =
@@ -275,9 +278,9 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         let nextMap =
             (model.ResolvedAcls, x.Resolved)
             ||> Seq.fold(fun m newItem ->
-                m |> Map.add newItem.Reference newItem.DisplayName
+                m |> Map.add newItem.Reference newItem
             )
-        match resolveAclsAccess.Save (Some nextMap) with
+        match resolveAclsAccess.TrySetValue (nextMap |> Map.map (fun _ v -> v.DisplayName) |> Some) with
         | Ok () -> ()
         | Error e ->
             eprintfn "Failed to save map: '%A'" e
@@ -357,7 +360,7 @@ module Renderers =
                 ]
             ]
 
-    let renderItemView (item:NavItem) (dispatch: Dispatch<Msg>) =  
+    let renderItemView (item:NavItem) (dispatch: Dispatch<Msg>) =
         let stripped = cloneExcept(item, ["Acls"])
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
@@ -503,7 +506,7 @@ let view appMode =
                                 | _, None
                                 | None, _ -> Html.div []
                                 | Some item, Some aclTypes ->
-                                    let r = NavEditor.renderEditor aclTypes (item, store |> Store.map MLens.getFocusedItem) (Msg.EditorMsg >> dispatch)
+                                    let r = NavEditor.renderEditor (store |> Store.map MLens.getResolvedAcls) aclTypes (item, store |> Store.map MLens.getFocusedItem) (Msg.EditorMsg >> dispatch)
                                     r
                         fun () ->
                             Bind.el2 gfi gAcl r
