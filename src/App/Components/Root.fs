@@ -125,6 +125,7 @@ module Commands =
         Cmd.OfAsync.perform a () id
 
     let getNavAclDisplays token (req:NavAclResolve) =
+        printfn "Fetching NavAclDisplay for '%s'" req.AclName
         // match item.Acls |> Seq.tryHead with
         // | Some acl when acl.Parameters |> Seq.isEmpty |> not ->
         let a () =
@@ -230,6 +231,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | PathReq, {NavPathState= _; Path= NonValueString _} -> block "PathReq NoPath"
     | TabChange v, {RootTab= y} when v = y -> block "already selected tab change"
     | EditorMsg(NavEditor.ParentMsg.Cancel), {FocusedItem = None} -> block "No FocusedItem for edit"
+    | EditorMsg(NavEditor.ParentMsg.AclTypeChange NonValueString), {FocusedItem = None} -> block "No AclType for eager loading"
 
     // actions
 
@@ -237,6 +239,15 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | TabChange v, _ -> {model with RootTab= v}, Cmd.none
 
     | Msg.EditorMsg (NavEditor.ParentMsg.Cancel), _ -> {model with FocusedItem = None}, Cmd.none
+    | Msg.EditorMsg (NavEditor.ParentMsg.AclTypeChange v), _ ->
+        match model.AppMode, model.FocusedItem with
+        | ConfigType.Demo, _ -> model, Cmd.none
+        | ConfigType.Auth accessToken, Some fi ->
+            model, Commands.getNavAclDisplays accessToken {
+                NavId= fi.Id
+                AclName= v
+            }
+        | ConfigType.Auth _, None -> block "AclTypeChange without Focused Item"
     | AclResolveMsg (Request x), _ ->
         match model.AppMode with
         | ConfigType.Demo -> model, Cmd.none

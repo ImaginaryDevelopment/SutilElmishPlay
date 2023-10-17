@@ -16,17 +16,18 @@ open Gen.Icons
 module Handlers = App.Adapters.Html.Handlers
 
 // TODO: is this complete and a proper representation? move to api perhaps
-type AclType =
-    | Selectable of values: string[] option * multiValue: bool
-    | Reference of multiValue: bool
+// type AclType =
+//     | Selectable of values: string[] option * multiValue: bool
+//     | Reference of multiValue: bool
 
 type AclRefState =
     | Requested
     | Response of Result<AclDisplay,Gen.ErrorType>
+
 type AclParentMsg =
     // which Acl Type is highlighted
     // None is a valid option
-    | AclTypeChange of AclType option
+    | AclTypeChange of string
 
 type Msg =
     | TypeSelectChange of string

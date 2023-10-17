@@ -28,12 +28,15 @@ type Model = {
     Error: (NavEditorErrorType * System.DateTime) option
 }
 
-module MLens =
+[<RequireQualifiedAccess>]
+module private MLens =
     let getTab x = x.Tab
+    let getItem x = x.Item
 
 type ParentMsg =
     | Cancel
     | Saved of NavItem
+    | AclTypeChange of string
 
 type EditorMsgType =
     | EditProp of prop:string * nextValue :string
@@ -88,18 +91,18 @@ let init item =
         Error= None
     }
 
-let update msg model =
+let update dispatchParent msg model =
     printfn "NavEditor update: %A" msg
     match msg with
     | TabChange t -> {model with Tab= t}
+    | IconMsg (IconEditor.IconEditorMsg.NameChange(name,value))
     | EditProp(name,value) ->
         let nextItem = clone model.Item
         (?) nextItem name <- value
         {model with Item= nextItem}
-    // TODO: Not implemented
-    | EditAcl aclMsg -> model  // of AclEditor.AclParentMsg
-    // TODO: Not implemented
-    | IconMsg iMsg -> model
+    | EditAcl (AclEditor.AclParentMsg.AclTypeChange v) ->
+        ParentMsg.AclTypeChange v |> dispatchParent
+        model
     // TODO: Not implemented
     | Save -> model
     // TODO: Not implemented
@@ -108,11 +111,13 @@ let update msg model =
 ()
 
 // renames will go a different route, no path editing
-let renderEditor resolvedParams aclTypes (value:NavItem, obs: System.IObservable<NavItem option>) (dispatchParent: Dispatch<ParentMsg>) = 
-    let store, dispatch = value |> Store.makeElmishSimple init update ignore
+let renderEditor resolvedParams aclTypes (propValue:NavItem, obs: System.IObservable<NavItem option>) (dispatchParent: Dispatch<ParentMsg>) = 
+    let store, dispatch = propValue |> Store.makeElmishSimple init (update dispatchParent) ignore
 
     let core =
-        Bind.el(store |> Store.map MLens.getTab, fun tab ->
+        let obsTab = store |> Store.map MLens.getTab
+        let obsItem = store |> Store.map MLens.getItem
+        Bind.el2 obsTab obsItem (fun (tab, value) ->
             tabs [
                 {
                     Name= "Icon"
@@ -134,8 +139,10 @@ let renderEditor resolvedParams aclTypes (value:NavItem, obs: System.IObservable
 
     Html.div [
         disposeOnUnmount [ store ]
-        Renderers.renderEditorFrame value [
-            core
-            // oldCore
-        ] dispatch dispatchParent
+        Bind.el(store |> Store.map MLens.getItem, fun value ->
+            Renderers.renderEditorFrame value [
+                core
+                // oldCore
+            ] dispatch dispatchParent
+        )
     ]
