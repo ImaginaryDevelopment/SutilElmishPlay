@@ -62,7 +62,7 @@ type NavAclResolveResponse = {
     Errors: AclDisplay[]
 }
 
-type NavRootResponse = {
+type NavItem = {
     Id: string
     Path: string
     Parent: string
@@ -78,7 +78,7 @@ type NavRootResponse = {
 
 type NavPathResponse = {
     Path: string
-    Items: NavRootResponse[]
+    Items: NavItem[]
 }
 
 // maybe headers too?
@@ -142,8 +142,8 @@ let getMyInfo token: Async<Result<MyInfoResponse,exn>> =
 
 
 // api/navigation/root
-let getNavRoot token : Async<Result<NavRootResponse[],exn>> =
-    fetchJson<_> "NavRootResponse[]" {Token=token;RelPath="/api/navigation/root"; Arg=None}
+let getNavRoot token : Async<Result<NavItem[],exn>> =
+    fetchJson<_> "NavItem[]" {Token=token;RelPath="/api/navigation/root"; Arg=None}
 
 let getNavPath token (path: string) : Async<Result<NavPathResponse,exn>> =
     let path =
@@ -151,7 +151,7 @@ let getNavPath token (path: string) : Async<Result<NavPathResponse,exn>> =
             "/api/navigation/root" + path
         else
             "/api/navigation/root/" + path
-    fetchJson<NavRootResponse[]> "NavRootResponse'[]" {Token=token;RelPath=path;Arg=None}
+    fetchJson<NavItem[]> "NavItem'[]" {Token=token;RelPath=path;Arg=None}
     |> Async.map (Result.map(fun items -> {Path=path;Items=items}))
 
 
@@ -159,12 +159,18 @@ let getAcls token : Async<Result<Acl[],exn>> =
     fetchJson<_> "Acl[]" {Token=token;RelPath="/api/Navigation/Acls"; Arg=None}
 
 // for selecting parameters for a new acl
-let getAclRefValues token name search =
-    fetchJson<AclSearchResponse> "AclSearchResponse" {Token=token;RelPath= $"/api/Navigation/Acls?Name={name}&search={search}"; Arg=None}
+type AclRefValueArgs = {
+    AclName: string
+    SearchText: string
+}
+let getAclRefValues token arv =
+    fetchJson<AclSearchResponse> "AclSearchResponse" {Token=token;RelPath= $"/api/Navigation/Acls?Name={arv.AclName}&Search={arv.SearchText}"; Arg=None}
+
+type NavAclResolve = {
+    AclName: string
+    NavId: string
+}
 
 // for doing a lookup of the parameters in an existing acl for display
-let getAclResolve token name objId =
-    fetchJson<_> "AclResolve?" {Token=token;RelPath= $"/api/Navigation/Acl?Name={name}&resolve={objId}"; Arg=None}
-
-let getNavAclResolve token (name:string) (objId:string) =
-    fetchJson<NavAclResolveResponse> "???" {Token=token; RelPath= $"/api/navigation/acls?acl={name}&Resolve={objId}"; Arg=None}
+let getNavAclResolve token nar =
+    fetchJson<NavAclResolveResponse> "???" {Token=token; RelPath= $"/api/Navigation/Acls?Resolve={nar.NavId}&Acl={nar.AclName}&"; Arg=None}

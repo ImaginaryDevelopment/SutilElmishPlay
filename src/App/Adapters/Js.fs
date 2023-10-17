@@ -1,5 +1,7 @@
 module Core
 
+open BReusable
+
 open Fable.Core
 open Fable.Core.JsInterop
 
@@ -11,6 +13,9 @@ let pretty<'t> (x:'t) =
     JS.JSON.stringify(x, Unchecked.defaultof<_>," ") //JSON.stringify(data, null, "  ")
 
 let serialize<'t> (x:'t) = JS.JSON.stringify(x) //JSON.stringify(data, null, "  ") 
+
+// this may have issues with DUs and other specialized types
+let deserialize<'t> (x: string) = Option.ofValueString x |> Option.map JS.JSON.parse |> Option.bind Option.ofUnsafe |> Option.map(fun v -> v :?> 't)
 
 [<Emit("Object.keys($0)")>]
 let keys x : string[] = jsNative
@@ -65,3 +70,58 @@ let tryParse<'t> title (x:string) : Result<'t,exn> =
 module Handlers =
     let getValue (e:Browser.Types.Event) : string = e.target?value
 ()
+
+module LocalStorage =
+    module internal Impl =
+        let localStorage = Browser.Dom.self.localStorage
+
+    open Impl
+    type Internal =
+        // let private localStorage = Browser.Dom.self.localStorage
+        // let private json = Fable.Core.JS.JSON
+        static member inline TryGet<'t when 't : equality > (key) : 't option =
+            localStorage.getItem key
+            |> Option.ofValueString
+            |> Option.bind (fun x ->
+                    // printfn "Found %s -> %s" key s
+                    let result:'t option =
+                        // Thoth.Json.Decode.Auto.fromString s
+                        // Resolver.Deserialize(x)
+                        deserialize x
+                        // json.parse(s)
+                        // |> unbox
+                    result
+                )
+
+        static member inline TrySave (key:string, valueOpt: 't option) : Result<unit,string> =
+            printfn "trying to save"
+            try
+                // let pojo = Fable.Core.JsInterop.toPlainJsObj value
+                let serial =
+                    match valueOpt with
+                    | Some (value: 't) ->
+                        let stringy = serialize value
+                        stringy
+                    | None -> null
+                printfn "Saving to key %s" key
+
+                localStorage.setItem(key,serial)
+                // printfn "Saved -> %s" serial
+                Ok ()
+            with ex ->
+                toGlobal "self" Browser.Dom.self
+                Error(ex.Message)
+
+    // assumes we never want to clear a key entirely
+    // assumes the serializer/deserializer works well enough
+    type StorageAccess<'t when 't : equality >(name) =
+        static member CreateStorage (name) = StorageAccess(name)
+        member inline this.TryGet() =
+            try this.Get()
+            with ex ->
+                eprintfn "Failed to fetch from storage '%s'" name
+                log ex
+                None
+
+        member inline _.Get() =  Internal.TryGet<'t>(name)
+        member inline _.Save(x:'t option) = Internal.TrySave (name,x)

@@ -23,6 +23,7 @@ open App.Components.Gen
 open App.Components.Gen.Icons
 open Sutil.Core
 
+
 type RootTabs =
     | RootMain
     | RootSub
@@ -30,13 +31,17 @@ type RootTabs =
 
 type Model = {
     AppMode: ConfigType<string>
-    NavRootState : RemoteData<NavRootResponse[]>
+    NavRootState : RemoteData<NavItem[]>
     NavPathState : RemoteData<NavPathResponse>
+    // we don't need to track not requested, in flight is implied by (value, None)
+    AclResolutions : string list
+    ResolvedAcls : Map<string,string>
     AclTypeState : RemoteData<Acl[]>
-    FocusedItem : NavRootResponse option
+    FocusedItem : NavItem option
     RootTab: RootTabs
     // this should not be able to change while a request is in flight
     Path: string
+    Errors: (string*System.DateTime) list
 }
     with
         static member tryFindNavRootItem itemId model =
@@ -50,7 +55,7 @@ type Model = {
             )
 
 [<RequireQualifiedAccess>]
-module MLens =
+module private MLens =
     let getNavRootState x = x.NavRootState
     let getFocusedItem x = x.FocusedItem
     let getNavPathState x = x.NavPathState
@@ -58,19 +63,21 @@ module MLens =
     let getAclTypes x = x.AclTypeState |> RemoteData.TryGet
     let getPath x = x.Path
     let getRootTab x = x.RootTab
+    let getErrors x = x.Errors
 
 type Msg =
-    | NavRootMsg of RemoteMsg<unit, NavRootResponse[]>
+    | NavRootMsg of RemoteMsg<unit, NavItem[]>
     | NavPathMsg of RemoteMsg<unit, NavPathResponse>
     | AclStateMsg of RemoteMsg<unit, Acl[]>
+    | AclResolveMsg of RemoteMsg<NavAclResolve, NavAclResolveResponse>
     | TabChange of RootTabs
     | EditorMsg of NavEditor.ParentMsg
-    | FocusItem of NavRootResponse
+    | FocusItem of NavItem
     | PathClick of string
     | PathChange of string
     | PathReq
 
-let dummyData: NavRootResponse[] =
+let dummyData: NavItem[] =
     Array.ofList [
         {
             Id="1"
@@ -116,6 +123,20 @@ module Commands =
             }
         Cmd.OfAsync.perform a () id
 
+    let getNavAclDisplays token (req:NavAclResolve) =
+        // match item.Acls |> Seq.tryHead with
+        // | Some acl when acl.Parameters |> Seq.isEmpty |> not ->
+        let a () =
+            async {
+                let! resp = App.Adapters.Api.getNavAclResolve token req
+                let resp2 = Response resp
+                return Msg.AclResolveMsg resp2
+            }
+        Cmd.OfAsync.perform a () id
+        // | _ -> Cmd.none
+
+let resolveAclsAccess = Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
+
 let init appMode =
     let (iState, cmd: Cmd<Msg>) = 
         match appMode with
@@ -124,6 +145,7 @@ let init appMode =
             let cmd1:Cmd<Msg> = Commands.getNavRoot token
             let cmd2:Cmd<Msg> = Commands.getAcls token
             InFlight, Cmd.batch [ cmd1;cmd2 ]
+    let resolvedAcls = resolveAclsAccess.TryGet()
 
     {   AppMode = appMode;
         NavRootState = if iState = InFlight then InFlight else NotRequested
@@ -131,10 +153,64 @@ let init appMode =
         AclTypeState = if iState = InFlight then InFlight else NotRequested
         FocusedItem = None
         RootTab= RootTabs.RootMain
-        Path = ""}, cmd
+        Path = ""
+        Errors = List.empty
+        AclResolutions = List.empty
+        ResolvedAcls = resolvedAcls |> Option.defaultValue Map.empty}
+        , cmd
+
+module SideEffects =
+    // ensure all commands flow through, make it harder to accidentally use old model
+    type SideEffector = {
+        Old: Model
+        Next: Model
+    }
+
+    let addSideEffect (f:SideEffector -> Model*Cmd<Msg> option) model (next,cmd) =
+        match f {Old=model;Next=next} with
+        | m, None -> m, cmd
+        | m, Some cmd2 -> m, Cmd.batch [ cmd2; cmd]
+
+    let onPropChange fProp fEffect (values:SideEffector) : Model*Cmd<Msg> option =
+        if fProp values.Old <> fProp values.Next then
+            fEffect values
+        else values.Next, None
+
+    let onPropOptAddedOrChanged fProp fEffect values =
+        let propNext = fProp values.Next
+        if Option.isSome propNext then
+            onPropChange fProp fEffect values
+        else values.Next,None
+
+    let whenFocusedItemChanges accessTokenOpt =
+        onPropOptAddedOrChanged (fun m -> m.FocusedItem)
+            <| fun se ->
+                match accessTokenOpt with
+                | None -> None
+                | Some accessToken ->
+                    let getEager fi = fi.Acls |> Seq.tryFind(fun acl -> Array.isEmpty acl.Parameters |> not) |> Option.map(fun acl -> fi,acl)
+                    match se.Next.FocusedItem |> Option.bind getEager with
+                    | Some pair -> Some pair
+                    | _ -> None
+
+                    // kick off eager fetch of acl params
+                    |> Option.map (fun (fi,acl) ->
+                        se.Next, Some <| Commands.getNavAclDisplays accessToken {
+                            NavId= fi.Id
+                            AclName = acl.Name
+                        }
+                    )
+
+                |> Option.defaultValue (se.Next,None)
+                |> fun (next,cmdOpt) -> { next with RootTab= RootTabs.RootEditor}, cmdOpt
 
 let update msg (model:Model) : Model * Cmd<Msg> =
     printfn "Root Update running: %A ('%s')" msg model.Path
+    let atOpt =
+        match model.AppMode with
+        | ConfigType.Demo -> None
+        | ConfigType.Auth accessToken -> Some accessToken
+
     let block title =
         printfn "Blocked: %s (%A)" title msg
         model, Cmd.none
@@ -152,28 +228,36 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     | TabChange v, {RootTab= y} when v = y -> block "already selected tab change"
     | EditorMsg(NavEditor.ParentMsg.Cancel), {FocusedItem = None} -> block "No FocusedItem for edit"
 
-
     // actions
 
     // consider a confirm dialog for navigating from the editor?
     | TabChange v, _ -> {model with RootTab= v}, Cmd.none
 
     | Msg.EditorMsg (NavEditor.ParentMsg.Cancel), _ -> {model with FocusedItem = None}, Cmd.none
+    | AclResolveMsg (Request x), _ ->
+        match model.AppMode with
+        | ConfigType.Demo -> model, Cmd.none
+        | ConfigType.Auth accessToken ->
+            {model with AclResolutions = x.NavId::model.AclResolutions}, Commands.getNavAclDisplays accessToken x
 
     | Msg.EditorMsg (NavEditor.Saved value), _ ->
         // TODO: post updated value back to api
-        let runSave () =
-            model, Cmd.none
+        // let runSave () =
+        //     model, Cmd.none
 
-        match model |> Model.tryFindNavItem value.Id with
-        | None ->
-            eprintfn "Item to update not found: '%A' ('%A')" value.Id value.Name
-            // TODO: report error up to user, although this case should never happen
-            model, Cmd.none
-        | Some _old -> // disable saves and save button, don't navigate away while we try to save
-            runSave()
+        // match model |> Model.tryFindNavItem value.Id with
+        // | None ->
+        //     eprintfn "Item to update not found: '%A' ('%A')" value.Id value.Name
+        //     // TODO: report error up to user, although this case should never happen
+        //     model, Cmd.none
+        // | Some _old -> // disable saves and save button, don't navigate away while we try to save
+        //     runSave()
+
+        printfn "Saved!"
+        model, Cmd.none
+
     | FocusItem item, _ ->
-        {model with RootTab= RootTabs.RootEditor; FocusedItem = Some (clone<NavRootResponse> item)}, Cmd.none
+        {model with FocusedItem = Some (clone<NavItem> item)}, Cmd.none
 
     | PathChange next, _ ->
         printfn "PathChange '%s' to '%s'" model.Path next
@@ -182,7 +266,24 @@ let update msg (model:Model) : Model * Cmd<Msg> =
     // responses:
 
     | AclStateMsg (Response x), _ -> {model with AclTypeState= Responded x}, Cmd.none
-    | NavRootMsg (Response x ), _ -> {model with NavRootState= Responded x}, Cmd.none
+    | NavRootMsg (Response x), _ -> {model with NavRootState= Responded x}, Cmd.none
+    | AclResolveMsg (Response (Error ex)), _ ->
+        {model with Errors = (ex.Message, System.DateTime.Now)::model.Errors}, Cmd.none
+
+    // TODO: remove model item that was tracking the inflight
+    | AclResolveMsg (Response (Ok x)), _ ->
+        let nextMap =
+            (model.ResolvedAcls, x.Resolved)
+            ||> Seq.fold(fun m newItem ->
+                m |> Map.add newItem.Reference newItem.DisplayName
+            )
+        match resolveAclsAccess.Save (Some nextMap) with
+        | Ok () -> ()
+        | Error e ->
+            eprintfn "Failed to save map: '%A'" e
+            log e
+
+        { model with AclResolutions = model.AclResolutions |> List.except (x.Resolved |> Array.map (fun r -> r.Reference)); ResolvedAcls=nextMap}, Cmd.none
 
     | NavPathMsg (Response x), _ ->
         {model with NavPathState= Responded x}, Cmd.none
@@ -225,6 +326,7 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken ->
             printfn "Requesting Path '%s'" model.Path
             {model with AclTypeState= InFlight}, Commands.getAcls accessToken
+    |> SideEffects.addSideEffect (SideEffects.whenFocusedItemChanges atOpt) model
 
 module Renderers =
 
@@ -255,7 +357,7 @@ module Renderers =
                 ]
             ]
 
-    let renderItemView (item:NavRootResponse) (dispatch: Dispatch<Msg>) =  
+    let renderItemView (item:NavItem) (dispatch: Dispatch<Msg>) =  
         let stripped = cloneExcept(item, ["Acls"])
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
@@ -320,7 +422,8 @@ module Renderers =
 
 let css = [
 
-    rule "label>span.info" Gen.CssRules.titleIndicator  
+    rule "label>span.info" Gen.CssRules.titleIndicator
+
     rule "div.iconColumn" [
         Css.height (em 1.0)
         Css.width (em 1.0)
@@ -342,11 +445,13 @@ let css = [
 let view appMode =
     let store, dispatch = appMode |> Store.makeElmish init update ignore
 
-    // let selected : IStore<NavRootResponse option> = Store.make( None )
+    // let selected : IStore<NavItem option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ store ]
         data_ "file" "Root"
+
+        store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
         Bind.el(store |> Store.map MLens.getRootTab, fun rt ->
             let rootTab =
                 {

@@ -15,7 +15,7 @@ open App.Components.Gen.Icons
 
 type RemoteStates = {
     MyInfoState: RemoteData<MyInfoResponse>
-    NavRootState: RemoteData<NavRootResponse[]>
+    NavRootState: RemoteData<NavItem[]>
     AclState: RemoteData<Acl[]>
 }
 
@@ -26,7 +26,7 @@ type Model = {
 
 type Msg =
     | MyInfo of RemoteMsg<unit, MyInfoResponse>
-    | NavRoot of RemoteMsg<unit,NavRootResponse[]>
+    | NavRoot of RemoteMsg<unit,NavItem[]>
     | Acl of RemoteMsg<unit,Acl[]>
 
 // enable mass scaffolding of api endpoint testers

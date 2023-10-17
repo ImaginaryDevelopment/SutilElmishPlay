@@ -100,6 +100,22 @@ module GenericFetcher =
                     ]
             )
         view
+module ErrorHandling =
+    let renderErrorDisplay obs =
+        Bind.el(obs,
+            function
+            | [] -> Html.divc "errors" []
+            | errors ->
+                Html.divc "errors" [
+                    Html.ul [
+                        for (e,dt) in errors do
+                            Html.li [
+                                text e
+                            ]
+                    ]
+                ]
+        )
+
 module Icons =
 
     open Sutil.Styling

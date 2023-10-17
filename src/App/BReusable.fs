@@ -14,6 +14,12 @@ module Option =
         | ValueString v -> Some v
         | _ -> None
 
+    let ofUnsafe (x:'t) =
+        if System.Object.ReferenceEquals(null, x) then
+            None
+        else Some x
+
+
 [<RequireQualifiedAccess>]
 module String =
     let toLower =

@@ -20,12 +20,11 @@ type AclType =
     | Selectable of values: string[] option * multiValue: bool
     | Reference of multiValue: bool
 
-// when a save is requested
 type AclParentMsg =
     // None is a valid option
     | AclTypeChange of AclType option
 
-type AclEditorMsg =
+type Msg =
     | TypeSelectChange of string
     | AclSelect of AclRef
 
@@ -35,7 +34,7 @@ type AclState = {
 }
 type Model = {
     FocusedAcl: AclState option
-    Error: string
+    ErrorQueue: (string * System.DateTime) list
 }
 
 let emptyAcl = {
@@ -43,37 +42,40 @@ let emptyAcl = {
         Parameters= Array.empty
 }
 
-let init aclRefOpt =
-    {FocusedAcl = aclRefOpt; Error = null}, Cmd.none
+let init aclRefOpt : Model * Cmd<Msg> =
+    {FocusedAcl = aclRefOpt; ErrorQueue = List.empty}, Cmd.none
 
-module MLens =
+[<RequireQualifiedAccess>]
+module private MLens =
     let updateAclRef item f model = {model with FocusedAcl = Some {item with AclRef = f item.AclRef}}
     let getFocusedAcl model = model.FocusedAcl
+    let getErrors model = model.ErrorQueue
+    let addError text model = {model with ErrorQueue= (text, System.DateTime.Now):: getErrors model}
 
-let update (itemAcls: AclRef seq) msg (model:Model) =
+let update (itemAcls: AclRef seq) (msg:Msg) (model:Model) =
+    let justError title = MLens.addError title model, Cmd.none
     match msg, model with
     // blocks
 
-    // | AclSelect _, {FocusedAcl = Some {IsNew}}
+    | TypeSelectChange _, {FocusedAcl = None} -> justError "Start a new acl first"
+    | TypeSelectChange _, {FocusedAcl = Some {IsNew = false}} -> justError "Cannot change type on new acl"
+    | TypeSelectChange v, _ when itemAcls |> Seq.exists(fun acl -> acl.Name = v) -> justError "Cannot change to existing acl type"
 
-
-    | TypeSelectChange _, {FocusedAcl = None} -> {model with Error = "Start a new acl first"}, Cmd.none
-    | TypeSelectChange _, {FocusedAcl = Some {IsNew = false}} -> {model with Error = "Cannot change type on new acl"}, Cmd.none
-    | TypeSelectChange v, _ when itemAcls |> Seq.exists(fun acl -> acl.Name = v) -> {model with Error = "Cannot change to existing acl type"}, Cmd.none
     // | TypeSelectChange v, {FocusedAcl = Some x} -> {model with FocusedAcl= Some {x with AclRef={x.AclRef with Name=v}}}
     | TypeSelectChange v, {FocusedAcl = Some x} -> model |> MLens.updateAclRef x (fun x -> {x with Name=v}) , Cmd.none
     // TODO: should we warn if they have unsaved changed and select another acl?
     | AclSelect v, _ -> {model with FocusedAcl= Some {IsNew= false; AclRef=v}}, Cmd.none
 
 module Renderers =
-    let renderAclTypeSelector (aclTypes: Acl seq) selectedType disabled dispatch = 
+    open Gen
+    let renderAclTypeSelector (aclTypes: Acl seq) selectedType disabled (dispatch:Dispatch<Msg>) = 
         log aclTypes
 
         Html.select [
             text "Acl!"
             Attr.className "select"
             Attr.disabled disabled
-            Handlers.onValueChangeIf dispatch (fun v -> Option.ofValueString v |> Option.map AclEditorMsg.TypeSelectChange)
+            Handlers.onValueChangeIf dispatch (fun v -> Option.ofValueString v |> Option.map Msg.TypeSelectChange)
             Html.option [
                 text ""
             ]
@@ -86,8 +88,25 @@ module Renderers =
                 ]
         ]
 
-    let renderAclParams (aclType: Acl) (item: AclRef) =
+    let renderAclParams (idMap:Map<string,RemoteData<string>>) (aclType: Acl) (item: AclRef) =
         Html.div [
+            Html.ul [
+                for p in item.Parameters do
+                    Html.li [
+                        match idMap |> Map.tryFind p with
+                        | Some NotRequested
+                        | Some InFlight
+                        | None ->
+                            text p
+                        | Some (Responded(Ok display)) ->
+                            Attr.title p
+                            text display
+                        | Some (Responded(Error e)) ->
+                            Attr.title (string e)
+                            text p
+                    ]
+            ]
+
         ]
 
     let renderAcl selectedType (item:AclRef) dispatch =
@@ -107,7 +126,7 @@ module Renderers =
                     tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
                     Attr.disabled isActiveButton
                     if not isActiveButton then
-                        onClick (fun _ -> item |> AclEditorMsg.AclSelect |> dispatch) List.empty
+                        onClick (fun _ -> item |> Msg.AclSelect |> dispatch) List.empty
                 ]
             ]
             Html.divc "column is-four-fifths" [
@@ -175,6 +194,7 @@ let renderAclsEditor (itemAcls:AclRef seq) (aclTypes:Acl seq) (dispatchParent:Di
 
     Html.div [
         disposeOnUnmount [ store ]
+        store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
 
         Bind.el(store |> Store.map MLens.getFocusedAcl, fun focusOpt ->
             let selectedType = focusOpt |> Option.map(fun item -> item.AclRef.Name) |> Option.defaultValue "" // String.toLower store.Value.FocusedAcl.Name

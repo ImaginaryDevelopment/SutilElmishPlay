@@ -24,7 +24,7 @@ type NavEditorErrorType = string
 
 type Model = {
     Tab: EditorTabs
-    Item: NavRootResponse
+    Item: NavItem
     Error: (NavEditorErrorType * System.DateTime) option
 }
 
@@ -33,7 +33,7 @@ module MLens =
 
 type ParentMsg =
     | Cancel
-    | Saved of NavRootResponse
+    | Saved of NavItem
 
 type EditorMsgType =
     | EditProp of prop:string * nextValue :string
@@ -51,7 +51,7 @@ module Renderers =
                 dispatch (EditProp(propName,value))
         App.Components.IconEditor.renderIconEditor (propName, propObs) value dispatch2
 
-    let renderEditorFrame (value:NavRootResponse) core (lDispatch:Dispatch<EditorMsgType>) (pDispatch: Dispatch<ParentMsg>) =
+    let renderEditorFrame (value:NavItem) core (lDispatch:Dispatch<EditorMsgType>) (pDispatch: Dispatch<ParentMsg>) =
         Html.divc "panel" [
             // path
             Html.pc "panel-heading" [
@@ -108,7 +108,7 @@ let update msg model =
 ()
 
 // renames will go a different route, no path editing
-let renderEditor aclTypes (value:NavRootResponse, obs: System.IObservable<NavRootResponse option>) (dispatchParent: Dispatch<ParentMsg>) = 
+let renderEditor aclTypes (value:NavItem, obs: System.IObservable<NavItem option>) (dispatchParent: Dispatch<ParentMsg>) = 
     let store, dispatch = value |> Store.makeElmishSimple init update ignore
 
     let oldCore =
