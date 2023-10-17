@@ -6,6 +6,17 @@ open Sutil.CoreElements
 
 type ErrorType = exn
 
+module CssRules =
+    open Sutil.Styling
+
+    let titleIndicator = 
+        [ // https://www.scientificpsychic.com/etc/css-mouseover.html
+            Css.custom("border-bottom","thin dotted")
+            Css.backgroundColor "#ffeedd"
+            // Css.paddingLeft 5
+            Css.marginLeft 5
+            Css.cursorHelp
+        ]
 type RemoteData<'t> =
     | NotRequested
     | InFlight

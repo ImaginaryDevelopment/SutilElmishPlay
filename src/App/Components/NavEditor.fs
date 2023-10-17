@@ -28,6 +28,9 @@ type Model = {
     Error: (NavEditorErrorType * System.DateTime) option
 }
 
+module MLens =
+    let getTab x = x.Tab
+
 type ParentMsg =
     | Cancel
     | Saved of NavRootResponse
@@ -86,6 +89,7 @@ let init item =
     }
 
 let update msg model =
+    printfn "NavEditor update: %A" msg
     match msg with
     | TabChange t -> {model with Tab= t}
     | EditProp(name,value) ->
@@ -122,24 +126,29 @@ let renderEditor aclTypes (value:NavRootResponse, obs: System.IObservable<NavRoo
         ]
 
     let core =
-        tabs [
-            {
-                Name= "Icon"
-                TabClickMsg= TabChange IconTab
-                IsActive= store.Value.Tab = EditorTabs.IconTab
-                Render=
-                    fun () -> IconEditor.renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
-            }
-            {
-                Name= "Acls"
-                TabClickMsg= TabChange AclTab
-                IsActive= store.Value.Tab = AclTab
-                Render = fun () ->
-                    AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
-            }
-        ] dispatch
+        Bind.el(store |> Store.map MLens.getTab, fun tab ->
+            tabs [
+                {
+                    Name= "Icon"
+                    TabClickMsg= TabChange IconTab
+                    IsActive= tab = EditorTabs.IconTab
+                    Render=
+                        fun () -> IconEditor.renderIconEditor ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon) ) value.Icon (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
+                }
+                {
+                    Name= "Acls"
+                    TabClickMsg= TabChange AclTab
+                    IsActive= tab = AclTab
+                    Render = fun () ->
+                        AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
+                }
+            ] dispatch
+        )
 
-    Renderers.renderEditorFrame value [
-        core
-        oldCore
-    ] dispatch dispatchParent
+    Html.div [
+        disposeOnUnmount [ store ]
+        Renderers.renderEditorFrame value [
+            core
+            // oldCore
+        ] dispatch dispatchParent
+    ]

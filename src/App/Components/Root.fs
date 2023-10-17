@@ -320,12 +320,7 @@ module Renderers =
 
 let css = [
 
-    rule "label>span.info" [ // https://www.scientificpsychic.com/etc/css-mouseover.html
-        Css.custom("border-bottom","thin dotted")
-        Css.backgroundColor "#ffeedd"
-        // Css.paddingLeft 5
-        Css.marginLeft 5
-    ]
+    rule "label>span.info" Gen.CssRules.titleIndicator  
     rule "div.iconColumn" [
         Css.height (em 1.0)
         Css.width (em 1.0)
