@@ -29,13 +29,13 @@ type RootTabs =
     | Main
     | Sub
     | Editor
-    with
-        static member ReParse (x:RootTabs) =
-            match string x with
-            | y when y = string Main -> Some RootTabs.Main
-            | y when y = string Sub -> Some RootTabs.Sub
-            | y when y = string Editor -> Some RootTabs.Editor
-            | _ -> None
+
+    static member ReParse(x: RootTabs) =
+        match string x with
+        | y when y = string Main -> Some RootTabs.Main
+        | y when y = string Sub -> Some RootTabs.Sub
+        | y when y = string Editor -> Some RootTabs.Editor
+        | _ -> None
 
 // parts of the model saved for use on refresh
 type CachedState = {
@@ -44,36 +44,50 @@ type CachedState = {
     FocusedItemId: string
 }
 
-let stateStore: LocalStorage.IAccessor<CachedState> = LocalStorage.StorageAccess.CreateStorage("Root_CachedState")
+let stateStore: LocalStorage.IAccessor<CachedState> =
+    LocalStorage.StorageAccess.CreateStorage("Root_CachedState")
+
 let resolveAclsAccess =
     //Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
-    Core.LocalStorage.StorageAccessor<Map<string,string>,_>("Root_AclsAccess", {Getter=Map.ofArray; Setter=Map.toArray}) :> Core.LocalStorage.IAccessor<_>
+    Core.LocalStorage.StorageAccessor<Map<string, string>, _>(
+        "Root_AclsAccess",
+        {
+            Getter = Map.ofArray
+            Setter = Map.toArray
+        }
+    )
+    :> Core.LocalStorage.IAccessor<_>
 
 type Model = {
     AppMode: ConfigType<string>
-    NavRootState : RemoteData<NavItem[]>
-    NavPathState : RemoteData<NavPathResponse>
+    NavRootState: RemoteData<NavItem[]>
+    NavPathState: RemoteData<NavPathResponse>
     // we don't need to track not requested, in flight is implied by (value, None)
-    AclResolutions : string list
-    ResolvedAcls : Map<string,AclDisplay>
-    AclTypeState : RemoteData<Acl[]>
-    FocusedItem : NavItem option
+    AclResolutions: string list
+    ResolvedAcls: Map<string, AclDisplay>
+    AclTypeState: RemoteData<Acl[]>
+    FocusedItem: NavItem option
     LastFocusedItemId: string
     RootTab: RootTabs
     // this should not be able to change while a request is in flight
     Path: string
-    Errors: (string*System.DateTime) list
-}
-    with
-        static member tryFindNavRootItem itemId model =
-            model.NavRootState |> RemoteData.TryGet |> Option.bind(fun x -> x |> Array.tryFind(fun item -> item.Id = itemId))
-        static member tryFindNavPathItem itemId model =
-            model.NavPathState |> RemoteData.TryGet |> Option.bind(fun x -> x.Items |> Array.tryFind(fun item -> item.Id = itemId))
-        static member tryFindNavItem itemId model =
-            model |> Model.tryFindNavRootItem itemId
-            |> Option.orElseWith(fun () ->
-                model |> Model.tryFindNavPathItem itemId
-            )
+    Errors: (string * System.DateTime) list
+} with
+
+    static member tryFindNavRootItem itemId model =
+        model.NavRootState
+        |> RemoteData.TryGet
+        |> Option.bind (fun x -> x |> Array.tryFind (fun item -> item.Id = itemId))
+
+    static member tryFindNavPathItem itemId model =
+        model.NavPathState
+        |> RemoteData.TryGet
+        |> Option.bind (fun x -> x.Items |> Array.tryFind (fun item -> item.Id = itemId))
+
+    static member tryFindNavItem itemId model =
+        model
+        |> Model.tryFindNavRootItem itemId
+        |> Option.orElseWith (fun () -> model |> Model.tryFindNavPathItem itemId)
 
 [<RequireQualifiedAccess>]
 module private MLens =
@@ -102,17 +116,17 @@ type Msg =
 let dummyData: NavItem[] =
     Array.ofList [
         {
-            Id="1"
-            Path="Path"
-            Parent="Parent"
-            Type="IDK"
-            Name="Name"
-            Description="Description"
-            Icon="user"
-            Weight=0
-            Url="url"
-            HasUrlKey= false
-            Acls= Array.empty
+            Id = "1"
+            Path = "Path"
+            Parent = "Parent"
+            Type = "IDK"
+            Name = "Name"
+            Description = "Description"
+            Icon = "user"
+            Weight = 0
+            Url = "url"
+            HasUrlKey = false
+            Acls = Array.empty
         }
     ]
 
@@ -124,9 +138,10 @@ module Commands =
                 let resp2 = Response resp
                 return Msg.NavRootMsg resp2
             }
+
         Cmd.OfAsync.perform a () id
 
-    let getNavPath (token,path) =
+    let getNavPath (token, path) =
         let a () =
             async {
                 printfn "Fetching Path '%s'" path
@@ -134,6 +149,7 @@ module Commands =
                 let resp2 = Response resp // |> Result.map(fun items -> path,items) |> Response
                 return Msg.NavPathMsg resp2
             }
+
         Cmd.OfAsync.perform a () id
 
     let getAcls token =
@@ -143,9 +159,10 @@ module Commands =
                 let resp2 = Response resp // |> Result.map(fun items -> path,items) |> Response
                 return Msg.AclStateMsg resp2
             }
+
         Cmd.OfAsync.perform a () id
 
-    let getNavAclDisplays token (req:NavAclResolve) =
+    let getNavAclDisplays token (req: NavAclResolve) =
         printfn "Fetching NavAclDisplay for '%s'" req.AclName
         // match item.Acls |> Seq.tryHead with
         // | Some acl when acl.Parameters |> Seq.isEmpty |> not ->
@@ -155,97 +172,114 @@ module Commands =
                 let resp2 = Response resp
                 return Msg.AclResolveMsg resp2
             }
+
         Cmd.OfAsync.perform a () id
-        // | _ -> Cmd.none
+// | _ -> Cmd.none
 
 
 let init appMode =
     let (iState, cmd: Cmd<Msg>) =
         match appMode with
-        | Demo -> NotRequested,Cmd.none
+        | Demo -> NotRequested, Cmd.none
         | Auth token ->
-            let cmd1:Cmd<Msg> = Commands.getNavRoot token
-            let cmd2:Cmd<Msg> = Commands.getAcls token
-            InFlight, Cmd.batch [ cmd1;cmd2 ]
+            let cmd1: Cmd<Msg> = Commands.getNavRoot token
+            let cmd2: Cmd<Msg> = Commands.getAcls token
+            InFlight, Cmd.batch [ cmd1; cmd2 ]
+
     let cachedState: CachedState option =
         stateStore.TryGetValue()
         // re-parse bad serializations
-        |> Option.map(fun cs ->
-            {cs with 
-                RootTab= RootTabs.ReParse cs.RootTab |> Option.defaultValue RootTabs.Main
-            }
-        )
+        |> Option.map (fun cs -> {
+            cs with
+                RootTab = RootTabs.ReParse cs.RootTab |> Option.defaultValue RootTabs.Main
+        })
 
     let resolvedAcls = resolveAclsAccess.TryGetValue()
 
-    {   AppMode = appMode;
+    {
+        AppMode = appMode
         NavRootState = if iState = InFlight then InFlight else NotRequested
         NavPathState = NotRequested
         AclTypeState = if iState = InFlight then InFlight else NotRequested
         FocusedItem = None
-        LastFocusedItemId = cachedState |> Option.map(fun cs -> cs.FocusedItemId) |> Option.defaultValue ""
-        RootTab= cachedState |> Option.map(fun cs -> cs.RootTab) |> Option.defaultValue RootTabs.Main
-        Path = cachedState |> Option.map(fun cs -> cs.Path) |> Option.defaultValue ""
+        LastFocusedItemId = cachedState |> Option.map (fun cs -> cs.FocusedItemId) |> Option.defaultValue ""
+        RootTab =
+            cachedState
+            |> Option.map (fun cs -> cs.RootTab)
+            |> Option.defaultValue RootTabs.Main
+        Path = cachedState |> Option.map (fun cs -> cs.Path) |> Option.defaultValue ""
         Errors = List.empty
         AclResolutions = List.empty
-        ResolvedAcls = resolvedAcls |> Option.map(Map.map(fun k v -> {AclDisplay.DisplayName= v; AclDisplay.Reference = k})) |> Option.defaultValue Map.empty}
-        , cmd
+        ResolvedAcls =
+            resolvedAcls
+            |> Option.map (
+                Map.map (fun k v -> {
+                    AclDisplay.DisplayName = v
+                    AclDisplay.Reference = k
+                })
+            )
+            |> Option.defaultValue Map.empty
+    },
+    cmd
 
 module SideEffects =
-    type SideEffector = {
-        Old: Model
-        Next: Model
-    }
+    type SideEffector = { Old: Model; Next: Model }
 
     // ensure all commands flow through, make it harder to accidentally use old model
-    let addSideEffect (f:SideEffector -> Model*Cmd<Msg> option) model (next,cmd) =
-        match f {Old=model;Next=next} with
+    let addSideEffect (f: SideEffector -> Model * Cmd<Msg> option) model (next, cmd) =
+        match f { Old = model; Next = next } with
         | m, None -> m, cmd
-        | m, Some cmd2 -> m, Cmd.batch [ cmd2; cmd]
+        | m, Some cmd2 -> m, Cmd.batch [ cmd2; cmd ]
 
-    let saveStateCache (next:Model) =
+    let saveStateCache (next: Model) =
         Some {
-            RootTab= next.RootTab
-            Path= next.Path
-            FocusedItemId= next.FocusedItem |> Option.map(fun fi -> fi.Id) |> Option.defaultValue ""
+            RootTab = next.RootTab
+            Path = next.Path
+            FocusedItemId = next.FocusedItem |> Option.map (fun fi -> fi.Id) |> Option.defaultValue ""
         }
         |> stateStore.TrySetValue
-    let onPropChange fProp fEffect (values:SideEffector) : Model*Cmd<Msg> option =
+
+    let onPropChange fProp fEffect (values: SideEffector) : Model * Cmd<Msg> option =
         if fProp values.Old <> fProp values.Next then
             fEffect values
-        else values.Next, None
+        else
+            values.Next, None
 
     let onPropOptAddedOrChanged fProp fEffect values =
         let propNext = fProp values.Next
+
         if Option.isSome propNext then
             onPropChange fProp fEffect values
-        else values.Next,None
+        else
+            values.Next, None
 
     let whenFocusedItemChanges accessTokenOpt =
         onPropOptAddedOrChanged (fun m -> m.FocusedItem)
-            <| fun se ->
-                match accessTokenOpt with
-                | None -> None
-                | Some accessToken ->
-                    let getEager fi = fi.Acls |> Seq.tryFind(fun acl -> Array.isEmpty acl.Parameters |> not) |> Option.map(fun acl -> fi,acl)
-                    match se.Next.FocusedItem |> Option.bind getEager with
-                    | Some pair -> Some pair
-                    | _ -> None
+        <| fun se ->
+            match accessTokenOpt with
+            | None -> None
+            | Some accessToken ->
+                let getEager fi =
+                    fi.Acls
+                    |> Seq.tryFind (fun acl -> Array.isEmpty acl.Parameters |> not)
+                    |> Option.map (fun acl -> fi, acl)
 
-                    // kick off eager fetch of acl params
-                    |> Option.map (fun (fi,acl) ->
-                        se.Next, Some <| Commands.getNavAclDisplays accessToken {
-                            NavId= fi.Id
-                            AclName = acl.Name
-                        }
-                    )
+                match se.Next.FocusedItem |> Option.bind getEager with
+                | Some pair -> Some pair
+                | _ -> None
 
-                |> Option.defaultValue (se.Next,None)
-                |> fun (next,cmdOpt) ->
-                    { next with RootTab= RootTabs.Editor}, cmdOpt
+                // kick off eager fetch of acl params
+                |> Option.map (fun (fi, acl) ->
+                    se.Next,
+                    Some
+                    <| Commands.getNavAclDisplays accessToken { NavId = fi.Id; AclName = acl.Name })
 
-let update msg (model:Model) : Model * Cmd<Msg> =
+            |> Option.defaultValue (se.Next, None)
+            |> fun (next, cmdOpt) -> { next with RootTab = RootTabs.Editor }, cmdOpt
+
+let update msg (model: Model) : Model * Cmd<Msg> =
     printfn "Root Update running: %A ('%s')" msg model.Path
+
     let atOpt =
         match model.AppMode with
         | ConfigType.Demo -> None
@@ -257,59 +291,64 @@ let update msg (model:Model) : Model * Cmd<Msg> =
 
     match msg, model with
     // block actions
-    | NavRootMsg (Request _), {NavRootState= InFlight} -> block "InFlight NavRootMsg"
-    | NavPathMsg (Request _), {NavPathState= InFlight} -> block "InFlight NavPathMsg"
-    | AclStateMsg (Request _), {AclTypeState= InFlight} -> block "InFlight AclStateMsg"
-    | PathReq, {NavPathState= InFlight} -> block "InFlight PathReq"
-    | PathChange _, {NavPathState=InFlight} -> block "InFlight PathChange"
-    | PathClick _, {NavPathState=InFlight} -> block "InFlight PathClick"
+    | NavRootMsg(Request _), { NavRootState = InFlight } -> block "InFlight NavRootMsg"
+    | NavPathMsg(Request _), { NavPathState = InFlight } -> block "InFlight NavPathMsg"
+    | AclStateMsg(Request _), { AclTypeState = InFlight } -> block "InFlight AclStateMsg"
+    | PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
+    | PathChange _, { NavPathState = InFlight } -> block "InFlight PathChange"
+    | PathClick _, { NavPathState = InFlight } -> block "InFlight PathClick"
 
-    | PathReq, {NavPathState= _; Path= NonValueString _} -> block "PathReq NoPath"
-    | TabChange v, {RootTab= y} when v = y -> block "already selected tab change"
-    | EditorMsg(NavEditor.ParentMsg.Cancel), {FocusedItem = None} -> block "No FocusedItem for edit"
-    | EditorMsg(NavEditor.ParentMsg.AclTypeChange NonValueString), {FocusedItem = None} -> block "No AclType for eager loading"
+    | PathReq,
+      {
+          NavPathState = _
+          Path = NonValueString _
+      } -> block "PathReq NoPath"
+    | TabChange v, { RootTab = y } when v = y -> block "already selected tab change"
+    | EditorMsg(NavEditor.ParentMsg.Cancel), { FocusedItem = None } -> block "No FocusedItem for edit"
+    | EditorMsg(NavEditor.ParentMsg.AclTypeChange NonValueString), { FocusedItem = None } ->
+        block "No AclType for eager loading"
 
     // actions
 
     // consider a confirm dialog for navigating from the editor?
-    | TabChange v, _ -> {model with RootTab= v}, Cmd.none
+    | TabChange v, _ -> { model with RootTab = v }, Cmd.none
 
-    | Msg.EditorMsg (NavEditor.ParentMsg.Cancel), _ -> {model with FocusedItem = None}, Cmd.none
+    | Msg.EditorMsg(NavEditor.ParentMsg.Cancel), _ -> { model with FocusedItem = None }, Cmd.none
 
-    | Msg.EditorMsg (NavEditor.ParentMsg.AclTypeChange v), _ ->
+    | Msg.EditorMsg(NavEditor.ParentMsg.AclTypeChange v), _ ->
         match model.AppMode, model.FocusedItem with
         | ConfigType.Demo, _ -> model, Cmd.none
         | ConfigType.Auth accessToken, Some fi ->
             // what if we already have this resolved?
             let unresolved =
                 fi.Acls
-                |> Seq.tryFind(fun acl -> acl.Name = v)
-                |> Option.map(fun acl ->
+                |> Seq.tryFind (fun acl -> acl.Name = v)
+                |> Option.map (fun acl ->
                     acl.Parameters
                     // strip already resolved items
                     |> Seq.except (model.ResolvedAcls.Keys)
                     // strip items that are already in flight
                     |> Seq.except (model.AclResolutions)
-                    |> List.ofSeq
-                )
+                    |> List.ofSeq)
+
             match unresolved with
             // we have already resolved these
             | Some [] -> model, Cmd.none
             | None
-            | Some _ ->
-                model, Commands.getNavAclDisplays accessToken {
-                    NavId= fi.Id
-                    AclName= v
-                }
+            | Some _ -> model, Commands.getNavAclDisplays accessToken { NavId = fi.Id; AclName = v }
         | ConfigType.Auth _, None -> block "AclTypeChange without Focused Item"
 
-    | AclResolveMsg (Request x), _ ->
+    | AclResolveMsg(Request x), _ ->
         match model.AppMode with
         | ConfigType.Demo -> model, Cmd.none
         | ConfigType.Auth accessToken ->
-            {model with AclResolutions = x.NavId::model.AclResolutions}, Commands.getNavAclDisplays accessToken x
+            {
+                model with
+                    AclResolutions = x.NavId :: model.AclResolutions
+            },
+            Commands.getNavAclDisplays accessToken x
 
-    | Msg.EditorMsg (NavEditor.Saved value), _ ->
+    | Msg.EditorMsg(NavEditor.Saved value), _ ->
         // TODO: post updated value back to api
         // let runSave () =
         //     model, Cmd.none
@@ -326,97 +365,145 @@ let update msg (model:Model) : Model * Cmd<Msg> =
         model, Cmd.none
 
     | FocusItem item, _ ->
-        {model with FocusedItem = Some (clone<NavItem> item)}, Cmd.none
+        {
+            model with
+                FocusedItem = Some(clone<NavItem> item)
+        },
+        Cmd.none
 
     | PathChange next, _ ->
         printfn "PathChange '%s' to '%s'" model.Path next
-        {model with Path= next; RootTab= RootTabs.Sub}, Cmd.none
+
+        {
+            model with
+                Path = next
+                RootTab = RootTabs.Sub
+        },
+        Cmd.none
 
     // responses:
 
-    | AclStateMsg (Response x), _ -> {model with AclTypeState= Responded x}, Cmd.none
-    | NavRootMsg (Response x), _ -> {model with NavRootState= Responded x}, Cmd.none
-    | AclResolveMsg (Response (Error ex)), _ ->
-        {model with Errors = (ex.Message, System.DateTime.Now)::model.Errors}, Cmd.none
+    | AclStateMsg(Response x), _ ->
+        {
+            model with
+                AclTypeState = Responded x
+        },
+        Cmd.none
+    | NavRootMsg(Response x), _ ->
+        {
+            model with
+                NavRootState = Responded x
+        },
+        Cmd.none
+    | AclResolveMsg(Response(Error ex)), _ ->
+        {
+            model with
+                Errors = (ex.Message, System.DateTime.Now) :: model.Errors
+        },
+        Cmd.none
 
     // TODO: remove model item that was tracking the inflight
-    | AclResolveMsg (Response (Ok x)), _ ->
+    | AclResolveMsg(Response(Ok x)), _ ->
         let nextMap =
             (model.ResolvedAcls, x.Resolved)
-            ||> Seq.fold(fun m newItem ->
-                m |> Map.add newItem.Reference newItem
-            )
-        match resolveAclsAccess.TrySetValue (nextMap |> Map.map (fun _ v -> v.DisplayName) |> Some) with
-        | Ok () -> ()
+            ||> Seq.fold (fun m newItem -> m |> Map.add newItem.Reference newItem)
+
+        match resolveAclsAccess.TrySetValue(nextMap |> Map.map (fun _ v -> v.DisplayName) |> Some) with
+        | Ok() -> ()
         | Error e ->
             eprintfn "Failed to save map: '%A'" e
             log e
 
-        { model with AclResolutions = model.AclResolutions |> List.except (x.Resolved |> Array.map (fun r -> r.Reference)); ResolvedAcls=nextMap}, Cmd.none
+        {
+            model with
+                AclResolutions =
+                    model.AclResolutions
+                    |> List.except (x.Resolved |> Array.map (fun r -> r.Reference))
+                ResolvedAcls = nextMap
+        },
+        Cmd.none
 
-    | NavPathMsg (Response x), _ ->
-        {model with NavPathState= Responded x}, Cmd.none
+    | NavPathMsg(Response x), _ ->
+        {
+            model with
+                NavPathState = Responded x
+        },
+        Cmd.none
 
     // requests for remotes:
 
     | PathClick next, _ ->
         printfn "PathClick '%s' to '%s'" model.Path next
+
         match model.AppMode with
         | ConfigType.Demo -> model, Cmd.none
         | ConfigType.Auth accessToken ->
-            {model with Path= next; RootTab= RootTabs.Sub; NavPathState=InFlight}, Commands.getNavPath(accessToken, model.Path)
+            {
+                model with
+                    Path = next
+                    RootTab = RootTabs.Sub
+                    NavPathState = InFlight
+            },
+            Commands.getNavPath (accessToken, model.Path)
 
     | PathReq, _ ->
         printfn "Requesting '%s'" model.Path
+
         match model.AppMode with
         | ConfigType.Demo -> model, Cmd.none
         | ConfigType.Auth accessToken ->
             printfn "Requesting '%s'" model.Path
-            {model with NavPathState= InFlight}, Commands.getNavPath(accessToken, model.Path)
+            { model with NavPathState = InFlight }, Commands.getNavPath (accessToken, model.Path)
 
-    | NavRootMsg (Request _), _ ->
+    | NavRootMsg(Request _), _ ->
         match model.AppMode with
         | ConfigType.Demo ->
-            {model with NavRootState=Responded (Ok dummyData)}, Cmd.none
-        | ConfigType.Auth accessToken ->
-            {model with NavRootState= InFlight}, Commands.getNavRoot accessToken
+            {
+                model with
+                    NavRootState = Responded(Ok dummyData)
+            },
+            Cmd.none
+        | ConfigType.Auth accessToken -> { model with NavRootState = InFlight }, Commands.getNavRoot accessToken
 
-    | NavPathMsg (Request ()), _ ->
+    | NavPathMsg(Request()), _ ->
         match model.AppMode with
         | ConfigType.Demo ->
-            {model with NavPathState= Responded(Ok {Path= model.Path; Items= dummyData})}, Cmd.none
+            {
+                model with
+                    NavPathState = Responded(Ok { Path = model.Path; Items = dummyData })
+            },
+            Cmd.none
         | ConfigType.Auth accessToken ->
             printfn "Requesting Path '%s'" model.Path
-            {model with NavPathState= InFlight}, Commands.getNavPath (accessToken, model.Path)
+            { model with NavPathState = InFlight }, Commands.getNavPath (accessToken, model.Path)
 
-    | AclStateMsg (Request ()), _ ->
+    | AclStateMsg(Request()), _ ->
         match model.AppMode with
         | ConfigType.Demo -> block "no dummy acl data"
         | ConfigType.Auth accessToken ->
             printfn "Requesting Path '%s'" model.Path
-            {model with AclTypeState= InFlight}, Commands.getAcls accessToken
+            { model with AclTypeState = InFlight }, Commands.getAcls accessToken
     |> SideEffects.addSideEffect (SideEffects.whenFocusedItemChanges atOpt) model
-    |> fun (next,cmd) ->
+    |> fun (next, cmd) ->
         match SideEffects.saveStateCache next with
         | Error s ->
-            {next with Errors = (s,System.DateTime.Now) :: model.Errors}, cmd
-        | _ -> next,cmd
+            {
+                next with
+                    Errors = (s, System.DateTime.Now) :: model.Errors
+            },
+            cmd
+        | _ -> next, cmd
 
 module Renderers =
 
     let renderLabeledField name value =
-        Html.div [ Html.label [text name]; Html.pre [text value]]
+        Html.div [ Html.label [ text name ]; Html.pre [ text value ] ]
 
     let renderPathInput (model: IStore<Model>) dispatch =
         function
-        | InFlight ->
-            Html.input [
-                type' "text"
-                Attr.value model.Value.Path
-                Attr.disabled true
-            ]
+        | InFlight -> Html.input [ type' "text"; Attr.value model.Value.Path; Attr.disabled true ]
         | Responded _
-        | NotRequested  ->
+        | NotRequested ->
             Html.div [
 
                 Html.input [
@@ -427,12 +514,17 @@ module Renderers =
                 ]
                 Html.button [
                     text "Fetch"
-                    onClick(fun _ -> printfn "Dispatching pathReq"; dispatch Msg.PathReq) List.empty
+                    onClick
+                        (fun _ ->
+                            printfn "Dispatching pathReq"
+                            dispatch Msg.PathReq)
+                        List.empty
                 ]
             ]
 
-    let renderItemView (item:NavItem) (dispatch: Dispatch<Msg>) =
-        let stripped = cloneExcept(item, ["Acls"])
+    let renderItemView (item: NavItem) (dispatch: Dispatch<Msg>) =
+        let stripped = cloneExcept (item, [ "Acls" ])
+
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
                 if item.Type = "Folder" then
@@ -447,73 +539,51 @@ module Renderers =
                 ]
             ]
             Html.divc "column is-one-fifth iconColumn" [
-                tryIcon (App.Init.tryFindIcon item.Icon |> Option.defaultWith (fun () -> App.Init.IconSearchType.FAIcon item.Icon))
+                tryIcon (
+                    App.Init.tryFindIcon item.Icon
+                    |> Option.defaultWith (fun () -> App.Init.IconSearchType.FAIcon item.Icon)
+                )
             ]
             Html.divc "column" [
                 Html.label [
                     text item.Name
-                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty stripped)]
-                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty item.Acls)]
+                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty stripped) ]
+                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty item.Acls) ]
                 ]
             ]
         ]
 
     let renderRootView title items dispatch =
         Html.div [
-            Html.label [
-                text title
-            ]
+            Html.label [ text title ]
             // https://fontawesome.com/docs/web/setup/get-started
             Html.ul [
                 for item in items do
-                Html.li [
-                    data_ "rootItem.Icon" item.Icon
-                    data_ "rootItem" (Core.serialize item)
-                    renderItemView item dispatch
-                ]
+                    Html.li [
+                        data_ "rootItem.Icon" item.Icon
+                        data_ "rootItem" (Core.serialize item)
+                        renderItemView item dispatch
+                    ]
             ]
         ]
 
-    let renderRemote title rdState reqMsg okRenderer (dispatch:Dispatch<Msg>) =
+    let renderRemote title rdState reqMsg okRenderer (dispatch: Dispatch<Msg>) =
         let buttonText = text title
+
         match rdState with
-        | RemoteData.NotRequested ->
-            Html.button [
-                buttonText
-                onClick(fun e -> dispatch reqMsg) []
-            ]
-        | RemoteData.InFlight ->
-            Html.button [
-                Attr.disabled true
-                buttonText
-            ]
-        | RemoteData.Responded(Ok(data)) ->
-            okRenderer data
-        | RemoteData.Responded(Error exn) ->
-            Html.divc "error" [
-                text (Core.pretty exn)
-            ]
+        | RemoteData.NotRequested -> Html.button [ buttonText; onClick (fun e -> dispatch reqMsg) [] ]
+        | RemoteData.InFlight -> Html.button [ Attr.disabled true; buttonText ]
+        | RemoteData.Responded(Ok(data)) -> okRenderer data
+        | RemoteData.Responded(Error exn) -> Html.divc "error" [ text (Core.pretty exn) ]
 
 let css = [
 
     rule "label>span.info" Gen.CssRules.titleIndicator
 
-    rule "div.iconColumn" [
-        Css.height (em 1.0)
-        Css.width (em 1.0)
-        Css.flexShrink 0
-    ]
-    rule "div.buttonColumn" [
-        Css.height (em 1.0)
-        Css.width (em 2.5)
-        Css.flexShrink 0
-    ]
-    rule ".tile .field" [
-        Css.marginRight (px 5)
-    ]
-    rule ".tile .field .control .box" [
-        Css.minWidth (px 450)
-    ]
+    rule "div.iconColumn" [ Css.height (em 1.0); Css.width (em 1.0); Css.flexShrink 0 ]
+    rule "div.buttonColumn" [ Css.height (em 1.0); Css.width (em 2.5); Css.flexShrink 0 ]
+    rule ".tile .field" [ Css.marginRight (px 5) ]
+    rule ".tile .field .control .box" [ Css.minWidth (px 450) ]
 ]
 
 let view appMode =
@@ -526,64 +596,85 @@ let view appMode =
         data_ "file" "Root"
 
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
-        Bind.el(store |> Store.map MLens.getRootTab, fun rt ->
-            let rootTab =
-                {
-                    Name= "Root"
-                    TabClickMsg= Msg.TabChange RootTabs.Main
-                    IsActive= rt = RootTabs.Main
-                    Render=
-                        let r data = Renderers.renderRootView "" data dispatch
+        Bind.el (
+            store |> Store.map MLens.getRootTab,
+            fun rt ->
+                let rootTab = {
+                    Name = "Root"
+                    TabClickMsg = Msg.TabChange RootTabs.Main
+                    IsActive = rt = RootTabs.Main
+                    Render =
+                        let r data =
+                            Renderers.renderRootView "" data dispatch
+
                         fun () ->
-                            Bind.el(store |> Store.map MLens.getNavRootState, fun nrs ->
-                                Renderers.renderRemote "Root" nrs (RemoteMsg.Request () |> Msg.NavRootMsg) r dispatch
+                            Bind.el (
+                                store |> Store.map MLens.getNavRootState,
+                                fun nrs ->
+                                    Renderers.renderRemote "Root" nrs (RemoteMsg.Request() |> Msg.NavRootMsg) r dispatch
                             )
                 }
 
-            let pathTab =
-                {
-                    Name="Path"
-                    TabClickMsg= Msg.TabChange RootTabs.Sub
-                    IsActive= rt = RootTabs.Sub
-                    Render=
+                let pathTab = {
+                    Name = "Path"
+                    TabClickMsg = Msg.TabChange RootTabs.Sub
+                    IsActive = rt = RootTabs.Sub
+                    Render =
                         fun () ->
                             Html.div [
                                 // display the path input properly based on current state
-                                Bind.el(store |> Store.map MLens.getNavPathState,
+                                Bind.el (
+                                    store |> Store.map MLens.getNavPathState,
                                     Renderers.renderPathInput store dispatch
                                 )
-                                Bind.el(store |> Store.map MLens.getNavPathState,
+                                Bind.el (
+                                    store |> Store.map MLens.getNavPathState,
                                     (fun nps ->
-                                        let r (x:NavPathResponse) = Renderers.renderRootView $"Sub:{x.Path}" x.Items dispatch
-                                        Renderers.renderRemote $"Path:{store.Value.Path}" nps (RemoteMsg.Request () |> Msg.NavPathMsg) r dispatch
-                                    )
+                                        let r (x: NavPathResponse) =
+                                            Renderers.renderRootView $"Sub:{x.Path}" x.Items dispatch
+
+                                        Renderers.renderRemote
+                                            $"Path:{store.Value.Path}"
+                                            nps
+                                            (RemoteMsg.Request() |> Msg.NavPathMsg)
+                                            r
+                                            dispatch)
                                 )
                             ]
                 }
 
-            // bulma tabs
-            tabs [
-                rootTab
-                pathTab
-                {
-                    Name="Edit"
-                    TabClickMsg= Msg.TabChange RootTabs.Editor
-                    IsActive= rt = RootTabs.Editor
-                    Render=
-                        let gfi= store |> Store.map MLens.getFocusedItem
-                        let gAcl= store |> Store.map MLens.getAclTypes
-                        let r : _ -> SutilElement =
-                                function
-                                | _, None
-                                | None, _ -> Html.div []
-                                | Some item, Some aclTypes ->
-                                    let r = NavEditor.renderEditor (store |> Store.map MLens.getResolvedAcls) aclTypes (item, store |> Store.map MLens.getFocusedItem) (Msg.EditorMsg >> dispatch)
-                                    r
-                        fun () ->
-                            Bind.el2 gfi gAcl r
+                // bulma tabs
+                tabs
+                    [
+                        rootTab
+                        pathTab
+                        {
+                            Name = "Edit"
+                            TabClickMsg = Msg.TabChange RootTabs.Editor
+                            IsActive = rt = RootTabs.Editor
+                            Render =
+                                let gfi = store |> Store.map MLens.getFocusedItem
+                                let gAcl = store |> Store.map MLens.getAclTypes
 
-                }
-            ] dispatch
+                                let r: _ -> SutilElement =
+                                    function
+                                    | _, None
+                                    | None, _ -> Html.div []
+                                    | Some item, Some aclTypes ->
+                                        let r =
+                                            NavEditor.renderEditor
+                                                (store |> Store.map MLens.getResolvedAcls)
+                                                aclTypes
+                                                (item, store |> Store.map MLens.getFocusedItem)
+                                                (Msg.EditorMsg >> dispatch)
+
+                                        r
+
+                                fun () -> Bind.el2 gfi gAcl r
+
+                        }
+                    ]
+                    dispatch
         )
 
     ]

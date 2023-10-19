@@ -5,7 +5,7 @@ open Fable.Core.JS
 
 // sign in code example: https://learn.microsoft.com/en-us/azure/active-directory/develop/scenario-spa-sign-in?tabs=javascript2
 
-[<Import("AccountEntity", from="@azure/msal-browser")>] // AccountInfo.ts
+[<Import("AccountEntity", from = "@azure/msal-browser")>] // AccountInfo.ts
 [<AbstractClass>]
 type AccountInfo =
     abstract member authorityType: obj
@@ -48,14 +48,14 @@ type TokenRequestResult =
 // type PublicClientApplication =
 //     [<Emit("new PublicClientApplication($1)")>]
 //     static member Create (config : obj) : PublicClientApplication = jsNative
-[<Import("PublicClientApplication", from="@azure/msal-browser")>]
-type PublicClientApplication(conf:obj)=
+[<Import("PublicClientApplication", from = "@azure/msal-browser")>]
+type PublicClientApplication(conf: obj) =
     class
         member _.initialize() : Promise<obj> = jsNative // appears to return an option type?
-        member _.loginPopup (reqConfig:obj) : Promise<AuthenticationResult> = jsNative
+        member _.loginPopup(reqConfig: obj) : Promise<AuthenticationResult> = jsNative
         member _.loginRedirect(loginRequestConfig: obj) : Promise<AuthenticationResult> = jsNative
         member _.handleRedirectPromise() : Promise<obj> = jsNative
-        member _.acquireTokenSilent(request:obj) : Promise<TokenRequestResult> = jsNative
+        member _.acquireTokenSilent(request: obj) : Promise<TokenRequestResult> = jsNative
         member _.getAllAccounts() : AccountInfo[] = jsNative
     end
 

@@ -12,7 +12,7 @@ open App.Adapters.Msal
 open App.Components.Gen
 
 type Model = {
-    AuthInfo: Result<AuthenticationResult*TokenRequestResult,exn> option
+    AuthInfo: Result<AuthenticationResult * TokenRequestResult, exn> option
 }
 
 let appMode = App.Adapters.Config.ConfigType.Auth Config.authConfig // App.Adapters.Config.ConfigType.Demo
@@ -28,8 +28,7 @@ let getAuthInfo m = m.AuthInfo
 let console = Browser.Dom.console
 let window = Browser.Dom.window
 
-type Message =
-    | AuthFinished of Result<AuthenticationResult*TokenRequestResult,exn>
+type Message = AuthFinished of Result<AuthenticationResult * TokenRequestResult, exn>
 
 let msalMode = MsalMode.Redirect
 
@@ -38,19 +37,16 @@ let msalMode = MsalMode.Redirect
 
 let mustAuthEl model f =
     match appMode with
-    | Demo ->
-        Html.div [
-            f Demo
-        ]
+    | Demo -> Html.div [ f Demo ]
     | ConfigType.Auth _ ->
-        Bind.el(model |> Store.map getAuthInfo, fun ai ->
-            match ai with
-            | Some (Ok auth) ->
-                Html.div [ f (Auth auth) ]
-            | Some (Error exn) ->
-                Html.pre [ text (string exn)]
-            | None -> Html.div []
-)
+        Bind.el (
+            model |> Store.map getAuthInfo,
+            fun ai ->
+                match ai with
+                | Some(Ok auth) -> Html.div [ f (Auth auth) ]
+                | Some(Error exn) -> Html.pre [ text (string exn) ]
+                | None -> Html.div []
+        )
 
 // make sure the module loads and is not tree-shaken out
 App.Adapters.Mui.all |> ignore
@@ -66,93 +62,96 @@ let init () : Model * Cmd<Message> =
 
     let msalSetup () =
         promise {
-            let! _ = msalC.initialize()
+            let! _ = msalC.initialize ()
             printfn "Finished initialize"
+
             let! ar =
                 promise {
                     match msalMode with
                     | MsalMode.Popup ->
-                        let! ar = msalC.loginPopup(null)
+                        let! ar = msalC.loginPopup (null)
                         printfn "Finished popup"
                         console.log ar
                         return ar
                     | MsalMode.Redirect ->
                         console.log "Redirect Promise"
-                        let! unk = msalC.handleRedirectPromise()
+                        let! unk = msalC.handleRedirectPromise ()
                         console.log "unk"
                         console.log unk
+
                         match unk with
                         | null ->
-                            let! ar = msalC.loginRedirect(
-                                {|
-                                    scopes = [| "openid"; Config.authConfig.ApiScope;
-                                    "user.readbasic.all" |]
-                                    extraQueryParameters = {| domain_hint= Config.authConfig.ApiDomainHint |}|})
+                            let! ar =
+                                msalC.loginRedirect (
+                                    {|
+                                        scopes = [| "openid"; Config.authConfig.ApiScope; "user.readbasic.all" |]
+                                        extraQueryParameters = {|
+                                            domain_hint = Config.authConfig.ApiDomainHint
+                                        |}
+                                    |}
+                                )
+
                             console.log "ar"
                             console.log ar
                             invalidOp "Hello world"
                             return ar
-                        | v ->
-                            return v :?> AuthenticationResult
+                        | v -> return v :?> AuthenticationResult
                 }
-            match msalC.getAllAccounts() |> List.ofArray with
+
+            match msalC.getAllAccounts () |> List.ofArray with
             | [] ->
                 eprintfn "No Accounts found"
                 return invalidOp "No accounts found"
             | h :: _ ->
-                let! token = msalC.acquireTokenSilent({| account= h|})
-                return (ar,token)
+                let! token = msalC.acquireTokenSilent ({| account = h |})
+                return (ar, token)
         }
-    { AuthInfo = None;}, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error>>AuthFinished)
 
-let update (msg : Message) (model : Model) : Model * Cmd<Message> =
+    { AuthInfo = None }, Cmd.OfPromise.either msalSetup () (Ok >> AuthFinished) (Error >> AuthFinished)
+
+let update (msg: Message) (model: Model) : Model * Cmd<Message> =
     printfn "App msg update"
+
     match msg with
     | AuthFinished x ->
         match x with
         | Error exn -> console.error exn
         | _ -> ()
-        {model with AuthInfo = Some x}, Cmd.none
+
+        { model with AuthInfo = Some x }, Cmd.none
 
 // In Sutil, the view() function is called *once*
-let view() =
+let view () =
 
     // model is an IStore<ModeL>
     // This means we can write to it if we want, but when we're adopting
     // Elmish, we treat it like an IObservable<Model>
     let model, dispatch = () |> Store.makeElmish init update ignore
+
     let tabStore =
-        let tabParent =
-            {
-                Name="AppRoot"
-                ActiveTab= 0
-                Tabs = [|
-                    {
-                        Label= "Admin"
-                        Value= 0
-                        Component=
-                            mustAuthEl model (
-                                function
-                                | Auth (ai,token) ->
-                                    App.Components.Root.view (Auth token.accessToken)
-                                | Demo ->
-                                    App.Components.Root.view Demo
-                            )
-                    }
-                    {
-                        Label= "Diag"
-                        Value= 1
-                        Component =
-                            mustAuthEl model (
-                                function
-                                | Auth (ai,token) ->
-                                    App.Components.Diag.view { AppMode = Auth token.accessToken }
-                                | Demo ->
-                                    App.Components.Diag.view { AppMode = Demo }
-                            )
-                    }
-                |]
-            }
+        let tabParent = {
+            Name = "AppRoot"
+            ActiveTab = 0
+            Tabs = [|
+                {
+                    Label = "Admin"
+                    Value = 0
+                    Component =
+                        mustAuthEl model (function
+                            | Auth(ai, token) -> App.Components.Root.view (Auth token.accessToken)
+                            | Demo -> App.Components.Root.view Demo)
+                }
+                {
+                    Label = "Diag"
+                    Value = 1
+                    Component =
+                        mustAuthEl model (function
+                            | Auth(ai, token) -> App.Components.Diag.view { AppMode = Auth token.accessToken }
+                            | Demo -> App.Components.Diag.view { AppMode = Demo })
+                }
+            |]
+        }
+
         () |> Store.makeElmishSimple (fun _ -> tabParent) Tabs.update ignore
 
     Html.div [
@@ -160,48 +159,36 @@ let view() =
         disposeOnUnmount [ model ]
 
         // See Sutil.Styling for more advanced styling options
-        Attr.style [
-            Css.fontFamily "Arial, Helvetica, sans-serif"
-            Css.margin 20
-        ]
+        Attr.style [ Css.fontFamily "Arial, Helvetica, sans-serif"; Css.margin 20 ]
 
         let mustAuthEl f =
-            Bind.el(model |> Store.map getAuthInfo, fun ai ->
-                match ai with
-                | Some (Ok auth) ->
-                    Html.div [ f auth ]
-                | Some (Error exn) ->
-                    Html.pre [ text (string exn)]
-                | None -> Html.div []
+            Bind.el (
+                model |> Store.map getAuthInfo,
+                fun ai ->
+                    match ai with
+                    | Some(Ok auth) -> Html.div [ f auth ]
+                    | Some(Error exn) -> Html.pre [ text (string exn) ]
+                    | None -> Html.div []
             )
 
-        Bind.el(model |> Store.map getAuthInfo, fun ai ->
-            match ai with
-            | None ->
-                match msalMode with
-                | MsalMode.Popup ->
-                    Html.div [ text "Authorizing via popup..."]
-                | MsalMode.Redirect ->
-                    Html.div [ text "Checking authorization..."]
-            | Some (Ok (auth,token)) ->
-                Html.div [
-                    text $"Welcome {auth.account.name}"
-                ]
-            | Some (Error exn) ->
-                Html.div[
-                    text "Failed auth"
-                    App.Components.Root.view ConfigType.Demo
-                ]
+        Bind.el (
+            model |> Store.map getAuthInfo,
+            fun ai ->
+                match ai with
+                | None ->
+                    match msalMode with
+                    | MsalMode.Popup -> Html.div [ text "Authorizing via popup..." ]
+                    | MsalMode.Redirect -> Html.div [ text "Checking authorization..." ]
+                | Some(Ok(auth, token)) -> Html.div [ text $"Welcome {auth.account.name}" ]
+                | Some(Error exn) ->
+                    Html.div[text "Failed auth"
+                             App.Components.Root.view ConfigType.Demo]
         )
 
-        mustAuthEl (fun (ai,token)->
-            Html.div [
-                App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
-            ]
-        )
+        mustAuthEl (fun (ai, token) -> Html.div [ App.Components.Gen.Tabs.view (Choice2Of2 tabStore) ])
 
     ]
 
 App.Init.FA.dom |> ignore
 // Start the app
-view() |> Program.mount
+view () |> Program.mount

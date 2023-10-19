@@ -2,7 +2,9 @@ open System
 
 module Option =
     let ofFileExists path =
-        if String.IsNullOrEmpty path then failwith $"bad path"
+        if String.IsNullOrEmpty path then
+            failwith $"bad path"
+
         if IO.File.Exists path then
             Some path
         else
@@ -14,22 +16,22 @@ module Map =
     // which one wins is not tested
     let combine maps =
         (Map.empty, maps)
-        ||> List.fold(fun m m2 ->
-            m |> Map.fold (fun acc key value -> Map.add key value acc) m2
-        )
+        ||> List.fold (fun m m2 -> m |> Map.fold (fun acc key value -> Map.add key value acc) m2)
 
 let (|ValueString|NonValueString|) value =
     if String.IsNullOrWhiteSpace value then
-        NonValueString ()
+        NonValueString()
     else
         ValueString value
 
-let (|StrEqualsI|_|) delimiter (value:string) =
+let (|StrEqualsI|_|) delimiter (value: string) =
     if String.IsNullOrEmpty delimiter then
         failwith $"Bad delimiter"
-    if String.Equals(value,delimiter, StringComparison.InvariantCultureIgnoreCase) then
-        Some ()
-    else None
+
+    if String.Equals(value, delimiter, StringComparison.InvariantCultureIgnoreCase) then
+        Some()
+    else
+        None
 
 let tryFindEnv =
     let vars =
@@ -40,61 +42,54 @@ let tryFindEnv =
 
     fun name ->
         vars
-        |> Map.tryFindKey(fun k _ ->
-            System.String.Equals(k,name, StringComparison.InvariantCultureIgnoreCase)
-        )
-        |> Option.map(fun k -> vars[k])
-// rundll32 sysdm.cpl,EditEnvironmentVariables 
+        |> Map.tryFindKey (fun k _ -> System.String.Equals(k, name, StringComparison.InvariantCultureIgnoreCase))
+        |> Option.map (fun k -> vars[k])
+// rundll32 sysdm.cpl,EditEnvironmentVariables
 module DotEnv =
-    let loadEnv path : Map<string,string> =
-        IO.File.ReadAllLines(path=path)
-        |> Array.choose(fun value ->
+    let loadEnv path : Map<string, string> =
+        IO.File.ReadAllLines(path = path)
+        |> Array.choose (fun value ->
             value.Split('=')
             |> List.ofArray
             |> function
-                | [] -> eprintfn "Value not understood: '%s'" value; None
-                | _ :: [] -> eprintfn "Value not understood: '%s'" value; None
-                | h::tl -> Some (h, tl |> String.concat "=")
-        )
+                | [] ->
+                    eprintfn "Value not understood: '%s'" value
+                    None
+                | _ :: [] ->
+                    eprintfn "Value not understood: '%s'" value
+                    None
+                | h :: tl -> Some(h, tl |> String.concat "="))
         |> Map.ofArray
 
     let buildEnvPath env =
-        if String.IsNullOrEmpty env then
-            ".env"
-        else
-            $".env.{env}"
+        if String.IsNullOrEmpty env then ".env" else $".env.{env}"
+
     let tryLoadEnvFile env =
-        buildEnvPath env
-        |> Option.ofFileExists
-        |> Option.map loadEnv
+        buildEnvPath env |> Option.ofFileExists |> Option.map loadEnv
 
     let envMap =
         match tryFindEnv "NODE_ENV" with
-        | Some (StrEqualsI "production") ->
-            Some "prod"
-        | Some (ValueString x) ->
-            Some x
+        | Some(StrEqualsI "production") -> Some "prod"
+        | Some(ValueString x) -> Some x
         | Some _ -> None
         | None -> None
         |> Option.bind tryLoadEnvFile
-    let loadEnvs() =
-        [
-            Some <| Map.ofList [("NODE_ENV", "local")]
-            tryLoadEnvFile null
-            envMap
-        ]
+
+    let loadEnvs () =
+        [ Some <| Map.ofList [ ("NODE_ENV", "local") ]; tryLoadEnvFile null; envMap ]
         |> List.choose id
         |> Map.combine
 
 module Process =
     open System.Diagnostics
+
     let createInfo fileName args useShell =
         let args = String.concat " " args
-        let psi = ProcessStartInfo(fileName, args, UseShellExecute=useShell)
+        let psi = ProcessStartInfo(fileName, args, UseShellExecute = useShell)
         psi
 
     let addEnv name value (psi: ProcessStartInfo) =
-        psi.EnvironmentVariables.Add(name,value)
+        psi.EnvironmentVariables.Add(name, value)
 
 // (Process.createInfo "npm" ["start"] true, DotEnv.loadEnvs())
 // ||> Map.fold(fun psi k v ->
@@ -102,9 +97,8 @@ module Process =
 //     psi
 // )
 
-DotEnv.loadEnvs()
-|> Map.iter(fun k v ->
+DotEnv.loadEnvs ()
+|> Map.iter (fun k v ->
     printfn "Setting '%s'='%s'" k v
-    Environment.SetEnvironmentVariable(k,v,EnvironmentVariableTarget.Process)
-    ()
-)
+    Environment.SetEnvironmentVariable(k, v, EnvironmentVariableTarget.Process)
+    ())
