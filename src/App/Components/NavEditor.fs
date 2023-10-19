@@ -16,11 +16,25 @@ open App.Adapters.Api
 open App.Components.Gen
 open App.Components.Gen.Icons
 
+// [<Fable.Core.Erase>]
 type EditorTabs =
     | IconTab
     | AclTab
+    with
+        static member ReParse (x:EditorTabs) =
+            match string x with
+            | y when y = string IconTab -> Some IconTab
+            | y when y = string AclTab -> Some AclTab
+            | _ -> None
+
 
 type NavEditorErrorType = string
+
+type CachedState = {
+    Tab: EditorTabs
+}
+
+let stateStore: LocalStorage.IAccessor<CachedState> = LocalStorage.StorageAccess("Root_CachedState")
 
 type Model = {
     Tab: EditorTabs
@@ -85,13 +99,14 @@ module Renderers =
         ]
 
 let init item =
+    let initialTab = stateStore.TryGetValue() |> Option.map(fun cs -> cs.Tab)
     {
-        Tab= IconTab
+        Tab= initialTab |> Option.bind EditorTabs.ReParse |> Option.defaultValue IconTab
         Item= item
         Error= None
     }
 
-let update dispatchParent msg model =
+let update dispatchParent msg (model:Model) =
     printfn "NavEditor update: %A" msg
     match msg with
     | TabChange t -> {model with Tab= t}

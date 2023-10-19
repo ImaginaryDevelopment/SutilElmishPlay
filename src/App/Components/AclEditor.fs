@@ -66,10 +66,13 @@ let update (itemAcls: AclRef seq) (msg:Msg) (model:Model) =
     | TypeSelectChange _, {FocusedAcl = Some {IsNew = false}} -> justError "Cannot change type on new acl"
     | TypeSelectChange v, _ when itemAcls |> Seq.exists(fun acl -> acl.Name = v) -> justError "Cannot change to existing acl type"
 
-    // | TypeSelectChange v, {FocusedAcl = Some x} -> {model with FocusedAcl= Some {x with AclRef={x.AclRef with Name=v}}}
-    | TypeSelectChange v, {FocusedAcl = Some x} -> model |> MLens.updateAclRef x (fun x -> {x with Name=v}) , Cmd.none
+    | TypeSelectChange v, {FocusedAcl = Some x} ->
+        printfn "TypeSelected change"
+        model |> MLens.updateAclRef x (fun x -> {x with Name=v}) , Cmd.none
     // TODO: should we warn if they have unsaved changed and select another acl?
-    | AclSelect v, _ -> {model with FocusedAcl= Some {IsNew= false; AclRef=v}}, Cmd.none
+    | AclSelect v, _ ->
+        printfn "AclSelected"
+        {model with FocusedAcl= Some {IsNew= false; AclRef=v}}, Cmd.none
 
 module Renderers =
     open Gen
@@ -114,7 +117,7 @@ module Renderers =
 
         ]
 
-    let renderAcl selectedType (item:AclRef) dispatch =
+    let renderAcl selectedType (item:AclRef) dispatch pDispatch =
         let isActiveButton = item.Name = selectedType
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
@@ -131,7 +134,10 @@ module Renderers =
                     tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
                     Attr.disabled isActiveButton
                     if not isActiveButton then
-                        onClick (fun _ -> item |> Msg.AclSelect |> dispatch) List.empty
+                        onClick (fun _ ->
+                            item |> Msg.AclSelect |> dispatch
+                            AclParentMsg.AclTypeChange item.Name |> pDispatch
+                        ) List.empty
                 ]
             ]
             Html.divc "column is-four-fifths" [
@@ -205,7 +211,6 @@ let renderAclsEditor (aea:AclEditorArgs) (dispatchParent:Dispatch<AclParentMsg>)
     let m = aea.ResolvedParams |> Observable.map(fun m ->
         m
         |> Map.map(fun k v -> AclRefState.Response (Ok v))
-
     )
 
     Html.div [
@@ -244,7 +249,7 @@ let renderAclsEditor (aea:AclEditorArgs) (dispatchParent:Dispatch<AclParentMsg>)
                     Html.div [
                         if i % 2 = 0 then
                             Attr.className "has-background-link-light"
-                        Renderers.renderAcl selectedType acl dispatch
+                        Renderers.renderAcl selectedType acl dispatch dispatchParent
                         ]
                     ]
         )
