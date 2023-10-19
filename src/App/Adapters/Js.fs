@@ -30,6 +30,12 @@ let keys x : string[] = jsNative
 [<Emit("Object.assign({},$0)")>]
 let clone<'t> (source: 't) : 't = jsNative
 
+let cloneSet<'t> (source: 't) (propName: string) (value: obj) =
+    let nextItem = clone source
+    // formatter may break this line
+    nextItem?(propName) <- value
+    nextItem
+
 
 [<Emit("delete $0[$1]")>]
 let delete (target: obj) (name: string) = jsNative

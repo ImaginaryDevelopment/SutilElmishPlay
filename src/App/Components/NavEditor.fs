@@ -104,8 +104,9 @@ let update dispatchParent msg (model: Model) =
     | TabChange t -> { model with Tab = t }
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
     | EditProp(name, value) ->
-        let nextItem = clone model.Item
-        (?) nextItem name <- value
+        let nextItem = cloneSet model.Item name value
+        // formatter may break this line
+        // (?) nextItem name <- value
         { model with Item = nextItem }
     | EditAcl(AclEditor.AclParentMsg.AclTypeChange v) ->
         ParentMsg.AclTypeChange v |> dispatchParent
