@@ -368,6 +368,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 FocusedItem = Some(clone<NavItem> item)
+                LastFocusedItemId = item.Id
         },
         Cmd.none
 
@@ -390,9 +391,18 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         },
         Cmd.none
     | NavRootMsg(Response x), _ ->
+
         {
             model with
                 NavRootState = Responded x
+                FocusedItem =
+                    if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
+                        match model.FocusedItem, x with
+                        | None, Ok items -> items |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
+                        | _ -> None
+                    else
+                        None
+                    |> Option.orElse model.FocusedItem
         },
         Cmd.none
     | AclResolveMsg(Response(Error ex)), _ ->
@@ -427,6 +437,14 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         {
             model with
                 NavPathState = Responded x
+                FocusedItem =
+                    if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
+                        match model.FocusedItem, x with
+                        | None, Ok nvp -> nvp.Items |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
+                        | _ -> None
+                    else
+                        None
+                    |> Option.orElse model.FocusedItem
         },
         Cmd.none
 
@@ -487,6 +505,8 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     |> fun (next, cmd) ->
         match SideEffects.saveStateCache next with
         | Error s ->
+            eprintfn "Error with save state cache"
+
             {
                 next with
                     Errors = (s, System.DateTime.Now) :: model.Errors
@@ -505,7 +525,6 @@ module Renderers =
         | Responded _
         | NotRequested ->
             Html.div [
-
                 Html.input [
                     type' "text"
                     autofocus

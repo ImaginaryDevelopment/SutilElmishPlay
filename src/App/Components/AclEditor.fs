@@ -240,7 +240,7 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
                         Html.spanc "info" [ text "*"; Attr.title (Core.pretty focusedAcl) ]
                         Html.spanc "info" [ text "*"; Attr.title (Core.pretty selectedAclType) ]
 
-                        Html.div [
+                        Html.divc "box" [
                             // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
                             match selectedAclType with
                             | Some selectedAclType ->
