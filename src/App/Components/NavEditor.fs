@@ -131,8 +131,7 @@ let renderEditor resolvedParams aclTypes (propValue:NavItem, obs: System.IObserv
                     TabClickMsg= TabChange AclTab
                     IsActive= tab = AclTab
                     Render = fun () ->
-                        AclEditor.renderAclsEditor { ItemAcls= value.Acls; AclTypes=aclTypes; ResolvedParams = resolvedParams } (fun msg -> msg |> EditAcl |> dispatch)
-                        // AclEditor.renderAclsEditor value.Acls aclTypes (fun msg -> msg |> EditAcl |> dispatch)
+                        AclEditor.renderAclsEditor { ItemAcls= value.Acls; AclTypes= aclTypes; ResolvedParams= resolvedParams } (fun msg -> msg |> EditAcl |> dispatch)
                 }
             ] dispatch
         )

@@ -1,4 +1,5 @@
 open System.Text
+
 let targets =
     System.IO.Directory.GetFiles(@"node_modules\@mui\icons-material", "*.js")
     |> Array.filter(fun f -> not <| f.EndsWith "index.js")
