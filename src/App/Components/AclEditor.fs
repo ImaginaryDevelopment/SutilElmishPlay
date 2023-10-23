@@ -32,7 +32,7 @@ type AclParentMsg =
 
 type Msg =
     | TypeSelectChange of string
-    | AclSelect of AclRef
+    | AclSelect of AclRef option
     | AclSearchChange of string
 
 type AclState = { IsNew: bool; AclRef: AclRef }
@@ -44,18 +44,30 @@ type SearchState =
 type Model = {
     FocusedAcl: AclState option
     ErrorQueue: (string * System.DateTime) list
-    SearchState: SearchState * string
+    SearchText: string
+    SearchState: SearchState
 }
 
+type CachedState = { AclSearchText: string }
+
+let stateStore: LocalStorage.IAccessor<CachedState> =
+    LocalStorage.StorageAccess("AclEditor_CachedState")
+
 let emptyAcl = { Name = ""; Parameters = Array.empty }
+let inline justModel m = m, Cmd.none
 
 let init aclRefOpt : Model * Cmd<Msg> =
-    {
+    let searchText =
+        stateStore.TryGetValue()
+        |> Option.bind (fun cs -> cs.AclSearchText |> Option.ofValueString)
+        |> Option.defaultValue ""
+
+    justModel {
         FocusedAcl = aclRefOpt
         ErrorQueue = List.empty
-        SearchState = AcceptInput, ""
-    },
-    Cmd.none
+        SearchText = searchText
+        SearchState = AcceptInput
+    }
 
 [<RequireQualifiedAccess>]
 module private MLens =
@@ -72,13 +84,18 @@ module private MLens =
             ErrorQueue = (text, System.DateTime.Now) :: getErrors model
     }
 
+module SideEffects =
+
+    let saveStateCache (next: Model) =
+        Some { AclSearchText = next.SearchText } |> stateStore.TrySetValue
+
 let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
     let justError title = MLens.addError title model, Cmd.none
 
     match msg, model with
     // blocks
 
-    | AclSearchChange _, { SearchState = Searching, _ } -> justError "Server is busy"
+    | AclSearchChange _, { SearchState = Searching } -> justError "Server is busy"
     // | AclSearchRequest, {SearchState = Searching, _} -> justError "A Search is already in flight"
     | TypeSelectChange _, { FocusedAcl = None } -> justError "Start a new acl first"
     | TypeSelectChange _, { FocusedAcl = Some { IsNew = false } } -> justError "Cannot change type on new acl"
@@ -87,31 +104,36 @@ let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
 
     // actions
 
-    | Msg.AclSearchChange text, { SearchState = AcceptInput, _ } ->
-        {
-            model with
-                SearchState = AcceptInput, text
-        },
-        Cmd.none
+    | Msg.AclSearchChange text, { SearchState = AcceptInput } -> justModel { model with SearchText = text }
     | TypeSelectChange v, { FocusedAcl = Some x } ->
         printfn "TypeSelected change"
-        model |> MLens.updateAclRef x (fun x -> { x with Name = v }), Cmd.none
+        model |> MLens.updateAclRef x (fun x -> { x with Name = v }) |> justModel
 
     // TODO: should we warn if they have unsaved changed and select another acl?
-    | AclSelect v, _ ->
+    | AclSelect(Some v), _ ->
         printfn "AclSelected"
 
-        {
+        justModel {
             model with
                 FocusedAcl = Some { IsNew = false; AclRef = v }
-        },
-        Cmd.none
+        }
+    | AclSelect None, _ ->
+        printfn "AclSelected"
+
+        justModel { model with FocusedAcl = None }
+    |> fun (next, cmd) ->
+        let next =
+            match SideEffects.saveStateCache next with
+            | Ok() -> next
+            | Error e -> MLens.addError e model
+
+        next, cmd
 
 module Renderers =
     open Gen
 
     let renderAclTypeSelector (aclTypes: Acl seq) selectedType disabled (dispatch: Dispatch<Msg>) =
-        log aclTypes
+        // log aclTypes
 
         Html.select [
             text "Acl!"
@@ -130,6 +152,7 @@ module Renderers =
 
     let renderAclParams
         searchState
+        (aclParams: (string * string) list)
         (idMap: Map<string, AclRefState>)
         (aclType: Acl)
         (item: AclRef)
@@ -161,28 +184,44 @@ module Renderers =
                     ]
                 ]
                 Html.divc "column" [
-                    let v: string = snd searchState
+                    if aclType.Searchable |> Option.defaultValue false then
+                        let v: string = snd searchState
 
-                    Html.inputc "text" [
-                        Attr.value v
+                        Html.inputc "text" [
+                            Attr.value v
 
-                        match searchState with
-                        | AcceptInput, _ -> autofocus
-                        | SearchState.Searching, _ -> Attr.disabled true
+                            match searchState with
+                            | AcceptInput, _ -> autofocus
+                            | SearchState.Searching, _ -> Attr.disabled true
 
-                        onInput (fun e -> e.inputElement.value |> Msg.AclSearchChange |> dispatch) []
-                    ]
+                            onInput (fun e -> e.inputElement.value |> Msg.AclSearchChange |> dispatch) []
+                        ]
 
-                    Html.buttonc "button" [
-                        text "Search"
-                        onClick
-                            (fun _ ->
-                                AclParentMsg.AclSearchRequest {
-                                    SearchText = v
-                                    AclName = aclType.Name
-                                }
-                                |> dispatchParent)
-                            []
+                        Html.buttonc "button" [
+                            text "Search"
+                            onClick
+                                (fun _ ->
+                                    AclParentMsg.AclSearchRequest {
+                                        SearchText = v
+                                        AclName = aclType.Name
+                                    }
+                                    |> dispatchParent)
+                                []
+                        ]
+                ]
+                Html.divc "column" [
+                    let ps =
+                        match aclParams with
+                        | [] ->
+                            aclType.SelectableParameters
+                            |> Option.defaultValue Array.empty
+                            |> Seq.map (fun p -> p, p)
+                            |> List.ofSeq
+                        | values -> values
+
+                    Html.ul [
+                        for (value, name) in ps do
+                            Html.li [ text name; Attr.title value ]
                     ]
                 ]
             ]
@@ -205,7 +244,7 @@ module Renderers =
                     if not isActiveButton then
                         onClick
                             (fun _ ->
-                                item |> Msg.AclSelect |> dispatch
+                                item |> Some |> Msg.AclSelect |> dispatch
                                 AclParentMsg.AclTypeChange item.Name |> dispatchParent)
                             List.empty
                 ]
@@ -222,9 +261,11 @@ module Renderers =
 
 open Sutil.Styling
 open type Feliz.length
+open type Feliz.borderStyle
 
 let css = [
     rule "span.info" Gen.CssRules.titleIndicator
+    rule "h2" [ Css.borderBottom (px 1, solid, "black") ]
 
     // not working
     // rule ".panel-block>*" [
@@ -259,14 +300,18 @@ let css = [
     rule ".columns" [ Css.marginTop (px 0); Css.marginBottom (px 0); Css.marginLeft (px 5) ]
 ]
 
-type AclEditorArgs = {
+type AclEditorProps = {
     ItemAcls: AclRef seq
     AclTypes: Acl seq
     ResolvedParams: System.IObservable<Map<string, AclDisplay>>
+    SearchResults: (string * string) list
+    DispatchParent: Dispatch<AclParentMsg>
 }
 
 // allow them to edit or create one
-let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg>) =
+let renderAclsEditor (aea: AclEditorProps) =
+    printfn "AclEditor Render"
+
     let store, dispatch =
         aea.ItemAcls
         |> Seq.tryHead
@@ -292,6 +337,10 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
                 let selectedAclType = aea.AclTypes |> Seq.tryFind (fun v -> v.Name = selectedType)
 
                 Html.div [
+                    Html.buttonc "button" [
+                        tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                        onClick (fun _ -> Msg.AclSelect None |> dispatch) []
+                    ]
                     Renderers.renderAclTypeSelector aea.AclTypes selectedType (Option.isSome focusAclOpt) dispatch
                     match focusAclOpt with
                     | Some focusedAcl ->
@@ -306,12 +355,13 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
                                     m,
                                     (fun m ->
                                         Renderers.renderAclParams
-                                            store.Value.SearchState
+                                            (store.Value.SearchState, store.Value.SearchText)
+                                            aea.SearchResults
                                             m
                                             selectedAclType
                                             focusedAcl.AclRef
                                             dispatch
-                                            dispatchParent)
+                                            aea.DispatchParent)
                                 )
                             | None -> ()
                         ]
@@ -331,7 +381,7 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
                         Html.div [
                             if i % 2 = 0 then
                                 Attr.className "has-background-link-light"
-                            Renderers.renderAcl selectedType acl dispatch dispatchParent
+                            Renderers.renderAcl selectedType acl dispatch aea.DispatchParent
                         ]
                 ]
         )

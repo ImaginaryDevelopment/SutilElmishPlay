@@ -721,11 +721,14 @@ let view appMode =
                                     | None, _ -> Html.div []
                                     | Some item, Some aclTypes ->
                                         let r =
-                                            NavEditor.renderEditor
-                                                (store |> Store.map MLens.getResolvedAcls)
-                                                aclTypes
-                                                (item, store |> Store.map MLens.getFocusedItem)
-                                                (Msg.EditorMsg >> dispatch)
+                                            NavEditor.renderEditor {
+                                                ResolvedAclParams = store |> Store.map MLens.getResolvedAcls
+                                                AclTypes = aclTypes
+                                                NavItem = item
+                                                NavItemIconObservable = store |> Store.map MLens.getFocusedItem
+                                                DispatchParent = (Msg.EditorMsg >> dispatch)
+
+                                            }
 
                                         r
 

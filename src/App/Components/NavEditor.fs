@@ -3,8 +3,6 @@ module App.Components.NavEditor
 open BReusable
 open Core
 
-open Fable.Core.JsInterop
-
 open Sutil
 open Sutil.CoreElements
 
@@ -95,15 +93,17 @@ module Renderers =
         ]
 
 let init item =
-    let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab)
+    let initialTab =
+        stateStore.TryGetValue() |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     {
-        Tab = initialTab |> Option.bind EditorTabs.ReParse |> Option.defaultValue IconTab
+        Tab = initialTab |> Option.defaultValue IconTab
         Item = item
         Errors = List.empty
     }
 
 module SideEffects =
+
     let saveStateCache (next: Model) =
         Some { Tab = next.Tab } |> stateStore.TrySetValue
 
@@ -137,15 +137,20 @@ let update dispatchParent msg (model: Model) =
 
 ()
 
+type NavEditorProps = {
+    ResolvedAclParams: System.IObservable<Map<string, AclDisplay>>
+    AclTypes: Acl seq
+    NavItem: NavItem
+    NavItemIconObservable: System.IObservable<NavItem option>
+    DispatchParent: Dispatch<ParentMsg>
+}
+
 // renames will go a different route, no path editing
-let renderEditor
-    resolvedParams
-    aclTypes
-    (propValue: NavItem, obs: System.IObservable<NavItem option>)
-    (dispatchParent: Dispatch<ParentMsg>)
-    =
+let renderEditor props =
+
     let store, dispatch =
-        propValue |> Store.makeElmishSimple init (update dispatchParent) ignore
+        props.NavItem
+        |> Store.makeElmishSimple init (update props.DispatchParent) ignore
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
@@ -161,7 +166,10 @@ let renderEditor
                         Render =
                             fun () ->
                                 IconEditor.renderIconEditor
-                                    ("Icon", obs |> Observable.choose id |> Observable.map (fun v -> v.Icon))
+                                    ("Icon",
+                                     props.NavItemIconObservable
+                                     |> Observable.choose id
+                                     |> Observable.map (fun v -> v.Icon))
                                     value.Icon
                                     (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
                     }
@@ -171,13 +179,13 @@ let renderEditor
                         IsActive = tab = AclTab
                         Render =
                             fun () ->
-                                AclEditor.renderAclsEditor
-                                    {
-                                        ItemAcls = value.Acls
-                                        AclTypes = aclTypes
-                                        ResolvedParams = resolvedParams
-                                    }
-                                    (fun msg -> msg |> EditAcl |> dispatch)
+                                AclEditor.renderAclsEditor {
+                                    ItemAcls = value.Acls
+                                    AclTypes = props.AclTypes
+                                    ResolvedParams = props.ResolvedAclParams
+                                    SearchResults = List.empty
+                                    DispatchParent = EditAcl >> dispatch
+                                }
                     }
                 ]
                 dispatch)
@@ -194,6 +202,6 @@ let renderEditor
                     // oldCore
                     ]
                     dispatch
-                    dispatchParent
+                    props.DispatchParent
         )
     ]
