@@ -50,6 +50,7 @@ type ParentMsg =
     | Cancel
     | Saved of NavItem
     | AclTypeChange of string
+    | AclSearchRequest of AclRefValueArgs
 
 type EditorMsgType =
     | EditProp of prop: string * nextValue: string
@@ -103,21 +104,24 @@ let update dispatchParent msg (model: Model) =
     match msg with
     | TabChange t -> { model with Tab = t }
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
+
     | EditProp(name, value) ->
         let nextItem = cloneSet model.Item name value
-        // formatter may break this line
-        // (?) nextItem name <- value
         { model with Item = nextItem }
+
     | EditAcl(AclEditor.AclParentMsg.AclTypeChange v) ->
         ParentMsg.AclTypeChange v |> dispatchParent
         model
-    // TODO: Not implemented
-    | Save -> model
-    // TODO: Not implemented
+    | EditAcl(AclEditor.AclParentMsg.AclSearchRequest v) ->
+        ParentMsg.AclSearchRequest v |> dispatchParent
+        model
     | SaveError e -> {
         model with
             Error = Some(e, System.DateTime.Now)
       }
+
+    // TODO: Not implemented
+    | Save -> model
 
 ()
 

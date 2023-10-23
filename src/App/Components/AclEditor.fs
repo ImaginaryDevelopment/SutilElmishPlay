@@ -28,16 +28,23 @@ type AclParentMsg =
     // which Acl Type is highlighted
     // None is a valid option
     | AclTypeChange of string
+    | AclSearchRequest of AclRefValueArgs
 
 type Msg =
     | TypeSelectChange of string
     | AclSelect of AclRef
+    | AclSearchChange of string
 
 type AclState = { IsNew: bool; AclRef: AclRef }
+
+type SearchState =
+    | AcceptInput
+    | Searching
 
 type Model = {
     FocusedAcl: AclState option
     ErrorQueue: (string * System.DateTime) list
+    SearchState: SearchState * string
 }
 
 let emptyAcl = { Name = ""; Parameters = Array.empty }
@@ -46,6 +53,7 @@ let init aclRefOpt : Model * Cmd<Msg> =
     {
         FocusedAcl = aclRefOpt
         ErrorQueue = List.empty
+        SearchState = AcceptInput, ""
     },
     Cmd.none
 
@@ -70,14 +78,25 @@ let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
     match msg, model with
     // blocks
 
+    | AclSearchChange _, { SearchState = Searching, _ } -> justError "Server is busy"
+    // | AclSearchRequest, {SearchState = Searching, _} -> justError "A Search is already in flight"
     | TypeSelectChange _, { FocusedAcl = None } -> justError "Start a new acl first"
     | TypeSelectChange _, { FocusedAcl = Some { IsNew = false } } -> justError "Cannot change type on new acl"
     | TypeSelectChange v, _ when itemAcls |> Seq.exists (fun acl -> acl.Name = v) ->
         justError "Cannot change to existing acl type"
 
+    // actions
+
+    | Msg.AclSearchChange text, { SearchState = AcceptInput, _ } ->
+        {
+            model with
+                SearchState = AcceptInput, text
+        },
+        Cmd.none
     | TypeSelectChange v, { FocusedAcl = Some x } ->
         printfn "TypeSelected change"
         model |> MLens.updateAclRef x (fun x -> { x with Name = v }), Cmd.none
+
     // TODO: should we warn if they have unsaved changed and select another acl?
     | AclSelect v, _ ->
         printfn "AclSelected"
@@ -109,28 +128,67 @@ module Renderers =
                 ]
         ]
 
-    let renderAclParams (idMap: Map<string, AclRefState>) (aclType: Acl) (item: AclRef) =
+    let renderAclParams
+        searchState
+        (idMap: Map<string, AclRefState>)
+        (aclType: Acl)
+        (item: AclRef)
+        dispatch
+        dispatchParent
+        =
         Html.div [
-            Html.ul [
-                for p in item.Parameters do
-                    Html.li [
-                        match idMap |> Map.tryFind p with
-                        | Some AclRefState.Requested
-                        | None ->
-                            text p
-                            Attr.title p
-                        | Some(AclRefState.Response(Ok x)) ->
-                            Attr.title x.Reference
-                            text x.DisplayName
-                        | Some(AclRefState.Response(Error e)) ->
-                            Attr.title (string e)
-                            text p
+            Html.divc "columns" [
+                Html.divc "column" [
+                    Html.divc "box" [
+                        // needs border or underline or font weight work
+                        Html.h2 [ text "Existing" ]
+                        Html.ul [
+                            for p in item.Parameters do
+                                Html.li [
+                                    match idMap |> Map.tryFind p with
+                                    | Some AclRefState.Requested
+                                    | None ->
+                                        text p
+                                        Attr.title p
+                                    | Some(AclRefState.Response(Ok x)) ->
+                                        Attr.title x.Reference
+                                        text x.DisplayName
+                                    | Some(AclRefState.Response(Error e)) ->
+                                        Attr.title (string e)
+                                        text p
+                                ]
+                        ]
                     ]
-            ]
+                ]
+                Html.divc "column" [
+                    let v: string = snd searchState
 
+                    Html.inputc "text" [
+                        Attr.value v
+
+                        match searchState with
+                        | AcceptInput, _ -> autofocus
+                        | SearchState.Searching, _ -> Attr.disabled true
+
+                        onInput (fun e -> e.inputElement.value |> Msg.AclSearchChange |> dispatch) []
+                    ]
+
+                    Html.buttonc "button" [
+                        text "Search"
+                        onClick
+                            (fun _ ->
+                                AclParentMsg.AclSearchRequest {
+                                    SearchText = v
+                                    AclName = aclType.Name
+                                }
+                                |> dispatchParent)
+                            []
+                    ]
+                ]
+            ]
         ]
 
-    let renderAcl selectedType (item: AclRef) dispatch pDispatch =
+    let renderAcl selectedType (item: AclRef) dispatch dispatchParent =
         let isActiveButton = item.Name = selectedType
 
         Html.divc "columns" [
@@ -148,7 +206,7 @@ module Renderers =
                         onClick
                             (fun _ ->
                                 item |> Msg.AclSelect |> dispatch
-                                AclParentMsg.AclTypeChange item.Name |> pDispatch)
+                                AclParentMsg.AclTypeChange item.Name |> dispatchParent)
                             List.empty
                 ]
             ]
@@ -244,7 +302,17 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
                             // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
                             match selectedAclType with
                             | Some selectedAclType ->
-                                Bind.el (m, (fun m -> Renderers.renderAclParams m selectedAclType focusedAcl.AclRef))
+                                Bind.el (
+                                    m,
+                                    (fun m ->
+                                        Renderers.renderAclParams
+                                            store.Value.SearchState
+                                            m
+                                            selectedAclType
+                                            focusedAcl.AclRef
+                                            dispatch
+                                            dispatchParent)
+                                )
                             | None -> ()
                         ]
                     | None -> ()

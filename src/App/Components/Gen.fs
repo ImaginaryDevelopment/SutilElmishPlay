@@ -27,9 +27,11 @@ type RemoteData<'t> =
         | Responded(Ok x) -> Some x
         | _ -> None
 
+type TRailRoad<'tOk> = Result<'tOk, ErrorType>
+
 type RemoteMsg<'tReq, 'tResp> =
     | Request of 'tReq
-    | Response of Result<'tResp, ErrorType>
+    | Response of TRailRoad<'tResp>
 
 type GenericModelArgs<'t, 'tModel, 'tMsg, 'tReqArgs> = {
     GetState: 'tModel -> RemoteData<'t>
