@@ -110,12 +110,25 @@ module private MLens =
     let addExnError title (ex: exn) x = addError $"%s{title}: %s{ex.Message}" x
 
 [<RequireQualifiedAccess>]
+type FetchReq =
+    // request root or path
+    | Nav of unit option
+    | AclTypes
+    | AclInquiry of NavAclInquiry
+
+type FetchRes =
+    | NavRoot of NavItem[]
+    | NavPath of NavPathResponse
+    | AclState of Acl[]
+    | AclResolve of NavAclResolveResponse
+    | AclSearchResolve of AclSearchResponse
+
+[<RequireQualifiedAccess>]
 type Msg =
-    | NavRootMsg of RemoteMsg<unit, NavItem[]>
-    | NavPathMsg of RemoteMsg<unit, NavPathResponse>
-    | AclStateMsg of RemoteMsg<unit, Acl[]>
-    | AclResolveMsg of RemoteMsg<NavAclResolve, NavAclResolveResponse>
-    | AclSearchResolveMsg of TRailRoad<AclSearchResponse>
+    | FetchRequest of FetchReq
+    | FetchResolve of FetchRes
+    | FetchFail of string * exn
+
     | TabChange of RootTabs
     | EditorMsg of NavEditor.ParentMsg
     | FocusItem of NavItem
@@ -142,39 +155,39 @@ let dummyData: NavItem[] =
 
 module Commands =
 
-    let getResponse (token: string) fMsg fAsync arg : Cmd<Msg> =
-        let f arg =
+    // assumes all calls will require a token
+    let getResponse<'tReq, 'tData>
+        (token: string)
+        (fMsg: 'tData -> FetchRes)
+        title
+        (fAsync: string -> 'tReq -> Async<Result<'tData, ErrorType>>)
+        x
+        : Cmd<Msg> =
+        let f x =
             async {
-                let! resp = fAsync token arg
-                return fMsg resp
+                let! resp = fAsync token x
+
+                match resp with
+                | Ok v -> return fMsg v |> Msg.FetchResolve
+                | Error e -> return Msg.FetchFail(title, e)
             }
 
-        Cmd.OfAsync.perform f arg id
-
-    let getRemoteResponse fMsg fAsync arg : Cmd<Msg> =
-        let a arg =
-            async {
-                let! resp = fAsync arg
-                let resp2 = Response resp
-                return fMsg resp2
-            }
-
-        Cmd.OfAsync.perform a arg id
+        Cmd.OfAsync.either f x id <| fun ex -> Msg.FetchFail(title, ex)
 
     let getNavRoot token =
-        getRemoteResponse Msg.NavRootMsg App.Adapters.Api.getNavRoot token
+        getResponse token FetchRes.NavRoot "NavRoot" App.Adapters.Api.getNavRoot ()
 
     let getNavPath (token, path) =
-        getRemoteResponse Msg.NavPathMsg (App.Adapters.Api.getNavPath token) path
+        getResponse token FetchRes.NavPath "NavPath" App.Adapters.Api.getNavPath path
 
     let getAcls token =
-        getRemoteResponse Msg.AclStateMsg App.Adapters.Api.getAcls token
+        getResponse token FetchRes.AclState "AclState" App.Adapters.Api.getAcls ()
 
-    let getNavAclDisplays token (req: NavAclResolve) =
-        getRemoteResponse Msg.AclResolveMsg (App.Adapters.Api.getNavAclResolve token) req
+    let getNavAclDisplays token req =
+        getResponse token FetchRes.AclResolve "AclResolve" App.Adapters.Api.getNavAclResolve req
 
     let getNavAclParamSearch token req =
-        getResponse token Msg.AclSearchResolveMsg (fun token -> App.Adapters.Api.getAclRefValues token) req
+        getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.getAclRefValues req
 
 
 let init appMode =
@@ -278,25 +291,134 @@ module SideEffects =
             |> Option.defaultValue (se.Next, None)
             |> fun (next, cmdOpt) -> { next with RootTab = RootTabs.Editor }, cmdOpt
 
+let justModel m = m, Cmd.none
+
+let block title msg (model: Model) : Model * Cmd<Msg> =
+    printfn "Blocked: %s (%A)" title msg
+    model, Cmd.none
+
+module Updates =
+    let updateFetchRequest msg (model: Model) : Model * Cmd<Msg> =
+        match msg with
+        | FetchReq.AclInquiry x ->
+            match model.AppMode with
+            | ConfigType.Demo -> block "AclResolve demo not implemented" msg model
+            | ConfigType.Auth accessToken ->
+                {
+                    model with
+                        AclResolutions = x.NavId :: model.AclResolutions
+                },
+                Commands.getNavAclDisplays accessToken x
+        | FetchReq.Nav(None) ->
+            match model.AppMode with
+            | ConfigType.Demo ->
+                {
+                    model with
+                        NavRootState = Responded(Ok dummyData)
+                },
+                Cmd.none
+            | ConfigType.Auth accessToken -> { model with NavRootState = InFlight }, Commands.getNavRoot accessToken
+
+        | FetchReq.Nav(Some()) ->
+            match model.AppMode with
+            | ConfigType.Demo ->
+                {
+                    model with
+                        NavPathState = Responded(Ok { Path = model.Path; Items = dummyData })
+                },
+                Cmd.none
+            | ConfigType.Auth accessToken ->
+                printfn "Requesting Path '%s'" model.Path
+                { model with NavPathState = InFlight }, Commands.getNavPath (accessToken, model.Path)
+
+        | FetchReq.AclTypes ->
+            match model.AppMode with
+            | ConfigType.Demo -> block "no dummy acl data" msg model
+            | ConfigType.Auth accessToken ->
+                printfn "Requesting Path '%s'" model.Path
+                { model with AclTypeState = InFlight }, Commands.getAcls accessToken
+
+
+    let fetchResolve msg (model: Model) : Model * Cmd<Msg> =
+        match msg with
+        | AclState data ->
+            justModel {
+                model with
+                    AclTypeState = Responded(Ok data)
+            }
+
+        | NavRoot data ->
+            justModel {
+                model with
+                    NavRootState = Responded(Ok data)
+                    FocusedItem =
+                        if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
+                            match model.FocusedItem with
+                            | None -> data |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
+                            | _ -> None
+                        else
+                            None
+                        |> Option.orElse model.FocusedItem
+            }
+
+        | AclSearchResolve data ->
+            justModel {
+                model with
+                    AclParamSearch = RemoteData.Responded(Ok data)
+            }
+
+        | AclResolve x ->
+            let nextMap =
+                (model.ResolvedAcls, x.Resolved)
+                ||> Seq.fold (fun m newItem -> m |> Map.add newItem.Reference newItem)
+
+            match resolveAclsAccess.TrySetValue(nextMap |> Map.map (fun _ v -> v.DisplayName) |> Some) with
+            | Ok() -> ()
+            | Error e ->
+                eprintfn "Failed to save map: '%A'" e
+                log e
+
+            justModel {
+                model with
+                    AclResolutions =
+                        model.AclResolutions
+                        |> List.except (x.Resolved |> Array.map (fun r -> r.Reference))
+                    ResolvedAcls = nextMap
+            }
+
+        | FetchRes.NavPath data ->
+            justModel {
+                model with
+                    NavPathState = Responded(Ok data)
+                    FocusedItem =
+                        if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
+                            match model.FocusedItem with
+                            | None -> data.Items |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
+                            | _ -> None
+                        else
+                            None
+                        |> Option.orElse model.FocusedItem
+            }
+
+()
+
 let update msg (model: Model) : Model * Cmd<Msg> =
     printfn "Root Update running: %A ('%s')" msg model.Path
+
+    let inline block title = block title msg model
 
     let atOpt =
         match model.AppMode with
         | ConfigType.Demo -> None
         | ConfigType.Auth accessToken -> Some accessToken
 
-    let justModel m = m, Cmd.none
-
-    let block title =
-        printfn "Blocked: %s (%A)" title msg
-        model, Cmd.none
 
     match msg, model with
     // block actions
-    | Msg.NavRootMsg(Request _), { NavRootState = InFlight } -> block "InFlight NavRootMsg"
-    | Msg.NavPathMsg(Request _), { NavPathState = InFlight } -> block "InFlight NavPathMsg"
-    | Msg.AclStateMsg(Request _), { AclTypeState = InFlight } -> block "InFlight AclStateMsg"
+    | Msg.FetchRequest(FetchReq.Nav(None)), { NavRootState = InFlight } -> block "InFlight NavRoot"
+    | Msg.FetchRequest(FetchReq.Nav(Some _)), { NavPathState = InFlight } -> block "InFlight NavPath"
+    | Msg.FetchRequest FetchReq.AclTypes, { AclTypeState = InFlight } -> block "InFlight AclTypes"
+
     | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest _), { AclParamSearch = InFlight } ->
         block "InFlight AclSearchRequest"
     | Msg.PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
@@ -358,15 +480,6 @@ let update msg (model: Model) : Model * Cmd<Msg> =
             | Some _ -> model, Commands.getNavAclDisplays accessToken { NavId = fi.Id; AclName = v }
         | ConfigType.Auth _, None -> block "AclTypeChange without Focused Item"
 
-    | Msg.AclResolveMsg(Request x), _ ->
-        match model.AppMode with
-        | ConfigType.Demo -> block "AclResolve demo not implemented"
-        | ConfigType.Auth accessToken ->
-            {
-                model with
-                    AclResolutions = x.NavId :: model.AclResolutions
-            },
-            Commands.getNavAclDisplays accessToken x
 
     | Msg.EditorMsg(NavEditor.Saved value), _ ->
         // TODO: post updated value back to api
@@ -391,70 +504,10 @@ let update msg (model: Model) : Model * Cmd<Msg> =
 
     // responses:
 
-    | Msg.AclStateMsg(Response x), _ ->
-        justModel {
-            model with
-                AclTypeState = Responded x
-        }
+    | Msg.FetchFail(title, ex), _ -> model |> MLens.addExnError title ex |> justModel
 
-    | Msg.NavRootMsg(Response x), _ ->
-        justModel {
-            model with
-                NavRootState = Responded x
-                FocusedItem =
-                    if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
-                        match model.FocusedItem, x with
-                        | None, Ok items -> items |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
-                        | _ -> None
-                    else
-                        None
-                    |> Option.orElse model.FocusedItem
-        }
+    | Msg.FetchResolve msg, _ -> Updates.fetchResolve msg model
 
-    | Msg.AclSearchResolveMsg(Error ex), _ -> model |> MLens.addExnError "AclSearchResolve" ex |> justModel
-
-    | Msg.AclResolveMsg(Response(Error ex)), _ -> model |> MLens.addExnError "AclResolve" ex |> justModel
-
-    | Msg.AclSearchResolveMsg(Ok data), _ ->
-        justModel {
-            model with
-                AclParamSearch = RemoteData.Responded(Ok data)
-        }
-
-    | Msg.AclResolveMsg(Response(Ok x)), _ ->
-        let nextMap =
-            (model.ResolvedAcls, x.Resolved)
-            ||> Seq.fold (fun m newItem -> m |> Map.add newItem.Reference newItem)
-
-        match resolveAclsAccess.TrySetValue(nextMap |> Map.map (fun _ v -> v.DisplayName) |> Some) with
-        | Ok() -> ()
-        | Error e ->
-            eprintfn "Failed to save map: '%A'" e
-            log e
-
-        {
-            model with
-                AclResolutions =
-                    model.AclResolutions
-                    |> List.except (x.Resolved |> Array.map (fun r -> r.Reference))
-                ResolvedAcls = nextMap
-        },
-        Cmd.none
-
-    | Msg.NavPathMsg(Response x), _ ->
-        {
-            model with
-                NavPathState = Responded x
-                FocusedItem =
-                    if String.isValueString model.LastFocusedItemId && Option.isNone model.FocusedItem then
-                        match model.FocusedItem, x with
-                        | None, Ok nvp -> nvp.Items |> Seq.tryFind (fun item -> item.Id = model.LastFocusedItemId)
-                        | _ -> None
-                    else
-                        None
-                    |> Option.orElse model.FocusedItem
-        },
-        Cmd.none
 
     // requests for remotes:
 
@@ -481,34 +534,8 @@ let update msg (model: Model) : Model * Cmd<Msg> =
             printfn "Requesting '%s'" model.Path
             { model with NavPathState = InFlight }, Commands.getNavPath (accessToken, model.Path)
 
-    | Msg.NavRootMsg(Request _), _ ->
-        match model.AppMode with
-        | ConfigType.Demo ->
-            {
-                model with
-                    NavRootState = Responded(Ok dummyData)
-            },
-            Cmd.none
-        | ConfigType.Auth accessToken -> { model with NavRootState = InFlight }, Commands.getNavRoot accessToken
+    | Msg.FetchRequest msg, _ -> Updates.updateFetchRequest msg model
 
-    | Msg.NavPathMsg(Request()), _ ->
-        match model.AppMode with
-        | ConfigType.Demo ->
-            {
-                model with
-                    NavPathState = Responded(Ok { Path = model.Path; Items = dummyData })
-            },
-            Cmd.none
-        | ConfigType.Auth accessToken ->
-            printfn "Requesting Path '%s'" model.Path
-            { model with NavPathState = InFlight }, Commands.getNavPath (accessToken, model.Path)
-
-    | Msg.AclStateMsg(Request()), _ ->
-        match model.AppMode with
-        | ConfigType.Demo -> block "no dummy acl data"
-        | ConfigType.Auth accessToken ->
-            printfn "Requesting Path '%s'" model.Path
-            { model with AclTypeState = InFlight }, Commands.getAcls accessToken
     |> SideEffects.addSideEffect (SideEffects.whenFocusedItemChanges atOpt) model
     |> fun (next, cmd) ->
         match SideEffects.saveStateCache next with
@@ -633,7 +660,7 @@ let view appMode =
                             Bind.el (
                                 store |> Store.map MLens.getNavRootState,
                                 fun nrs ->
-                                    Renderers.renderRemote "Root" nrs (RemoteMsg.Request() |> Msg.NavRootMsg) r dispatch
+                                    Renderers.renderRemote "Root" nrs (FetchReq.Nav None |> Msg.FetchRequest) r dispatch
                             )
                 }
 
@@ -658,7 +685,7 @@ let view appMode =
                                         Renderers.renderRemote
                                             $"Path:{store.Value.Path}"
                                             nps
-                                            (RemoteMsg.Request() |> Msg.NavPathMsg)
+                                            (Some() |> FetchReq.Nav |> Msg.FetchRequest)
                                             r
                                             dispatch)
                                 )

@@ -140,7 +140,7 @@ let getMyInfo token : Async<Result<MyInfoResponse, exn>> =
 
 
 // api/navigation/root
-let getNavRoot token : Async<Result<NavItem[], exn>> =
+let getNavRoot token () : Async<Result<NavItem[], exn>> =
     fetchJson<_> "NavItem[]" {
         Token = token
         RelPath = "/api/navigation/root"
@@ -162,7 +162,7 @@ let getNavPath token (path: string) : Async<Result<NavPathResponse, exn>> =
     |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
 
 
-let getAcls token : Async<Result<Acl[], exn>> =
+let getAcls token () : Async<Result<Acl[], exn>> =
     fetchJson<_> "Acl[]" {
         Token = token
         RelPath = "/api/Navigation/Acls"
@@ -175,16 +175,16 @@ type AclRefValueArgs = { AclName: string; SearchText: string }
 let getAclRefValues token arv =
     fetchJson<AclSearchResponse> "AclSearchResponse" {
         Token = token
-        RelPath = $"/api/Navigation/Acls?Name={arv.AclName}&Search={arv.SearchText}"
+        RelPath = $"/api/Navigation/Acls?Acl={arv.AclName}&Search={arv.SearchText}"
         Arg = None
     }
 
-type NavAclResolve = { AclName: string; NavId: string }
+type NavAclInquiry = { AclName: string; NavId: string }
 
 // for doing a lookup of the parameters in an existing acl for display
 let getNavAclResolve token nar =
-    fetchJson<NavAclResolveResponse> "???" {
+    fetchJson<NavAclResolveResponse> "NavAclResolveResponse" {
         Token = token
-        RelPath = $"/api/Navigation/Acls?Resolve={nar.NavId}&Acl={nar.AclName}"
+        RelPath = $"/api/Navigation/Acls?Acl={nar.AclName}&Resolve={nar.NavId}"
         Arg = None
     }
