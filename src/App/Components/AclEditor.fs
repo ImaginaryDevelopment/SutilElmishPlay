@@ -275,7 +275,7 @@ let renderAclsEditor (aea: AclEditorArgs) (dispatchParent: Dispatch<AclParentMsg
 
     let m =
         aea.ResolvedParams
-        |> Observable.map (fun m -> m |> Map.map (fun k v -> AclRefState.Response(Ok v)))
+        |> Observable.map (fun m -> m |> Map.map (fun _ v -> AclRefState.Response(Ok v)))
 
     Html.div [
         disposeOnUnmount [ store ]

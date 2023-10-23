@@ -114,7 +114,7 @@ module LocalStorage =
                 result)
 
         static member inline TrySave(key: string, valueOpt: 't option) : Result<unit, string> =
-            printfn "trying to save"
+            // printfn "trying to save"
 
             try
                 // let pojo = Fable.Core.JsInterop.toPlainJsObj value

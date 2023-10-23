@@ -73,7 +73,7 @@ let updateNavRoot, viewNavRoot =
             GetArgs = fun model -> model.AppMode
             Fetch =
                 function
-                | ConfigType.Auth token -> App.Adapters.Api.getNavRoot token
+                | ConfigType.Auth token -> App.Adapters.Api.getNavRoot token ()
                 | ConfigType.Demo -> Async.ofResult (Ok Root.dummyData)
         }
 
@@ -102,7 +102,7 @@ let updateAcl, viewAcls =
             Fetch =
                 function
                 | Demo -> Async.ofResult (Ok Array.empty)
-                | Auth token -> App.Adapters.Api.getAcls token // 'tFetchArg -> Async<Result<'t,ErrorType>>
+                | Auth token -> App.Adapters.Api.getAcls token () // 'tFetchArg -> Async<Result<'t,ErrorType>>
         }
 
     let view =

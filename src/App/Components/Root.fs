@@ -26,9 +26,9 @@ open Sutil.Core
 
 [<RequireQualifiedAccess>]
 type RootTabs =
-    | Main
-    | Sub
-    | Editor
+    | Main // Root
+    | Sub // Path
+    | Editor // Edit
 
     static member ReParse(x: RootTabs) =
         match string x with
@@ -190,14 +190,8 @@ module Commands =
         getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.getAclRefValues req
 
 
+// TODO: timeout to expire error messages, make sure they get logged to console on expiration
 let init appMode =
-    let (iState, cmd: Cmd<Msg>) =
-        match appMode with
-        | Demo -> NotRequested, Cmd.none
-        | Auth token ->
-            let cmd1: Cmd<Msg> = Commands.getNavRoot token
-            let cmd2: Cmd<Msg> = Commands.getAcls token
-            InFlight, Cmd.batch [ cmd1; cmd2 ]
 
     let cachedState: CachedState option =
         stateStore.TryGetValue()
@@ -206,6 +200,15 @@ let init appMode =
             cs with
                 RootTab = RootTabs.ReParse cs.RootTab |> Option.defaultValue RootTabs.Main
         })
+
+    let (iState, cmd: Cmd<Msg>) =
+        match appMode with
+        | Demo -> NotRequested, Cmd.none
+        | Auth token ->
+            // Consider fetching last path also
+            let cmd1: Cmd<Msg> = Commands.getNavRoot token
+            let cmd2: Cmd<Msg> = Commands.getAcls token
+            InFlight, Cmd.batch [ cmd1; cmd2 ]
 
     let resolvedAcls = resolveAclsAccess.TryGetValue()
 
@@ -217,13 +220,21 @@ let init appMode =
         AclTypeState = if iState = InFlight then InFlight else NotRequested
         FocusedItem = None
         LastFocusedItemId = cachedState |> Option.map (fun cs -> cs.FocusedItemId) |> Option.defaultValue ""
-        RootTab =
-            cachedState
-            |> Option.map (fun cs -> cs.RootTab)
-            |> Option.defaultValue RootTabs.Main
         Path = cachedState |> Option.map (fun cs -> cs.Path) |> Option.defaultValue ""
         Errors = List.empty
         AclResolutions = List.empty
+
+        RootTab =
+            match cachedState with
+            // don't let editor be the focused tab without an item to focus
+            | Some {
+                       RootTab = RootTabs.Editor
+                       FocusedItemId = NonValueString
+                   } -> None
+            | Some cs -> Some cs.RootTab
+            | None -> None
+            |> Option.defaultValue RootTabs.Main
+
         ResolvedAcls =
             resolvedAcls
             |> Option.map (
@@ -579,7 +590,6 @@ module Renderers =
                 if item.Type = "Folder" then
                     tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
                     onClick (fun _ -> item.Name |> Msg.PathChange |> dispatch) List.empty
-
             ]
             Html.divc "column is-one-fifth buttonColumn" [
                 Html.button [

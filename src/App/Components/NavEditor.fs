@@ -33,18 +33,23 @@ type NavEditorErrorType = string
 type CachedState = { Tab: EditorTabs }
 
 let stateStore: LocalStorage.IAccessor<CachedState> =
-    LocalStorage.StorageAccess("Root_CachedState")
+    LocalStorage.StorageAccess("NavEditor_CachedState")
 
 type Model = {
     Tab: EditorTabs
     Item: NavItem
-    Error: (NavEditorErrorType * System.DateTime) option
+    Errors: (NavEditorErrorType * System.DateTime) list
 }
 
 [<RequireQualifiedAccess>]
 module private MLens =
     let getTab x = x.Tab
     let getItem x = x.Item
+
+    let addError msg (x: Model) = {
+        x with
+            Errors = (msg, System.DateTime.Now) :: x.Errors
+    }
 
 type ParentMsg =
     | Cancel
@@ -95,14 +100,23 @@ let init item =
     {
         Tab = initialTab |> Option.bind EditorTabs.ReParse |> Option.defaultValue IconTab
         Item = item
-        Error = None
+        Errors = List.empty
     }
+
+module SideEffects =
+    let saveStateCache (next: Model) =
+        Some { Tab = next.Tab } |> stateStore.TrySetValue
 
 let update dispatchParent msg (model: Model) =
     printfn "NavEditor update: %A" msg
 
     match msg with
-    | TabChange t -> { model with Tab = t }
+    | TabChange t ->
+        let next = { model with Tab = t }
+
+        match SideEffects.saveStateCache next with
+        | Ok() -> next
+        | Error e -> MLens.addError e model
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
 
     | EditProp(name, value) ->
@@ -115,12 +129,10 @@ let update dispatchParent msg (model: Model) =
     | EditAcl(AclEditor.AclParentMsg.AclSearchRequest v) ->
         ParentMsg.AclSearchRequest v |> dispatchParent
         model
-    | SaveError e -> {
-        model with
-            Error = Some(e, System.DateTime.Now)
-      }
+    | SaveError e -> MLens.addError e model
 
     // TODO: Not implemented
+    // this is save requested, not resolved
     | Save -> model
 
 ()
