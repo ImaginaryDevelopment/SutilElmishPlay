@@ -318,7 +318,7 @@ module SideEffects =
 let justModel m = m, Cmd.none
 
 let block title msg (model: Model) : Model * Cmd<Msg> =
-    printfn "Blocked: %s (%A)" title msg
+    printfn "Root blocked: %s (%A)" title msg
     model, Cmd.none
 
 module Updates =
@@ -584,7 +584,7 @@ module Renderers =
                     Bind.attr ("value", model |> Store.map MLens.getPath)
                     Handlers.onValueChange dispatch Msg.PathChange
                 ]
-                Html.button [
+                bButton "Fetch" [
                     text "Fetch"
                     onClick
                         (fun _ ->
@@ -604,7 +604,7 @@ module Renderers =
                     onClick (fun _ -> item.Name |> Msg.PathChange |> dispatch) List.empty
             ]
             Html.divc "column is-one-fifth buttonColumn" [
-                Html.button [
+                bButton "Edit" [
                     tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
                     onClick (fun _ -> item |> Msg.FocusItem |> dispatch) List.empty
                 ]
@@ -642,8 +642,8 @@ module Renderers =
         let buttonText = text title
 
         match rdState with
-        | RemoteData.NotRequested -> Html.button [ buttonText; onClick (fun e -> dispatch reqMsg) [] ]
-        | RemoteData.InFlight -> Html.button [ Attr.disabled true; buttonText ]
+        | RemoteData.NotRequested -> bButton title [ buttonText; onClick (fun _ -> dispatch reqMsg) [] ]
+        | RemoteData.InFlight -> bButton title [ Attr.disabled true; buttonText ]
         | RemoteData.Responded(Ok(data)) -> okRenderer data
         | RemoteData.Responded(Error exn) -> Html.divc "error" [ text (Core.pretty exn) ]
 
@@ -736,6 +736,7 @@ let view appMode =
                                         let r =
                                             NavEditor.renderEditor {
                                                 ResolvedAclParams = store |> Store.map MLens.getResolvedAcls
+                                                AppMode = appMode
                                                 AclTypes = aclTypes
                                                 NavItem = item
                                                 NavItemIconObservable = store |> Store.map MLens.getFocusedItem

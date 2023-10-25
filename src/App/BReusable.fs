@@ -52,6 +52,15 @@ module String =
         | x when x < 0 -> None
         | i -> Some x.[0 .. i - 1]
 
+    let replace (delimiter: string) (replacement: string) (value: string) =
+        if not <| isValueString delimiter then
+            failwithf "no delimiter passed"
+
+        match value with
+        | null -> null
+        | _ -> value.Replace(delimiter, replacement)
+
+
 let (|ValueString|NonValueString|) value =
     if String.isValueString value then
         ValueString value

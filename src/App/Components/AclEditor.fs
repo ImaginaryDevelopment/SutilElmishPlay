@@ -197,7 +197,7 @@ module Renderers =
                             onInput (fun e -> e.inputElement.value |> Msg.AclSearchChange |> dispatch) []
                         ]
 
-                        Html.buttonc "button" [
+                        bButton "Search" [
                             text "Search"
                             onClick
                                 (fun _ ->
@@ -232,8 +232,7 @@ module Renderers =
 
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
-                Html.button [
-                    Attr.title "Edit Acl"
+                bButton "Edit Acl" [
                     Attr.classes [
                         "button"
                         "is-small"
@@ -342,7 +341,7 @@ let renderAclsEditor (aea: AclEditorProps) =
                 let selectedAclType = aea.AclTypes |> Seq.tryFind (fun v -> v.Name = selectedType)
 
                 Html.div [
-                    Html.buttonc "button" [
+                    bButton "Add" [
                         tryIcon (App.Init.IconSearchType.MuiIcon "Add")
                         onClick (fun _ -> Msg.AclSelect None |> dispatch) []
                     ]

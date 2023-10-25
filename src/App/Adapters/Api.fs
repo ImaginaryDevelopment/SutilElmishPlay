@@ -218,16 +218,29 @@ let getNavAclResolve token nar =
         List.empty
 
 let save token (item: NavItem) =
-    fetchJson<obj>
-        "NavItem?"
-        {
-            Token = token
-            RelPath = genNavUrl <| Some item.Path
-            Arg = None
-        }
-        [
-            RequestProperties.Method HttpMethod.PATCH
-            // https://github.com/fable-compiler/fable-fetch/issues/7
-            // RequestProperties.Body (!^ item)
-            RequestProperties.Body(!^(Core.serialize item))
-        ]
+    let url = Some item.Path |> genNavUrl |> String.replace "/root/Root" "/Root"
+    printfn $"Attempting save to %s{url} - {item.Path}"
+
+    async {
+
+        let! result =
+            fetchJson<NavItem>
+                "NavItem"
+                {
+                    Token = token
+                    RelPath = url
+                    Arg = None
+                }
+                [
+                    RequestProperties.Method HttpMethod.PATCH
+                    // https://github.com/fable-compiler/fable-fetch/issues/7
+                    // RequestProperties.Body (!^ item)
+                    RequestProperties.Body(!^(Core.serialize item))
+                ]
+
+        match result with
+        | Ok v -> Core.log v
+        | _ -> ()
+
+        return result
+    }

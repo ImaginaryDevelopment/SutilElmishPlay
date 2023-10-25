@@ -13,6 +13,7 @@ open App.Adapters.Api
 
 open App.Components.Gen
 open App.Components.Gen.Icons
+open App.Adapters.Config
 
 // [<Fable.Core.Erase>]
 type EditorTabs =
@@ -55,13 +56,33 @@ type ParentMsg =
     | AclTypeChange of string
     | AclSearchRequest of AclRefValueArgs
 
+type SaveMsg =
+    | Requested
+    | Responded of Result<NavItem, NavEditorErrorType>
+
 type EditorMsgType =
     | EditProp of prop: string * nextValue: string
     | EditAcl of AclEditor.AclParentMsg
     | TabChange of EditorTabs
     | IconMsg of IconEditor.IconEditorMsg
-    | Save
-    | SaveError of NavEditorErrorType
+    | Save of SaveMsg
+
+module Commands =
+
+    let saveItem token item : Cmd<EditorMsgType> =
+        let mapError (ex: exn) = $"Save Error: {ex.Message}"
+
+        let f item =
+            async {
+                let! resp = Api.save token item
+
+                // TODO: swap item with response item, or at least compare them?
+                return
+                    Save
+                    <| Responded(resp |> Result.map (fun _ -> item) |> Result.mapError mapError)
+            }
+
+        Cmd.OfAsync.either f item id (mapError >> Error >> Responded >> Save)
 
 module Renderers =
     let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<EditorMsgType>) =
@@ -85,18 +106,23 @@ module Renderers =
 
             Html.divc "panel-block" [
                 Html.divc "left-left" [
-                    Html.buttonc "button" [ text "Save"; onClick (fun _ -> ParentMsg.Saved value |> pDispatch) [] ]
-                    Html.buttonc "button" [ text "Cancel"; onClick (fun _ -> Cancel |> pDispatch) [] ]
+                    bButton "Save" [
+                        text "Save"
+                        onClick (fun _ -> EditorMsgType.Save SaveMsg.Requested |> lDispatch) []
+                    ]
+                    rButton "Cancel" [ text "Cancel"; onClick (fun _ -> Cancel |> pDispatch) [] ]
                 ]
             ]
             Html.pre [ text (Core.pretty value) ]
         ]
 
+let justModel m = m, Cmd.none
+
 let init item =
     let initialTab =
         stateStore.TryGetValue() |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
-    {
+    justModel {
         Tab = initialTab |> Option.defaultValue IconTab
         Item = item
         Errors = List.empty
@@ -107,37 +133,46 @@ module SideEffects =
     let saveStateCache (next: Model) =
         Some { Tab = next.Tab } |> stateStore.TrySetValue
 
-let update dispatchParent msg (model: Model) =
+let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType> =
     printfn "NavEditor update: %A" msg
 
     match msg with
     | TabChange t ->
         let next = { model with Tab = t }
 
-        match SideEffects.saveStateCache next with
-        | Ok() -> next
-        | Error e -> MLens.addError e model
+        justModel
+        <| match SideEffects.saveStateCache next with
+           | Ok() -> next
+           | Error e -> MLens.addError e model
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
 
     | EditProp(name, value) ->
         let nextItem = cloneSet model.Item name value
-        { model with Item = nextItem }
+        justModel { model with Item = nextItem }
 
     | EditAcl(AclEditor.AclParentMsg.AclTypeChange v) ->
         ParentMsg.AclTypeChange v |> dispatchParent
-        model
+        justModel model
     | EditAcl(AclEditor.AclParentMsg.AclSearchRequest v) ->
         ParentMsg.AclSearchRequest v |> dispatchParent
-        model
-    | SaveError e -> MLens.addError e model
+        justModel model
+    | Save(Responded(Error e)) -> MLens.addError e model |> justModel
+    | Save(Responded(Ok item)) ->
+        ParentMsg.Saved item |> dispatchParent
+        justModel model
+
 
     // TODO: Not implemented
     // this is save requested, not resolved
-    | Save -> model
+    | Save SaveMsg.Requested ->
+        match appMode with
+        | Auth token -> model, Commands.saveItem token model.Item
+        | Demo -> MLens.addError "Save Not implemented in demo" model |> justModel
 
 ()
 
 type NavEditorProps = {
+    AppMode: ConfigType<string>
     ResolvedAclParams: System.IObservable<Map<string, AclDisplay>>
     AclTypes: Acl seq
     NavItem: NavItem
@@ -153,7 +188,7 @@ let renderEditor props =
 
     let store, dispatch =
         props.NavItem
-        |> Store.makeElmishSimple init (update props.DispatchParent) ignore
+        |> Store.makeElmish init (update props.AppMode props.DispatchParent) ignore
 
     toGlobalWindow "navEditor_model" store.Value
 

@@ -84,8 +84,8 @@ module GenericFetcher =
                     let buttonText = text gfa.Title
 
                     match mis with
-                    | RemoteData.NotRequested -> Html.button [ buttonText; onClick dispatchReqMsg [] ]
-                    | RemoteData.InFlight -> Html.button [ Attr.disabled true; buttonText ]
+                    | RemoteData.NotRequested -> bButton "Request" [ buttonText; onClick dispatchReqMsg [] ]
+                    | RemoteData.InFlight -> bButton "InFlight" [ Attr.disabled true; buttonText ]
                     | RemoteData.Responded(Ok(data)) ->
                         Html.div [
                             Html.pre [
@@ -140,6 +140,7 @@ module Icons =
             | None, App.Init.IconSearchType.FAIcon x
             | None, App.Init.IconSearchType.MuiIcon x ->
                 // text $"missing:{x}"
+                Attr.title x
                 Bulma.FontAwesome.fa x
             | Some(App.Init.FaResult v), _ ->
                 if v.html.Length <> 1 then

@@ -1,8 +1,22 @@
 module App.Adapters.Html
 
+open BReusable
+
 open Sutil
+open Sutil.CoreElements
 
 let data_ (name: string) value = prop.custom ($"data-{name}", value)
+
+type ButtonType =
+    | Submit
+    | Reset
+    | Button
+
+let tButton title (buttonType: ButtonType) props =
+    Html.buttonc "button" [ type' (string buttonType |> String.toLower); Attr.title title; yield! props ]
+
+let bButton title props = tButton title Button props
+let rButton title props = tButton title Reset props
 
 let columns2 col1 col2 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2 ]
