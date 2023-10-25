@@ -7,6 +7,8 @@ open Fable.Core.JsInterop
 
 let log x = Browser.Dom.console.log (x)
 
+let mutable windowData = true
+
 // https://medium.com/@zaid.naom/f-interop-with-javascript-in-fable-the-complete-guide-ccc5b896a59f
 [<Emit("JSON.stringify($0,null,\" \")")>]
 let pretty<'t> (x: 't) =
@@ -55,15 +57,19 @@ let cloneExcept (source: obj, exclusions: string seq) =
     v
 
 let inline toGlobal (name: string) (value: obj) : unit =
-    printfn "Adding global %s" name
+    // printfn "Adding global %s" name
     // Browser.Dom.self?(name) <- value
     Browser.Dom.window?(name) <- value
 
-// let y = {|testing="Hello";v="world"|}
-// log("Cloned:")
-// log(clone y)
-// log(cloneExcept(y, ["v"]))
-// Fable.Core.JS.console.log("cloned:", clone y)
+let windowChange value = windowData <- value
+
+// allow window to be opened
+// even in prod?
+toGlobal "w_openWindow" windowChange
+
+let inline toGlobalWindow name value =
+    if windowData then
+        toGlobal $"w_{name}" value
 
 [<Emit("$0[$1]")>]
 let getValue (x: obj) (name: string) = jsNative
@@ -113,6 +119,7 @@ module LocalStorage =
                 // |> unbox
                 result)
 
+        // uses saving null, rather than clearing the key
         static member inline TrySave(key: string, valueOpt: 't option) : Result<unit, string> =
             // printfn "trying to save"
 
@@ -138,6 +145,10 @@ module LocalStorage =
         abstract member GetValue: unit -> 't option
         abstract member TryGetValue: unit -> 't option
         abstract member TrySetValue: 't option -> Result<unit, string>
+
+    type WriteOnly<'t>(name) =
+        static member CreateStorage(name) = WriteOnly(name)
+        member inline _.Save(x: 't option) = Internal.TrySave(name, x)
 
     // assumes we never want to clear a key entirely
     // assumes the serializer/deserializer works well enough

@@ -304,19 +304,24 @@ type AclEditorProps = {
     ItemAcls: AclRef seq
     AclTypes: Acl seq
     ResolvedParams: System.IObservable<Map<string, AclDisplay>>
-    SearchResults: (string * string) list
+    AclSearchResponse: AclSearchResponse option
     DispatchParent: Dispatch<AclParentMsg>
 }
 
 // allow them to edit or create one
 let renderAclsEditor (aea: AclEditorProps) =
-    printfn "AclEditor Render"
+    if Core.windowData then
+        printfn "AclEditor Render"
+
+    toGlobalWindow "aclEditor_props" aea
 
     let store, dispatch =
         aea.ItemAcls
         |> Seq.tryHead
         |> Option.map (fun v -> { IsNew = false; AclRef = v })
         |> Store.makeElmish init (update aea.ItemAcls) ignore
+
+    toGlobalWindow "aclEditor_model" store.Value
 
     let m =
         aea.ResolvedParams
@@ -351,12 +356,22 @@ let renderAclsEditor (aea: AclEditorProps) =
                             // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
                             match selectedAclType with
                             | Some selectedAclType ->
+                                let aclParams =
+                                    if selectedAclType.Searchable |> Option.defaultValue false then
+                                        aea.AclSearchResponse
+                                        |> Option.map (fun acl ->
+                                            acl.Results |> Seq.map (fun v -> v.Reference, v.DisplayName))
+                                    else
+                                        selectedAclType.SelectableParameters |> Option.map (Seq.map Tuple2.replicate)
+                                    |> Option.map List.ofSeq
+                                    |> Option.defaultValue List.empty
+
                                 Bind.el (
                                     m,
                                     (fun m ->
                                         Renderers.renderAclParams
                                             (store.Value.SearchState, store.Value.SearchText)
-                                            aea.SearchResults
+                                            aclParams
                                             m
                                             selectedAclType
                                             focusedAcl.AclRef

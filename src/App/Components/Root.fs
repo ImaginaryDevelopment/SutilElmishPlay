@@ -62,7 +62,7 @@ type Model = {
     AppMode: ConfigType<string>
     NavRootState: RemoteData<NavItem[]>
     NavPathState: RemoteData<NavPathResponse>
-    AclParamSearch: RemoteData<AclSearchResponse>
+    AclSearchResponse: RemoteData<AclSearchResponse>
     // we don't need to track not requested, in flight is implied by (value, None)
     AclResolutions: string list
     ResolvedAcls: Map<string, AclDisplay>
@@ -96,6 +96,7 @@ module private MLens =
     let getFocusedItem x = x.FocusedItem
     let getNavPathState x = x.NavPathState
     let getAclTypeState x = x.AclTypeState
+    let getAclSearchResponse x = x.AclSearchResponse
     let getAclTypes x = x.AclTypeState |> RemoteData.TryGet
     let getPath x = x.Path
     let getRootTab x = x.RootTab
@@ -216,7 +217,7 @@ let init appMode =
         AppMode = appMode
         NavRootState = if iState = InFlight then InFlight else NotRequested
         NavPathState = NotRequested
-        AclParamSearch = NotRequested
+        AclSearchResponse = NotRequested
         AclTypeState = if iState = InFlight then InFlight else NotRequested
         FocusedItem = None
         LastFocusedItemId = cachedState |> Option.map (fun cs -> cs.FocusedItemId) |> Option.defaultValue ""
@@ -250,6 +251,10 @@ let init appMode =
 module SideEffects =
     type SideEffector = { Old: Model; Next: Model }
 
+    let observeModel f (model, cmd) =
+        f (model, cmd)
+        model, cmd
+
     // ensure all commands flow through, make it harder to accidentally use old model
     let addSideEffect (f: SideEffector -> Model * Cmd<Msg> option) model (next, cmd) =
         match f { Old = model; Next = next } with
@@ -263,6 +268,14 @@ module SideEffects =
             FocusedItemId = next.FocusedItem |> Option.map (fun fi -> fi.Id) |> Option.defaultValue ""
         }
         |> stateStore.TrySetValue
+
+    let includeError (f: Model -> Result<unit, string>) (model: Model, cmd) : Model * _ =
+        match f model with
+        | Error s ->
+            eprintfn "Error with save state cache"
+            model |> MLens.addError s, cmd
+        | _ -> model, cmd
+
 
     let onPropChange fProp fEffect (values: SideEffector) : Model * Cmd<Msg> option =
         if fProp values.Old <> fProp values.Next then
@@ -375,7 +388,7 @@ module Updates =
         | AclSearchResolve data ->
             justModel {
                 model with
-                    AclParamSearch = RemoteData.Responded(Ok data)
+                    AclSearchResponse = RemoteData.Responded(Ok data)
             }
 
         | AclResolve x ->
@@ -430,7 +443,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.FetchRequest(FetchReq.Nav(Some _)), { NavPathState = InFlight } -> block "InFlight NavPath"
     | Msg.FetchRequest FetchReq.AclTypes, { AclTypeState = InFlight } -> block "InFlight AclTypes"
 
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest _), { AclParamSearch = InFlight } ->
+    | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest _), { AclSearchResponse = InFlight } ->
         block "InFlight AclSearchRequest"
     | Msg.PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
     | Msg.PathChange _, { NavPathState = InFlight } -> block "InFlight PathChange"
@@ -463,7 +476,11 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken, Some fi ->
             let cmd = Commands.getNavAclParamSearch accessToken search
 
-            { model with AclParamSearch = InFlight }, cmd
+            {
+                model with
+                    AclSearchResponse = InFlight
+            },
+            cmd
 
         | ConfigType.Auth _, None -> block "AclSearch without Focused Item"
 
@@ -548,12 +565,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.FetchRequest msg, _ -> Updates.updateFetchRequest msg model
 
     |> SideEffects.addSideEffect (SideEffects.whenFocusedItemChanges atOpt) model
-    |> fun (next, cmd) ->
-        match SideEffects.saveStateCache next with
-        | Error s ->
-            eprintfn "Error with save state cache"
-            next |> MLens.addError s, cmd
-        | _ -> next, cmd
+    |> SideEffects.includeError SideEffects.saveStateCache
 
 module Renderers =
 
@@ -648,6 +660,7 @@ let css = [
 let view appMode =
     let store, dispatch = appMode |> Store.makeElmish init update ignore
 
+    toGlobalWindow "root_model" store.Value
     // let selected : IStore<NavItem option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
@@ -726,8 +739,9 @@ let view appMode =
                                                 AclTypes = aclTypes
                                                 NavItem = item
                                                 NavItemIconObservable = store |> Store.map MLens.getFocusedItem
+                                                AclSearchResponse =
+                                                    store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
                                                 DispatchParent = (Msg.EditorMsg >> dispatch)
-
                                             }
 
                                         r

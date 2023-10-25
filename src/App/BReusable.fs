@@ -114,6 +114,15 @@ module Result =
         | Choice1Of2 x -> Ok x
         | Choice2Of2 e -> Error e
 
+module Tuple2 =
+    let replicate x = (x, x)
+    let map f (a, b) = f a, f b
+    let mapSnd f (x, y) = x, f y
+    let mapFst f (x, y) = f x, y
+    let rotate (a, b) = b, a
+    let combine f (a, b) = f a b
+    let fromCurry x y = (x, y)
+
 module Async =
     let map f x =
         async {

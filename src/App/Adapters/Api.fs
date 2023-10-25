@@ -97,8 +97,8 @@ let addQueryParam n v (url: string) =
 let addQueryValues url m =
     (url, m) ||> Map.fold (fun url k v -> url |> addQueryParam k v)
 
-// handle get/post + query params and/or json body
-let fetch fetchArgs f =
+// does not prevent conflicting props against fetchArgs
+let fetch fetchArgs requestProps f =
     async {
         let relUrl =
             fetchArgs.Arg
@@ -108,6 +108,7 @@ let fetch fetchArgs f =
 
         let! response =
             fetch (App.Adapters.Config.authConfig.ApiBase + relUrl) [
+                yield! requestProps
                 requestHeaders [ HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}" ]
             ]
             |> Async.AwaitPromise
@@ -116,12 +117,14 @@ let fetch fetchArgs f =
     }
     |> Async.catch
 
-let fetchText fetchArgs : Async<Result<_, exn>> =
-    fetch fetchArgs (fun v -> v.text () |> Async.AwaitPromise)
+// handle get/post + query params and/or json body
 
-let fetchJson<'t> tName fetchArgs : Async<Result<'t, exn>> =
+let fetchText fetchArgs rp : Async<Result<_, exn>> =
+    fetch fetchArgs rp (fun v -> v.text () |> Async.AwaitPromise)
+
+let fetchJson<'t> tName fetchArgs rp : Async<Result<'t, exn>> =
     async {
-        let! text = fetchText fetchArgs
+        let! text = fetchText fetchArgs rp
 
         match text with
         | Ok text ->
@@ -132,59 +135,99 @@ let fetchJson<'t> tName fetchArgs : Async<Result<'t, exn>> =
     }
 
 let getMyInfo token : Async<Result<MyInfoResponse, exn>> =
-    fetchJson<_> "MyInfoResponse" {
-        Token = token
-        RelPath = "/api/profile/myInfo"
-        Arg = None
-    }
+    fetchJson<_>
+        "MyInfoResponse"
+        {
+            Token = token
+            RelPath = "/api/profile/myInfo"
+            Arg = None
+        }
+        List.empty
 
 
 // api/navigation/root
 let getNavRoot token () : Async<Result<NavItem[], exn>> =
-    fetchJson<_> "NavItem[]" {
-        Token = token
-        RelPath = "/api/navigation/root"
-        Arg = None
-    }
+    fetchJson<_>
+        "NavItem[]"
+        {
+            Token = token
+            RelPath = "/api/navigation/root"
+            Arg = None
+        }
+        List.empty
+
+let genNavUrl pathOpt =
+    let b = "/api/navigation/root"
+
+    match pathOpt with
+    | Some(ValueString path) -> if path.StartsWith "/" then b + path else $"%s{b}/{path}"
+    | Some _ ->
+        let txt = "Bad PathOpt"
+        eprintfn "%s" txt
+        invalidArg "pathOpt" txt
+    | None -> b
 
 let getNavPath token (path: string) : Async<Result<NavPathResponse, exn>> =
-    let path =
-        if path.StartsWith "/" then
-            "/api/navigation/root" + path
-        else
-            "/api/navigation/root/" + path
+    let path = genNavUrl (Some path)
 
-    fetchJson<NavItem[]> "NavItem'[]" {
-        Token = token
-        RelPath = path
-        Arg = None
-    }
+    fetchJson<NavItem[]>
+        "NavItem'[]"
+        {
+            Token = token
+            RelPath = path
+            Arg = None
+        }
+        List.empty
     |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
 
 
 let getAcls token () : Async<Result<Acl[], exn>> =
-    fetchJson<_> "Acl[]" {
-        Token = token
-        RelPath = "/api/Navigation/Acls"
-        Arg = None
-    }
+    fetchJson<_>
+        "Acl[]"
+        {
+            Token = token
+            RelPath = "/api/Navigation/Acls"
+            Arg = None
+        }
+        List.empty
 
 // for selecting parameters for a new acl
 type AclRefValueArgs = { AclName: string; SearchText: string }
 
 let getAclRefValues token arv =
-    fetchJson<AclSearchResponse> "AclSearchResponse" {
-        Token = token
-        RelPath = $"/api/Navigation/Acls?Acl={arv.AclName}&Search={arv.SearchText}"
-        Arg = None
-    }
+    fetchJson<AclSearchResponse>
+        "AclSearchResponse"
+        {
+            Token = token
+            RelPath = $"/api/Navigation/Acls?Acl={arv.AclName}&Search={arv.SearchText}"
+            Arg = None
+        }
+        List.empty
 
 type NavAclInquiry = { AclName: string; NavId: string }
 
 // for doing a lookup of the parameters in an existing acl for display
 let getNavAclResolve token nar =
-    fetchJson<NavAclResolveResponse> "NavAclResolveResponse" {
-        Token = token
-        RelPath = $"/api/Navigation/Acls?Acl={nar.AclName}&Resolve={nar.NavId}"
-        Arg = None
-    }
+    fetchJson<NavAclResolveResponse>
+        "NavAclResolveResponse"
+        {
+            Token = token
+            RelPath = $"/api/Navigation/Acls?Acl={nar.AclName}&Resolve={nar.NavId}"
+            Arg = None
+        }
+        List.empty
+
+let save token (item: NavItem) =
+    fetchJson<obj>
+        "NavItem?"
+        {
+            Token = token
+            RelPath = genNavUrl <| Some item.Path
+            Arg = None
+        }
+        [
+            RequestProperties.Method HttpMethod.PATCH
+            // https://github.com/fable-compiler/fable-fetch/issues/7
+            // RequestProperties.Body (!^ item)
+            RequestProperties.Body(!^(Core.serialize item))
+        ]

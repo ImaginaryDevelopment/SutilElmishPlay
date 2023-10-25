@@ -17,6 +17,7 @@ type RemoteStates = {
     MyInfoState: RemoteData<MyInfoResponse>
     NavRootState: RemoteData<NavItem[]>
     AclState: RemoteData<Acl[]>
+    AclParamSearchState: RemoteData<AclSearchResponse>
 }
 
 type Model = {
@@ -28,6 +29,7 @@ type Msg =
     | MyInfo of RemoteMsg<unit, MyInfoResponse>
     | NavRoot of RemoteMsg<unit, NavItem[]>
     | Acl of RemoteMsg<unit, Acl[]>
+    | AclParam of RemoteMsg<AclRefValueArgs, AclSearchResponse>
 
 // enable mass scaffolding of api endpoint testers
 
@@ -42,6 +44,7 @@ let init (dia: DiagInitArgs) =
             MyInfoState = NotRequested
             NavRootState = NotRequested
             AclState = NotRequested
+            AclParamSearchState = NotRequested
         }
     },
     Cmd.none
@@ -148,9 +151,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 let view dia =
     let (store: IStore<Model>, dispatch) = dia |> Store.makeElmish init update ignore
 
-    let di =
-        store.Subscribe(fun v ->
-            Browser.Dom.window.localStorage.setItem ("diagModel", Fable.Core.JS.JSON.stringify (v)))
+    Core.toGlobalWindow "diag_model" store.Value
 
     let tabStore =
         let tabParent =
@@ -196,7 +197,7 @@ let view dia =
 
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
-        disposeOnUnmount [ store; di ]
+        disposeOnUnmount [ store ]
         Html.ul[Html.li[data_ "icon" "intentionally missing"
                         Bulma.FontAwesome.fa "mo"]
 

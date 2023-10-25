@@ -142,15 +142,20 @@ type NavEditorProps = {
     AclTypes: Acl seq
     NavItem: NavItem
     NavItemIconObservable: System.IObservable<NavItem option>
+    AclSearchResponse: AclSearchResponse option
     DispatchParent: Dispatch<ParentMsg>
 }
 
 // renames will go a different route, no path editing
 let renderEditor props =
 
+    toGlobalWindow "navEditor_props" props
+
     let store, dispatch =
         props.NavItem
         |> Store.makeElmishSimple init (update props.DispatchParent) ignore
+
+    toGlobalWindow "navEditor_model" store.Value
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
@@ -183,7 +188,7 @@ let renderEditor props =
                                     ItemAcls = value.Acls
                                     AclTypes = props.AclTypes
                                     ResolvedParams = props.ResolvedAclParams
-                                    SearchResults = List.empty
+                                    AclSearchResponse = props.AclSearchResponse
                                     DispatchParent = EditAcl >> dispatch
                                 }
                     }
