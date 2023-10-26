@@ -14,32 +14,44 @@ module Handlers = App.Adapters.Html.Handlers
 
 open App.Components.Gen.Icons
 
+open Core
+
 type IconEditorMsg = NameChange of propName: string * value: string
 
-let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<IconEditorMsg>) =
+type IconEditorProps = {
+    PropName: string
+    PropObserver: System.IObservable<string>
+    PropValue: string
+}
+
+let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>) =
+    toGlobalWindow "iconEditor_props" props
+
     Html.div [
-        tryIcon (App.Init.IconSearchType.MuiIcon value)
+        tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)
         formField [ text "Icon Name" ] [
             Html.inputc "input" [
                 type' "text"
                 autofocus
-                Attr.value value
-                Handlers.onValueInput dispatch (fun v -> NameChange(propName, v))
+                Attr.value props.PropValue
+                Handlers.onValueInput dispatch (fun v -> NameChange(props.PropName, v))
             ]
 
             Html.divc "select" [
                 Bind.el (
-                    propObs,
+                    props.PropObserver,
                     function
                     | ValueString iconPath ->
+                        printfn "Rerender select : %s" iconPath
                         let toLower = System.Char.ToLowerInvariant
 
-                        let first = toLower iconPath.[0]
+                        // not sure why this doesn't work with iconPath
+                        let first = toLower props.PropValue[0]
 
                         Html.select [
                             Attr.className "select"
                             Handlers.onValueChangeIf dispatch (function
-                                | ValueString v -> NameChange(propName, v) |> Some
+                                | ValueString v -> NameChange(props.PropName, v) |> Some
                                 | _ -> None)
                             Html.option [ text "" ]
                             for o in Mui.all.Keys |> Seq.filter (fun k -> toLower k.[0] = first) do

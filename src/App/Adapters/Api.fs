@@ -19,9 +19,102 @@ type MyInfoResponse = {
     IsImperator: bool
 }
 
+[<RequireQualifiedAccess; StringEnum>]
+type AclParameterType =
+    | [<CompiledName("None")>] None
+    | [<CompiledName("Selectable")>] Selectable
+    | [<CompiledName("Reference")>] Reference
+
+    static member ReParse(x: AclParameterType) =
+        match string x with
+        | y when y = string None -> Some AclParameterType.None
+        | y when y = string Selectable -> Some AclParameterType.Selectable
+        | y when y = string Reference -> Some AclParameterType.Reference
+        | _ ->
+            eprintfn "Could not parse: '%A'" x
+            Option.None
+
+    static member Troubleshoot (api: AclParameterType) (reParsed: AclParameterType option) =
+        printfn "original: '%A'" api
+        string AclParameterType.None |> printfn "Stringed: '%A'"
+        console.log reParsed
+
+        // can't test direct matching as passing the static value would use equality instead of literal matching
+
+        let testOperations (v: AclParameterType) (rep: AclParameterType) =
+            let hasEquality = v = rep
+            let hasInequality = v <> rep |> not
+
+            if not hasEquality then
+                eprintfn "No Equality"
+
+            if not hasInequality then
+                eprintfn "No Inequality"
+
+            match rep with
+            | rep when rep = api -> eprintfn "is redundant parse?"
+            | rep when rep <> api -> eprintfn "Match when no equality"
+            | _ -> eprintfn "no equality and inequality"
+
+            if Some api = reParsed then
+                printfn "Redundant parse"
+            else
+                eprintfn "No Equality"
+
+        match reParsed with
+        | Some reParsed -> printfn "AreEqual? %A, %A = %A" api reParsed (reParsed = api)
+        | Option.None -> eprintfn "Could not reParse '%A'" api
+
+        match api, reParsed with
+
+        | AclParameterType.None, Option.None -> eprintfn "NoParse: n"
+        | AclParameterType.None, Some AclParameterType.Reference ->
+            if string api = string AclParameterType.Reference then
+                printfn "Parse required"
+            else
+                eprintfn "Uh: n-r"
+                Core.log api
+        // the api - None match might be a false positive
+        | AclParameterType.None, Some AclParameterType.Selectable ->
+            if string api = string AclParameterType.Selectable then
+                printfn "Parse required"
+            else
+                eprintfn "Uh n-s"
+                Core.log api
+
+        | AclParameterType.Reference, Option.None -> eprintfn "NoParse: r"
+        | AclParameterType.Reference, Some AclParameterType.None -> eprintfn "Uh r-n"
+        | AclParameterType.Reference, Some AclParameterType.Selectable -> eprintfn "Uh r-s"
+
+        | AclParameterType.Selectable, Option.None -> eprintfn "NoParse: s"
+        | AclParameterType.Selectable, Some AclParameterType.None -> eprintfn "Uh s-n"
+        | AclParameterType.Selectable, Some AclParameterType.Reference -> eprintfn "Uh s-r"
+
+        | AclParameterType.None, Some AclParameterType.None ->
+            reParsed |> Option.iter (testOperations AclParameterType.None)
+        | AclParameterType.Reference, Some AclParameterType.Reference ->
+            reParsed |> Option.iter (testOperations AclParameterType.Reference)
+        | AclParameterType.Selectable, Some AclParameterType.Selectable ->
+            reParsed |> Option.iter (testOperations AclParameterType.Selectable)
+
+            if Some api = reParsed then
+                printfn "Redundant parse"
+            else
+                eprintfn "No Equality"
+
+            match reParsed with
+            | Some rep when rep = api -> eprintfn "is redundant parse?"
+            | Some rep when rep <> api -> printfn "Match when no equality"
+            | Some rep -> eprintfn "no equality and inequality"
+            | Option.None -> ()
+
+        reParsed |> Option.defaultValue api
+
+
+
 type Acl = {
     Name: string
-    ParameterType: string
+    ParameterType: AclParameterType // None, Selectable, Reference
     MultiValue: bool option
     Searchable: bool option
     SelectableParameters: string[] option
@@ -194,7 +287,7 @@ let getAcls token () : Async<Result<Acl[], exn>> =
 // for selecting parameters for a new acl
 type AclRefValueArgs = { AclName: string; SearchText: string }
 
-let getAclRefValues token arv =
+let searchAclRefValues token arv =
     fetchJson<AclSearchResponse>
         "AclSearchResponse"
         {

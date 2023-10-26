@@ -3,6 +3,8 @@ module App.Adapters.Bulma
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Html
+
 // https://bulma.io/documentation/form/general/
 let formField labelContent controlContent =
     Html.divc "field" [ Html.labelc "label" labelContent; Html.divc "control" controlContent ]
@@ -14,8 +16,10 @@ type BulmaTab<'t> = {
     Render: unit -> Core.SutilElement
 }
 
-let tabs items dispatch =
-    Html.div [
+let renderTabs containerClass items dispatch =
+    Html.divc containerClass [
+        data_ "file" "Bulma"
+        data_ "method" "renderTabs"
         Html.divc "tabs" [
             Html.ul [
                 for item in items do

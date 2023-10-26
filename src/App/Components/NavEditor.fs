@@ -53,7 +53,7 @@ module private MLens =
 type ParentMsg =
     | Cancel
     | Saved of NavItem
-    | AclTypeChange of string
+    | AclTypeChange of Acl
     | AclSearchRequest of AclRefValueArgs
 
 type SaveMsg =
@@ -91,10 +91,17 @@ module Renderers =
             | App.Components.IconEditor.IconEditorMsg.NameChange(propName, value) ->
                 dispatch (EditProp(propName, value))
 
-        App.Components.IconEditor.renderIconEditor (propName, propObs) value dispatch2
+        App.Components.IconEditor.renderIconEditor
+            {
+                PropName = propName
+                PropObserver = propObs
+                PropValue = value
+            }
+            dispatch2
 
     let renderEditorFrame (value: NavItem) core (lDispatch: Dispatch<EditorMsgType>) (pDispatch: Dispatch<ParentMsg>) =
         Html.divc "panel" [
+            data_ "method" "renderEditorFrame"
             // path
             Html.pc "panel-heading" [
                 if value.Type = "Folder" then
@@ -105,6 +112,7 @@ module Renderers =
             Html.divc "panel-block" core
 
             Html.divc "panel-block" [
+
                 Html.divc "left-left" [
                     bButton "Save" [
                         text "Save"
@@ -116,7 +124,7 @@ module Renderers =
             Html.pre [ text (Core.pretty value) ]
         ]
 
-let justModel m = m, Cmd.none
+let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
 let init item =
     let initialTab =
@@ -136,7 +144,19 @@ module SideEffects =
 let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType> =
     printfn "NavEditor update: %A" msg
 
+    let block msg : Model * Cmd<EditorMsgType> =
+        model |> MLens.addError msg |> justModel<EditorMsgType>
+
     match msg with
+    // blocks
+
+    | EditAcl(AclEditor.AclParentMsg.Create(aclRef, acl)) when
+        model.Item.Acls |> Seq.exists (fun e -> e.Name = acl.Name)
+        ->
+        block $"Acl Create for existing acl '{acl.Name}'"
+
+    // actions
+
     | TabChange t ->
         let next = { model with Tab = t }
 
@@ -150,10 +170,28 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         let nextItem = cloneSet model.Item name value
         justModel { model with Item = nextItem }
 
-    | EditAcl(AclEditor.AclParentMsg.AclTypeChange v) ->
+    | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
         ParentMsg.AclTypeChange v |> dispatchParent
         justModel model
-    | EditAcl(AclEditor.AclParentMsg.AclSearchRequest v) ->
+    | EditAcl(AclEditor.Remove acl) ->
+        let nextItem =
+            cloneSet
+                model.Item
+                "Acls"
+                (model.Item.Acls
+                 |> Seq.filter (fun aclRef -> aclRef.Name <> acl.Name)
+                 |> Array.ofSeq)
+
+        justModel { model with Item = nextItem }
+
+    | EditAcl(AclEditor.AclParentMsg.Create(aclRef, acl)) ->
+        printfn "cloning item to add acl"
+        // should we try to block repeated acl names?
+        let nextItem =
+            cloneSet model.Item "Acls" (model.Item.Acls |> Seq.append [ aclRef ] |> Array.ofSeq)
+
+        justModel { model with Item = nextItem }
+    | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
         ParentMsg.AclSearchRequest v |> dispatchParent
         justModel model
     | Save(Responded(Error e)) -> MLens.addError e model |> justModel
@@ -161,8 +199,6 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         ParentMsg.Saved item |> dispatchParent
         justModel model
 
-
-    // TODO: Not implemented
     // this is save requested, not resolved
     | Save SaveMsg.Requested ->
         match appMode with
@@ -197,7 +233,8 @@ let renderEditor props =
         let obsItem = store |> Store.map MLens.getItem
 
         Bind.el2 obsTab obsItem (fun (tab, value) ->
-            tabs
+            renderTabs
+                "fill"
                 [
                     {
                         Name = "Icon"
@@ -206,11 +243,14 @@ let renderEditor props =
                         Render =
                             fun () ->
                                 IconEditor.renderIconEditor
-                                    ("Icon",
-                                     props.NavItemIconObservable
-                                     |> Observable.choose id
-                                     |> Observable.map (fun v -> v.Icon))
-                                    value.Icon
+                                    {
+                                        PropName = "Icon"
+                                        PropObserver =
+                                            props.NavItemIconObservable
+                                            |> Observable.choose id
+                                            |> Observable.map (fun v -> v.Icon)
+                                        PropValue = value.Icon
+                                    }
                                     (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
                     }
                     {

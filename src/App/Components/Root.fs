@@ -188,7 +188,7 @@ module Commands =
         getResponse token FetchRes.AclResolve "AclResolve" App.Adapters.Api.getNavAclResolve req
 
     let getNavAclParamSearch token req =
-        getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.getAclRefValues req
+        getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.searchAclRefValues req
 
 
 // TODO: timeout to expire error messages, make sure they get logged to console on expiration
@@ -451,7 +451,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
 
     | Msg.TabChange v, { RootTab = y } when v = y -> block "already selected tab change"
     | Msg.EditorMsg(NavEditor.ParentMsg.Cancel), { FocusedItem = None } -> block "No FocusedItem for edit"
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclTypeChange NonValueString), { FocusedItem = None } ->
+    | Msg.EditorMsg(NavEditor.ParentMsg.AclTypeChange { Name = NonValueString }), { FocusedItem = None } ->
         block "No AclType for eager loading"
     | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest { SearchText = NonValueString }), _ ->
         block "Empty search found"
@@ -492,7 +492,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
             // what if we already have this resolved?
             let unresolved =
                 fi.Acls
-                |> Seq.tryFind (fun acl -> acl.Name = v)
+                |> Seq.tryFind (fun acl -> acl.Name = v.Name)
                 |> Option.map (fun acl ->
                     acl.Parameters
                     // strip already resolved items
@@ -505,7 +505,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
             // we have already resolved these
             | Some [] -> justModel model
             | None
-            | Some _ -> model, Commands.getNavAclDisplays accessToken { NavId = fi.Id; AclName = v }
+            | Some _ -> model, Commands.getNavAclDisplays accessToken { NavId = fi.Id; AclName = v.Name }
         | ConfigType.Auth _, None -> block "AclTypeChange without Focused Item"
 
 
@@ -716,7 +716,8 @@ let view appMode =
                 }
 
                 // bulma tabs
-                tabs
+                renderTabs
+                    ""
                     [
                         rootTab
                         pathTab

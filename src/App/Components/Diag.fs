@@ -23,7 +23,22 @@ type RemoteStates = {
 type Model = {
     AppMode: ConfigType<string>
     States: RemoteStates
+    AclParamSearchInput: AclRefValueArgs
 }
+
+[<RequireQualifiedAccess>]
+module private MLens =
+    let getAppMode x = x.AppMode
+    let getStates x = x.States
+
+    let setAclParamSearchState v x = {
+        x with
+            States = {
+                x.States with
+                    AclParamSearchState = v
+            }
+    }
+
 
 type Msg =
     | MyInfo of RemoteMsg<unit, MyInfoResponse>
@@ -46,20 +61,29 @@ let init (dia: DiagInitArgs) =
             AclState = NotRequested
             AclParamSearchState = NotRequested
         }
+        AclParamSearchInput = { AclName = ""; SearchText = "" }
     },
     Cmd.none
 
 module Commands =
     let getMyInfo token =
-        async {
-            let! resp = App.Adapters.Api.getMyInfo token
-            return Msg.MyInfo(Response resp)
-        }
-// let getNavRoot token =
-//     async {
-//         let! resp = App.Adapters.Api.getNavRoot token
-//         return Msg.NavRoot(Response resp)
+        let f () =
+            async {
+                let! resp = App.Adapters.Api.getMyInfo token
+                return Msg.MyInfo(Response resp)
+            }
+
+        Cmd.OfAsync.perform f () id
+
+// let getAclParamSearch token req : Cmd<Msg> =
+//     let f () = async {
+
+//         let! resp = App.Adapters.Api.searchAclRefValues token req
+//         return Msg.AclParam (Response resp)
 //     }
+
+//     Cmd.OfAsync.perform f () id
+
 
 let setAState f model = { model with States = f model.States }
 
@@ -118,6 +142,40 @@ let updateAcl, viewAcls =
 
     update, view
 
+let updateAclSearch, viewAclSearch =
+    let gma = {
+        GetState = MLens.getStates >> fun m -> m.AclParamSearchState
+        WrapMsg = Msg.AclParam
+    }
+
+    let update =
+        Gen.GenericFetcher.createUpdate {
+            Gma = gma
+            SetState =
+                fun (model: Model) next ->
+                    model
+                    |> setAState (fun states -> {
+                        states with
+                            AclParamSearchState = next
+                    }) // 'tModel -> RemoteData<'t> -> 'tModel
+            GetArgs = fun model -> (model.AppMode, model.AclParamSearchInput)
+            Fetch =
+                function
+                // TODO: validate search params?
+                | Auth token, si -> App.Adapters.Api.searchAclRefValues token si
+                | Demo, _ -> Async.ofResult (Error <| System.Exception("Not Implemented"))
+        }
+
+    let view =
+        Gen.GenericFetcher.createView {
+            Title = "Acl Search"
+            Gma = gma
+            GetObserver = fun store f -> store |> Store.map f
+            GetReqArg = fun model -> model.AclParamSearchInput
+        }
+
+    update, view
+
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     printfn "Diag update"
 
@@ -126,8 +184,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | MyInfo(Request _), _ ->
         match model.AppMode with
         | Auth token ->
-            model |> setAState (fun states -> { states with MyInfoState = InFlight }),
-            Cmd.OfAsync.perform Commands.getMyInfo token id
+            model |> setAState (fun states -> { states with MyInfoState = InFlight }), Commands.getMyInfo token
         | Demo ->
             model
             |> setAState (fun states -> {
@@ -143,8 +200,22 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         }),
         Cmd.none
 
-    | NavRoot rr, model -> updateNavRoot rr model
-    | Acl rr, model -> updateAcl rr model
+    | NavRoot rr, _ -> updateNavRoot rr model
+    | Acl rr, _ -> updateAcl rr model
+    | AclParam rr, _ -> updateAclSearch rr model
+
+// | AclParam(Request _), {States = {AclParamSearchState = InFlight}} -> model, Cmd.none
+// | AclParam(Request req), _ ->
+//     match model.AppMode with
+//     | Auth token ->
+//         model |> MLens.setAclParamSearchState InFlight, Commands.searchAclRefValues token
+//     | Demo ->
+//         model
+//         |> setAState (fun states -> {
+//             states with
+//                 AclParamSearchState = Responded(Error(System.Exception("Not Implemented")))
+//         }),
+//         Cmd.none
 
 ()
 
@@ -186,6 +257,11 @@ let view dia =
                         Label = "Acls"
                         Value = 2
                         Component = viewAcls (store, dispatch)
+                    }
+                    {
+                        Label = "AclSearch"
+                        Value = 3
+                        Component = viewAclSearch (store, dispatch)
                     }
                 |]
             }
