@@ -28,12 +28,20 @@ type SearchState =
 
 type Model = {
     FocusedAcl: AclState option
+    LastAclType: string option
     ErrorQueue: (string * System.DateTime) list
     SearchText: string
     SearchState: SearchState
 }
 
-type CachedState = { AclSearchText: string }
+type CachedState = {
+    AclSearchText: string
+    AclType: string option
+}
+
+type AclParamModificationType =
+    | AddParam
+    | RemoveParam
 
 type AclParentMsg =
     // which Acl Type is highlighted
@@ -41,6 +49,7 @@ type AclParentMsg =
     | TypeChange of Acl
     | SearchRequest of AclRefValueArgs
     | Create of AclRef * Acl
+    | Change of aclName: string * AclParamModificationType * aclParam: string
     | Remove of Acl
 
 type Msg =
@@ -59,14 +68,29 @@ let stateStore: LocalStorage.IAccessor<CachedState> =
 let emptyAcl = { Name = ""; Parameters = Array.empty }
 let inline justModel m = m, Cmd.none
 
-let init aclStateRefOpt : Model * Cmd<Msg> =
+// assumes we won't ever have an aclRef that can't be found in the acls list
+let init (acls: Map<Acl, AclRef option>) : Model * Cmd<Msg> =
+    let cache = stateStore.TryGetValue()
+
     let searchText =
-        stateStore.TryGetValue()
+        cache
         |> Option.bind (fun cs -> cs.AclSearchText |> Option.ofValueString)
         |> Option.defaultValue ""
 
+    let lastAcl =
+        cache
+        |> Option.bind (fun cs -> cs.AclType |> Option.bind Option.ofValueString)
+        |> Option.bind (fun lAclType -> acls |> Map.tryFindKey (fun acl _aclRef -> acl.Name = lAclType))
+
+    let defaultFocus =
+        lastAcl
+        |> Option.orElseWith (fun () -> acls.Keys |> Seq.tryHead)
+        |> Option.bind (fun k -> acls[k])
+        |> Option.map (fun v -> { IsNew = false; AclRef = v })
+
     justModel {
-        FocusedAcl = aclStateRefOpt
+        FocusedAcl = defaultFocus
+        LastAclType = lastAcl |> Option.map (fun acl -> acl.Name)
         ErrorQueue = List.empty
         SearchText = searchText
         SearchState = AcceptInput
@@ -90,7 +114,11 @@ module private MLens =
 module SideEffects =
 
     let saveStateCache (next: Model) =
-        Some { AclSearchText = next.SearchText } |> stateStore.TrySetValue
+        Some {
+            AclSearchText = next.SearchText
+            AclType = next.FocusedAcl |> Option.map (fun fa -> fa.AclRef.Name)
+        }
+        |> stateStore.TrySetValue
 
 let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
     printfn "AclEditor: '%A'" msg
@@ -176,7 +204,7 @@ module Renderers =
                 ]
         ]
 
-    let renderAclSearchResults aclParams (aclType: Acl) =
+    let renderAclSearchResults aclParams (aclType: Acl) dispatchParent =
         let ps =
             match aclParams with
             | [] ->
@@ -189,7 +217,12 @@ module Renderers =
         Html.divc "box" [
             for (value, name) in ps do
                 Html.divc "columns" [
-                    Html.divc "column" [ bButton "Add" [ tryIcon (App.Init.IconSearchType.MuiIcon "Add") ] ]
+                    Html.divc "column" [
+                        bButton "Add" [
+                            tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                            onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
+                        ]
+                    ]
                     Html.divc "column" [ text name; Attr.title value ]
 
                 // Html.ul [
@@ -263,7 +296,7 @@ module Renderers =
                 ]
                 Html.divc "column is-three-fifths" [
                     data_ "purpose" "params"
-                    renderAclSearchResults aclParams aclType
+                    renderAclSearchResults aclParams aclType dispatchParent
                 ]
             ]
         ]
@@ -279,8 +312,6 @@ module Renderers =
             match props.Acl.ParameterType with
             | AclParameterType.None -> false
             | _ -> true
-
-        printfn "'%s' - '%A' is configurable? '%A'" props.Acl.Name props.Acl.ParameterType isConfigurable
 
         let tButton title isActiveButton isPrimary isDisabled icon fOnClick =
             bButton title [
@@ -372,7 +403,7 @@ let css = [
 ]
 
 type AclEditorProps = {
-    ItemAcls: AclRef seq
+    ItemAclRefs: AclRef seq
     AclTypes: Acl seq
     ResolvedParams: System.IObservable<Map<string, AclDisplay>>
     AclSearchResponse: AclSearchResponse option
@@ -381,16 +412,16 @@ type AclEditorProps = {
 
 // allow them to edit or create one
 let renderAclsEditor (props: AclEditorProps) =
-    if Core.windowData then
-        printfn "AclEditor Render"
+    // if Core.windowData then
+    //     printfn "AclEditor Render"
 
     toGlobalWindow "aclEditor_props" props
 
     let store, dispatch =
-        props.ItemAcls
-        |> Seq.tryHead
-        |> Option.map (fun v -> { IsNew = false; AclRef = v })
-        |> Store.makeElmish init (update props.ItemAcls) ignore
+        props.AclTypes
+        |> Seq.map (fun aclType -> aclType, props.ItemAclRefs |> Seq.tryFind (fun ar -> ar.Name = aclType.Name))
+        |> Map.ofSeq
+        |> Store.makeElmish init (update props.ItemAclRefs) ignore
 
     toGlobalWindow "aclEditor_model" store.Value
 
@@ -480,7 +511,7 @@ let renderAclsEditor (props: AclEditorProps) =
             fun focusOpt ->
 
                 Html.div [
-                    for (i, aclRef) in props.ItemAcls |> Seq.indexed do
+                    for (i, aclRef) in props.ItemAclRefs |> Seq.indexed do
                         let thisAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = aclRef.Name)
 
                         Html.div [

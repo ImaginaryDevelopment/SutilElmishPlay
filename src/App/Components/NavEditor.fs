@@ -16,16 +16,10 @@ open App.Components.Gen.Icons
 open App.Adapters.Config
 
 // [<Fable.Core.Erase>]
+[<Fable.Core.StringEnum>]
 type EditorTabs =
     | IconTab
     | AclTab
-
-    static member ReParse(x: EditorTabs) =
-        match string x with
-        | y when y = string IconTab -> Some IconTab
-        | y when y = string AclTab -> Some AclTab
-        | _ -> None
-
 
 type NavEditorErrorType = string
 
@@ -127,8 +121,7 @@ module Renderers =
 let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
 let init item =
-    let initialTab =
-        stateStore.TryGetValue() |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
+    let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     justModel {
         Tab = initialTab |> Option.defaultValue IconTab
@@ -173,6 +166,29 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
     | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
         ParentMsg.AclTypeChange v |> dispatchParent
         justModel model
+
+    | EditAcl(AclEditor.AclParentMsg.Change(aclName, pt, aclValue)) ->
+        let nextItem =
+            cloneSet
+                model.Item
+                "Acls"
+                (model.Item.Acls
+                 |> Seq.map (fun v ->
+                     if v.Name = aclName then
+                         {
+                             v with
+                                 Parameters =
+                                     match pt with
+                                     | AclEditor.AclParamModificationType.AddParam ->
+                                         v.Parameters |> Set.ofArray |> Set.add aclValue |> Set.toArray
+                                     | AclEditor.AclParamModificationType.RemoveParam ->
+                                         v.Parameters |> Seq.filter (fun pv -> pv <> aclValue) |> Array.ofSeq
+                         }
+                     else
+                         v)
+                 |> Array.ofSeq)
+
+        justModel { model with Item = nextItem }
     | EditAcl(AclEditor.Remove acl) ->
         let nextItem =
             cloneSet
@@ -260,7 +276,7 @@ let renderEditor props =
                         Render =
                             fun () ->
                                 AclEditor.renderAclsEditor {
-                                    ItemAcls = value.Acls
+                                    ItemAclRefs = value.Acls
                                     AclTypes = props.AclTypes
                                     ResolvedParams = props.ResolvedAclParams
                                     AclSearchResponse = props.AclSearchResponse
