@@ -144,7 +144,7 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
     // blocks
 
     | EditAcl(AclEditor.AclParentMsg.Create(aclRef, acl)) when
-        model.Item.Acls |> Seq.exists (fun e -> e.Name = acl.Name)
+        model.Item.AclRefs |> Seq.exists (fun e -> e.Name = acl.Name)
         ->
         block $"Acl Create for existing acl '{acl.Name}'"
 
@@ -171,8 +171,8 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         let nextItem =
             cloneSet
                 model.Item
-                "Acls"
-                (model.Item.Acls
+                (nameof model.Item.AclRefs)
+                (model.Item.AclRefs
                  |> Seq.map (fun v ->
                      if v.Name = aclName then
                          {
@@ -193,8 +193,8 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         let nextItem =
             cloneSet
                 model.Item
-                "Acls"
-                (model.Item.Acls
+                (nameof model.Item.AclRefs)
+                (model.Item.AclRefs
                  |> Seq.filter (fun aclRef -> aclRef.Name <> acl.Name)
                  |> Array.ofSeq)
 
@@ -204,7 +204,8 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         printfn "cloning item to add acl"
         // should we try to block repeated acl names?
         let nextItem =
-            cloneSet model.Item "Acls" (model.Item.Acls |> Seq.append [ aclRef ] |> Array.ofSeq)
+            let n = nameof model.Item.AclRefs
+            cloneSet model.Item n (model.Item.AclRefs |> Seq.append [ aclRef ] |> Array.ofSeq)
 
         justModel { model with Item = nextItem }
     | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
@@ -276,7 +277,7 @@ let renderEditor props =
                         Render =
                             fun () ->
                                 AclEditor.renderAclsEditor {
-                                    ItemAclRefs = value.Acls
+                                    ItemAclRefs = value.AclRefs
                                     AclTypes = props.AclTypes
                                     ResolvedParams = props.ResolvedAclParams
                                     AclSearchResponse = props.AclSearchResponse

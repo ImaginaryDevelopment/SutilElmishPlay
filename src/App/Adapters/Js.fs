@@ -29,18 +29,39 @@ let keys x : string[] = jsNative
 // [<Emit("Object.assign($0)")>]
 // let assign<'t> (target:obj, [<System.ParamArray>] items: obj): 't = jsNative
 
+[<Emit("delete $0[$1]")>]
+let delete (target: obj) (name: string) = jsNative
+
 [<Emit("Object.assign({},$0)")>]
 let clone<'t> (source: 't) : 't = jsNative
 
+let controlledClone name adds removes source =
+    if System.Object.ReferenceEquals(null, source) then
+        failwith $"Cannot clone a null - %s{name}"
+
+    try
+        let nextItem = clone source
+        removes |> Seq.iter (fun v -> delete source v)
+        adds |> Seq.iter (fun (propName, value) -> nextItem?(propName) <- value)
+        nextItem
+    with ex ->
+        eprintfn "controlledClone: '%s' - '%s'" name ex.Message
+        reraise ()
+
 let cloneSet<'t> (source: 't) (propName: string) (value: obj) =
-    let nextItem = clone source
-    // formatter may break this line
-    nextItem?(propName) <- value
-    nextItem
+    if System.Object.ReferenceEquals(null, source) then
+        failwith $"Cannot cloneSet a null (prop: '%s{propName}')"
+
+    try
+        let nextItem = clone source
+        // formatter may break this line
+        nextItem?(propName) <- value
+        nextItem
+    with ex ->
+        eprintfn "cloneSet: '%s' in '%A': '%s'" propName source ex.Message
+        reraise ()
 
 
-[<Emit("delete $0[$1]")>]
-let delete (target: obj) (name: string) = jsNative
 
 [<Emit("debugger;")>]
 let debugger () : unit = jsNative

@@ -150,7 +150,7 @@ let dummyData: NavItem[] =
             Weight = 0
             Url = "url"
             HasUrlKey = false
-            Acls = Array.empty
+            AclRefs = Array.empty
         }
     ]
 
@@ -297,8 +297,17 @@ module SideEffects =
             match accessTokenOpt with
             | None -> None
             | Some accessToken ->
-                let getEager fi =
-                    fi.Acls
+                let getEager (fi: NavItem) =
+                    if System.Object.ReferenceEquals(null, fi) then
+                        failwith "fi was null"
+
+                    if System.Object.ReferenceEquals(null, fi.AclRefs) then
+                        Core.log fi.AclRefs
+                        failwith "fi.AclRefs was null"
+
+                    Core.log fi.AclRefs
+
+                    fi.AclRefs
                     |> Seq.tryFind (fun acl -> Array.isEmpty acl.Parameters |> not)
                     |> Option.map (fun acl -> fi, acl)
 
@@ -491,7 +500,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         | ConfigType.Auth accessToken, Some fi ->
             // what if we already have this resolved?
             let unresolved =
-                fi.Acls
+                fi.AclRefs
                 |> Seq.tryFind (fun acl -> acl.Name = v.Name)
                 |> Option.map (fun acl ->
                     acl.Parameters
@@ -619,7 +628,7 @@ module Renderers =
                 Html.label [
                     text item.Name
                     Html.spanc "info" [ text "*"; Attr.title (Core.pretty stripped) ]
-                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty item.Acls) ]
+                    Html.spanc "info" [ text "*"; Attr.title (Core.pretty item.AclRefs) ]
                 ]
             ]
         ]

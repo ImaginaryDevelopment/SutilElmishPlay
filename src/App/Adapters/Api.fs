@@ -154,6 +154,21 @@ type NavAclResolveResponse = {
     Errors: AclDisplay[]
 }
 
+type ApiNavItem = {
+    Id: string
+    Path: string
+    Parent: string
+    Type: string
+    Name: string
+    Description: string
+    Icon: string
+    Weight: int
+    Url: string
+    HasUrlKey: bool
+    // [<CompiledName("Acls")>]
+    Acls: AclRef[]
+}
+
 type NavItem = {
     Id: string
     Path: string
@@ -165,7 +180,9 @@ type NavItem = {
     Weight: int
     Url: string
     HasUrlKey: bool
-    Acls: AclRef[]
+    [<CompiledName("Acls")>]
+    AclRefs: AclRef[]
+
 }
 
 type NavPathResponse = { Path: string; Items: NavItem[] }
@@ -217,13 +234,13 @@ let fetchText fetchArgs rp : Async<Result<_, exn>> =
 
 let fetchJson<'t> tName fetchArgs rp : Async<Result<'t, exn>> =
     async {
-        let! text = fetchText fetchArgs rp
+        let! json = fetch fetchArgs rp (fun v -> v.json () |> Async.AwaitPromise) //fetchText fetchArgs rp
 
-        match text with
-        | Ok text ->
+        match json with
+        | Ok json ->
             printfn "%s:Parsing" tName
-            let parsed = Core.tryParse<'t> tName text
-            return parsed
+            // let parsed = Core.tryParse<'t> tName text
+            return Ok(json :?> 't)
         | Error e -> return Error e
     }
 
@@ -240,7 +257,9 @@ let getMyInfo token : Async<Result<MyInfoResponse, exn>> =
 
 // api/navigation/root
 let getNavRoot token () : Async<Result<NavItem[], exn>> =
-    fetchJson<_>
+    let aclRefsPropName = nameof Unchecked.defaultof<NavItem>.AclRefs
+
+    fetchJson<ApiNavItem[]>
         "NavItem[]"
         {
             Token = token
@@ -248,6 +267,13 @@ let getNavRoot token () : Async<Result<NavItem[], exn>> =
             Arg = None
         }
         List.empty
+    |> Async.map (
+        Result.map (
+            Array.map (fun ani ->
+                let b = Core.cloneSet ani aclRefsPropName ani.Acls |> box
+                b :?> NavItem)
+        )
+    )
 
 let genNavUrl pathOpt =
     let b = "/api/navigation/root"
@@ -311,13 +337,20 @@ let getNavAclResolve token nar =
         List.empty
 
 let save token (item: NavItem) =
+    let n = nameof Unchecked.defaultof<ApiNavItem>.Acls
     let url = Some item.Path |> genNavUrl |> String.replace "/root/Root" "/Root"
     printfn $"Attempting save to %s{url} - {item.Path}"
+
+    let apiNavItem =
+        item
+        |> Core.controlledClone "NavItem -> ApiNavItem" [ n, box item.AclRefs ] [ nameof item.AclRefs ]
+        |> box
+        :?> ApiNavItem
 
     async {
 
         let! result =
-            fetchJson<NavItem>
+            fetchJson<ApiNavItem>
                 "NavItem"
                 {
                     Token = token
@@ -328,7 +361,7 @@ let save token (item: NavItem) =
                     RequestProperties.Method HttpMethod.PATCH
                     // https://github.com/fable-compiler/fable-fetch/issues/7
                     // RequestProperties.Body (!^ item)
-                    RequestProperties.Body(!^(Core.serialize item))
+                    RequestProperties.Body(!^(Core.serialize apiNavItem))
                 ]
 
         match result with
