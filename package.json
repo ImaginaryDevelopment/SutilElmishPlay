@@ -4,11 +4,15 @@
   },
   "private": true,
   "notes": {
-    "Taking Advantage of the platform with Sutil and Web Components": "https://dev.to/tunaxor/taking-advantage-of-the-platform-with-sutil-and-web-components-5hm0"
+    "Taking Advantage of the platform with Sutil and Web Components": "https://dev.to/tunaxor/taking-advantage-of-the-platform-with-sutil-and-web-components-5hm0",
+    "Fable Mocha example package json": "https://github.com/Zaid-Ajaj/Fable.Mocha/blob/master/package.json"
   },
   "scripts": {
+    "pretest": "dotnet fable tests -o dist/tests",
+    "test": "mocha dist/tests --timeout 5000",
     "start": "dotnet fable watch src/App --run webpack serve",
-    "build": "dotnet fable       src/App --run webpack --mode production"
+    "build": "dotnet fable       src/App --run webpack --mode production",
+    "dotnet-test": "dotnet run --project ./tests/Tests.fsproj -c EXPECTO"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.1.0",
@@ -22,6 +26,8 @@
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.14.12",
-    "@mui/material": "^5.14.12"
-  }
+    "@mui/material": "^5.14.12",
+    "mocha": "^10.2.0"
+  },
+  "type": "module"
 }

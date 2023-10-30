@@ -7,7 +7,9 @@ bundle.js
 *.fs.js
 .fake
 .ionide
-
 # VS entries
 *.suo
 .vs
+
+# Fable Mocha
+dist/tests
