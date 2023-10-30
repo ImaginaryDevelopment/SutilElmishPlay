@@ -189,6 +189,9 @@ let view () =
 
     ]
 
-App.Init.FA.dom |> ignore
-// Start the app
-view () |> Program.mount
+[<EntryPoint>]
+let main argv =
+    App.Init.FA.dom |> ignore
+    // Start the app
+    view () |> Program.mount
+    0

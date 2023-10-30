@@ -28,6 +28,5 @@
     "@mui/icons-material": "^5.14.12",
     "@mui/material": "^5.14.12",
     "mocha": "^10.2.0"
-  },
-  "type": "module"
+  }
 }

@@ -1,6 +1,22 @@
 module Tests
 
+// https://github.com/Zaid-Ajaj/Fable.Mocha
 open Fable.Mocha
+
+let appTests =
+    testList "app" [
+        // let update (msg: Message) (model: Model) : Model * Cmd<Message> =
+        testList "update" [
+            testCase "update happy"
+            <| fun () ->
+                let initModel = App.init () |> fst
+                let msg = App.Message.AuthFinished(Error(System.Exception "I'm still happy anyway"))
+                let actual = App.update msg initModel |> fst
+                Expect.isSome actual.AuthInfo "AuthInfo"
+
+        ]
+
+    ]
 
 let arithmeticTests =
     testList "Arithmetic tests" [
@@ -16,3 +32,4 @@ let arithmeticTests =
     ]
 
 Mocha.runTests arithmeticTests |> ignore
+Mocha.runTests appTests |> ignore

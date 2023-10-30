@@ -222,7 +222,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
 let view dia =
     let (store: IStore<Model>, dispatch) = dia |> Store.makeElmish init update ignore
 
-    Core.toGlobalWindow "diag_model" store.Value
+    Core.toGlobalWindow "diag_model" store.Value |> ignore
 
     let tabStore =
         let tabParent =

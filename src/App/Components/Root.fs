@@ -669,7 +669,7 @@ let css = [
 let view appMode =
     let store, dispatch = appMode |> Store.makeElmish init update ignore
 
-    toGlobalWindow "root_model" store.Value
+    toGlobalWindow "root_model" store.Value |> ignore
     // let selected : IStore<NavItem option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.

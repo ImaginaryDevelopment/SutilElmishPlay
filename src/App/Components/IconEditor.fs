@@ -25,7 +25,7 @@ type IconEditorProps = {
 }
 
 let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>) =
-    toGlobalWindow "iconEditor_props" props
+    toGlobalWindow "iconEditor_props" props |> ignore
 
     Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)

@@ -415,7 +415,7 @@ let renderAclsEditor (props: AclEditorProps) =
     // if Core.windowData then
     //     printfn "AclEditor Render"
 
-    toGlobalWindow "aclEditor_props" props
+    toGlobalWindow "aclEditor_props" props |> ignore
 
     let store, dispatch =
         props.AclTypes
@@ -423,7 +423,7 @@ let renderAclsEditor (props: AclEditorProps) =
         |> Map.ofSeq
         |> Store.makeElmish init (update props.ItemAclRefs) ignore
 
-    toGlobalWindow "aclEditor_model" store.Value
+    toGlobalWindow "aclEditor_model" store.Value |> ignore
 
     let m =
         props.ResolvedParams

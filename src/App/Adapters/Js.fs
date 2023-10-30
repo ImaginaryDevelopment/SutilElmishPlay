@@ -77,20 +77,26 @@ let cloneExcept (source: obj, exclusions: string seq) =
     // debugger()
     v
 
-let inline toGlobal (name: string) (value: obj) : unit =
+let inline toGlobal (name: string) (value: obj) : Result<_, _> =
     // printfn "Adding global %s" name
     // Browser.Dom.self?(name) <- value
-    Browser.Dom.window?(name) <- value
+    try
+        Browser.Dom.window?(name) <- value
+        Ok()
+    with ex ->
+        Error ex
 
 let windowChange value = windowData <- value
 
 // allow window to be opened
 // even in prod?
 toGlobal "w_openWindow" windowChange
+|> function
+    | Error ex -> eprintfn "Failed to add global '%s'" ex.Message
+    | _ -> ()
 
 let inline toGlobalWindow name value =
-    if windowData then
-        toGlobal $"w_{name}" value
+    if windowData then toGlobal $"w_{name}" value else Ok()
 
 [<Emit("$0[$1]")>]
 let getValue (x: obj) (name: string) = jsNative
@@ -120,7 +126,7 @@ module Handlers =
 
 module LocalStorage =
     module internal Impl =
-        let localStorage = Browser.Dom.self.localStorage
+        let localStorage = lazy (Browser.Dom.self.localStorage)
 
     open Impl
 
@@ -128,7 +134,7 @@ module LocalStorage =
         // let private localStorage = Browser.Dom.self.localStorage
         // let private json = Fable.Core.JS.JSON
         static member inline TryGet<'t when 't: equality>(key) : 't option =
-            localStorage.getItem key
+            localStorage.Value.getItem key
             |> Option.ofValueString
             |> Option.bind (fun x ->
                 // printfn "Found %s -> %s" key s
@@ -155,11 +161,11 @@ module LocalStorage =
 
                 printfn "Saving to key %s" key
 
-                localStorage.setItem (key, serial)
+                localStorage.Value.setItem (key, serial)
                 // printfn "Saved -> %s" serial
                 Ok()
             with ex ->
-                toGlobal "self" Browser.Dom.self
+                toGlobal "self" Browser.Dom.self |> ignore
                 Error(ex.Message)
 
     type IAccessor<'t> = //
@@ -177,7 +183,7 @@ module LocalStorage =
         let get () = Internal.TryGet<'t> name
 
         do
-            toGlobal $"storageAccess_{name}" get
+            toGlobal $"storageAccess_{name}" get |> ignore
             ()
 
         static member CreateStorage(name) = StorageAccess(name)

@@ -23,7 +23,7 @@ module Mui =
 
     let allMuiIcons = App.Adapters.Mui.all
 
-    toGlobal "getMuiIcons" (fun () -> allMuiIcons.Keys |> Array.ofSeq)
+    toGlobal "getMuiIcons" (fun () -> allMuiIcons.Keys |> Array.ofSeq) |> ignore
 
     // printfn "Mui: %A" allMuiIcons.Value
     let getMuiIcon (name: string) = allMuiIcons |> Map.tryFind name
@@ -62,7 +62,7 @@ module FA =
                  v.iconName)
              |> Set.ofSeq)
 
-    toGlobal "getFaIcons" (fun () -> Set.toArray allFAIcons.Value)
+    toGlobal "getFaIcons" (fun () -> Set.toArray allFAIcons.Value) |> ignore
 
     let icon' (_: obj) : FAIconDefinition option =
         import "icon" "@fortawesome/fontawesome-svg-core"

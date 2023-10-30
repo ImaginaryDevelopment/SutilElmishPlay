@@ -237,13 +237,13 @@ type NavEditorProps = {
 // renames will go a different route, no path editing
 let renderEditor props =
 
-    toGlobalWindow "navEditor_props" props
+    toGlobalWindow "navEditor_props" props |> ignore
 
     let store, dispatch =
         props.NavItem
         |> Store.makeElmish init (update props.AppMode props.DispatchParent) ignore
 
-    toGlobalWindow "navEditor_model" store.Value
+    toGlobalWindow "navEditor_model" store.Value |> ignore
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
