@@ -9,9 +9,9 @@ let appTests =
         testList "update" [
             testCase "update happy"
             <| fun () ->
-                let initModel = App.init () |> fst
-                let msg = App.Message.AuthFinished(Error(System.Exception "I'm still happy anyway"))
-                let actual = App.update msg initModel |> fst
+                let initModel = AppMain.init () |> fst
+                let msg = AppMain.Message.AuthFinished(Error(System.Exception "I'm still happy anyway"))
+                let actual = AppMain.update msg initModel |> fst
                 Expect.isSome actual.AuthInfo "AuthInfo"
 
         ]
