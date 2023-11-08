@@ -24,7 +24,6 @@
 
     <Compile Include="Msal.fs" />
     <Compile Include="App.fs" />
-
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Browser.Dom" Version="2.14.0" />

@@ -133,7 +133,14 @@ module LocalStorage =
     type Internal =
         // let private localStorage = Browser.Dom.self.localStorage
         // let private json = Fable.Core.JS.JSON
-        static member inline TryGet<'t when 't: equality>(key) : 't option =
+        static member
+
+#if FABLE_COMPILER
+            inline
+#endif
+            TryGet<'t when 't: equality>
+                (key)
+                : 't option =
             localStorage.Value.getItem key
             |> Option.ofValueString
             |> Option.bind (fun x ->
@@ -147,7 +154,15 @@ module LocalStorage =
                 result)
 
         // uses saving null, rather than clearing the key
-        static member inline TrySave(key: string, valueOpt: 't option) : Result<unit, string> =
+        static member
+#if FABLE_COMPILER
+            inline
+#endif
+            TrySave
+                (
+                    key: string,
+                    valueOpt: 't option
+                ) : Result<unit, string> =
             // printfn "trying to save"
 
             try
@@ -175,7 +190,15 @@ module LocalStorage =
 
     type WriteOnly<'t>(name) =
         static member CreateStorage(name) = WriteOnly(name)
-        member inline _.Save(x: 't option) = Internal.TrySave(name, x)
+
+        member
+#if FABLE_COMPILER
+            inline
+#endif
+            _.Save
+                (x: 't option)
+                =
+            Internal.TrySave(name, x)
 
     // assumes we never want to clear a key entirely
     // assumes the serializer/deserializer works well enough
@@ -188,7 +211,13 @@ module LocalStorage =
 
         static member CreateStorage(name) = StorageAccess(name)
 
-        member inline this.TryGet() =
+        member
+#if FABLE_COMPILER
+            inline
+#endif
+            this.TryGet
+                ()
+                =
             try
                 this.Get()
             with ex ->
@@ -196,8 +225,23 @@ module LocalStorage =
                 log ex
                 None
 
-        member inline _.Get() = get ()
-        member inline _.Save(x: 't option) = Internal.TrySave(name, x)
+        member
+#if FABLE_COMPILER
+            inline
+#endif
+            _.Get
+                ()
+                =
+            get ()
+
+        member
+#if FABLE_COMPILER
+            inline
+#endif
+            _.Save
+                (x: 't option)
+                =
+            Internal.TrySave(name, x)
 
         interface IAccessor<'t> with
             override this.GetValue() = this.Get()
