@@ -40,6 +40,9 @@ module Observable =
     let choose (f: 'T option -> 'R option) (source: IObservable<'T option>) : IObservable<'R> =
         { new System.IObservable<_> with
             member _.Subscribe(h: IObserver<_>) =
+                if isNull source then
+                    failwith $"Source was null"
+
                 let disposeA =
                     source.Subscribe(fun x ->
                         (try

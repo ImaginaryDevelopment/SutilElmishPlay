@@ -61,7 +61,22 @@ let cloneSet<'t> (source: 't) (propName: string) (value: obj) =
         eprintfn "cloneSet: '%s' in '%A': '%s'" propName source ex.Message
         reraise ()
 
+let cloneSets<'t> (source: 't) (items: (string * obj) seq) =
+    if System.Object.ReferenceEquals(null, source) then
+        failwith "Cannot cloneSets on a null"
 
+    try
+        let nextItem = clone source
+
+        items
+        |> Seq.iter (fun (propName, value) ->
+            // formatter may break this line
+            nextItem?(propName) <- value)
+
+        nextItem
+    with ex ->
+        eprintfn "cloneSets in '%A': '%s'" source ex.Message
+        reraise ()
 
 [<Emit("debugger;")>]
 let debugger () : unit = jsNative

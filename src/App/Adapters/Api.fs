@@ -10,6 +10,7 @@ open Fable.Core.JsInterop
 
 open Browser
 
+
 type MyInfoResponse = {
     ObjectID: string
     DisplayName: string
@@ -163,27 +164,57 @@ type ApiNavItem = {
     Description: string
     Icon: string
     Weight: int
+    Enabled: bool option
     Url: string
     HasUrlKey: bool
     // [<CompiledName("Acls")>]
     Acls: AclRef[]
 }
 
+type NavItemType =
+    | Link
+    | Folder
+
+    static member All = [ Link; Folder ]
+
+    static member TryParse =
+        function
+        | y when y = string Link -> Some Link
+        | y when y = string Folder -> Some Folder
+        | _ -> None
+
 type NavItem = {
     Id: string
     Path: string
     Parent: string
-    Type: string
+    Type: NavItemType
     Name: string
     Description: string
     Icon: string
     Weight: int
+    Enabled: bool
     Url: string
     HasUrlKey: bool
     [<CompiledName("Acls")>]
     AclRefs: AclRef[]
 
-}
+} with
+
+    static member OfApiNavItem(x: ApiNavItem) : NavItem =
+        let aclRefsPropName = nameof Unchecked.defaultof<NavItem>.AclRefs
+        let enabledPropName = nameof Unchecked.defaultof<NavItem>.Enabled
+
+        let b =
+            Core.cloneSets x [
+                aclRefsPropName, box x.Acls
+                enabledPropName, box (x.Enabled |> Option.defaultValue false)
+                match NavItemType.TryParse x.Type with
+                | Some t -> nameof x.Type, box t
+                | None -> ()
+            ]
+            |> box
+
+        b :?> NavItem
 
 type NavPathResponse = { Path: string; Items: NavItem[] }
 
@@ -257,7 +288,6 @@ let getMyInfo token : Async<Result<MyInfoResponse, exn>> =
 
 // api/navigation/root
 let getNavRoot token () : Async<Result<NavItem[], exn>> =
-    let aclRefsPropName = nameof Unchecked.defaultof<NavItem>.AclRefs
 
     fetchJson<ApiNavItem[]>
         "NavItem[]"
@@ -267,13 +297,7 @@ let getNavRoot token () : Async<Result<NavItem[], exn>> =
             Arg = None
         }
         List.empty
-    |> Async.map (
-        Result.map (
-            Array.map (fun ani ->
-                let b = Core.cloneSet ani aclRefsPropName ani.Acls |> box
-                b :?> NavItem)
-        )
-    )
+    |> Async.map (Result.map (Array.map (NavItem.OfApiNavItem)))
 
 let genNavUrl pathOpt =
     let b = "/api/navigation/root"
@@ -289,7 +313,7 @@ let genNavUrl pathOpt =
 let getNavPath token (path: string) : Async<Result<NavPathResponse, exn>> =
     let path = genNavUrl (Some path)
 
-    fetchJson<NavItem[]>
+    fetchJson<ApiNavItem[]>
         "NavItem'[]"
         {
             Token = token
@@ -297,7 +321,12 @@ let getNavPath token (path: string) : Async<Result<NavPathResponse, exn>> =
             Arg = None
         }
         List.empty
-    |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
+    |> Async.map (
+        Result.map (fun items -> {
+            Path = path
+            Items = items |> Array.map NavItem.OfApiNavItem
+        })
+    )
 
 
 let getAcls token () : Async<Result<Acl[], exn>> =
@@ -369,4 +398,77 @@ let save token (item: NavItem) =
         | _ -> ()
 
         return result
+    }
+
+
+[<RequireQualifiedAccess>]
+type NavItemCreateType =
+    | Link of parentPath: string
+    | Folder
+
+type CreatingNavItem = {
+
+    Path: string
+    // required
+    Type: NavItemCreateType
+    // required
+    // Name: Required<string>
+    Name: string
+    Description: string
+    Icon: string
+    Weight: int
+    Enabled: bool
+    Url: string
+    HasUrlKey: bool
+    [<CompiledName("Acls")>]
+    AclRefs: AclRef[]
+
+}
+
+
+// link create will be a PUT
+// Name and Type
+// path must be root for folders
+// otherwise target destination for links
+let create token (cni: CreatingNavItem) =
+    async {
+        let url, itemType =
+            match cni.Type with
+            // | Folder when String.isValueString path  ->
+            //     return Result.Error "Folder must be in root"
+            | NavItemCreateType.Folder -> None |> genNavUrl, "Folder"
+            | NavItemCreateType.Link parentPath -> Option.ofValueString parentPath |> genNavUrl, "Link"
+
+        let item: ApiNavItem = {
+            Acls = cni.AclRefs
+            Description = cni.Description
+            Enabled = Some cni.Enabled
+            HasUrlKey = false
+            Icon = cni.Icon
+            Id = null
+            Name = cni.Name
+            Parent = null
+            Path = null
+            Type = itemType
+            Weight = cni.Weight
+            Url = cni.Url
+        }
+
+        // once we know the type make it fetch json
+        let! (result: Result<ApiNavItem, _>) =
+            fetchJson
+                (nameof ApiNavItem)
+                {
+                    Token = token
+                    RelPath = url
+                    Arg = None
+                }
+                [
+                    RequestProperties.Method HttpMethod.PUT
+                    // https://github.com/fable-compiler/fable-fetch/issues/7
+                    // RequestProperties.Body (!^ item)
+                    RequestProperties.Body(!^(Core.serialize item))
+                ]
+
+        return result |> Result.map NavItem.OfApiNavItem
     }

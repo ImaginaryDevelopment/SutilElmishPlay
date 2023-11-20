@@ -11,3 +11,6 @@ bundle.js
 # VS entries
 *.suo
 .vs
+
+# Fable Mocha Tests output
+dist/tests

@@ -48,7 +48,7 @@ type AclParentMsg =
     // None is a valid option
     | TypeChange of Acl
     | SearchRequest of AclRefValueArgs
-    | Create of AclRef * Acl
+    | CreateAcl of AclRef * Acl
     | Change of aclName: string * AclParamModificationType * aclParam: string
     | Remove of Acl
 
@@ -423,11 +423,45 @@ let renderAclsEditor (props: AclEditorProps) =
         |> Map.ofSeq
         |> Store.makeElmish init (update props.ItemAclRefs) ignore
 
-    toGlobalWindow "aclEditor_model" store.Value
+    toGlobalWindow "aclEditor_model" store.Value |> ignore
+    // TODO: check store for unresolved params, and fire off acl type change to parent or other msg to get them looked up
 
     let m =
         props.ResolvedParams
         |> Observable.map (fun m -> m |> Map.map (fun _ v -> AclRefState.Response(Ok v)))
+
+    let renderFocusedAcl (focusedAcl, selectedAclType) = [
+        Html.spanc "info" [ text "*"; Attr.title (Core.pretty focusedAcl) ]
+        Html.spanc "info" [ text "*"; Attr.title (Core.pretty selectedAclType) ]
+
+        Html.divc "box" [
+            // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
+            match selectedAclType with
+            | Some selectedAclType ->
+                let aclParams =
+                    if selectedAclType.Searchable |> Option.defaultValue false then
+                        props.AclSearchResponse
+                        |> Option.map (fun acl -> acl.Results |> Seq.map (fun v -> v.Reference, v.DisplayName))
+                    else
+                        selectedAclType.SelectableParameters |> Option.map (Seq.map Tuple2.replicate)
+                    |> Option.map List.ofSeq
+                    |> Option.defaultValue List.empty
+
+                Bind.el (
+                    m,
+                    (fun m ->
+                        Renderers.renderAclParams
+                            (store.Value.SearchState, store.Value.SearchText)
+                            aclParams
+                            m
+                            selectedAclType
+                            focusedAcl.AclRef
+                            dispatch
+                            props.DispatchParent)
+                )
+            | None -> ()
+        ]
+    ]
 
     Html.divc "fill" [
         disposeOnUnmount [ store ]
@@ -462,47 +496,14 @@ let renderAclsEditor (props: AclEditorProps) =
                     | Some focusItem, Some acl when focusItem.IsNew ->
                         bButton "Add" [
                             tryIcon (App.Init.IconSearchType.MuiIcon "Save")
-                            onClick (fun _ -> AclParentMsg.Create(focusItem.AclRef, acl) |> props.DispatchParent) []
+                            onClick (fun _ -> AclParentMsg.CreateAcl(focusItem.AclRef, acl) |> props.DispatchParent) []
                         ]
                     | _ -> ()
 
                     match focusAclOpt with
-                    | Some focusedAcl ->
-                        Html.spanc "info" [ text "*"; Attr.title (Core.pretty focusedAcl) ]
-                        Html.spanc "info" [ text "*"; Attr.title (Core.pretty selectedAclType) ]
-
-                        Html.divc "box" [
-                            // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
-                            match selectedAclType with
-                            | Some selectedAclType ->
-                                let aclParams =
-                                    if selectedAclType.Searchable |> Option.defaultValue false then
-                                        props.AclSearchResponse
-                                        |> Option.map (fun acl ->
-                                            acl.Results |> Seq.map (fun v -> v.Reference, v.DisplayName))
-                                    else
-                                        selectedAclType.SelectableParameters |> Option.map (Seq.map Tuple2.replicate)
-                                    |> Option.map List.ofSeq
-                                    |> Option.defaultValue List.empty
-
-                                Bind.el (
-                                    m,
-                                    (fun m ->
-                                        Renderers.renderAclParams
-                                            (store.Value.SearchState, store.Value.SearchText)
-                                            aclParams
-                                            m
-                                            selectedAclType
-                                            focusedAcl.AclRef
-                                            dispatch
-                                            props.DispatchParent)
-                                )
-                            | None -> ()
-                        ]
+                    | Some focusedAcl -> yield! renderFocusedAcl (focusedAcl, selectedAclType)
                     | None -> ()
-
                 ]
-
         )
         Html.h2 [ text "Existing Acls" ]
 

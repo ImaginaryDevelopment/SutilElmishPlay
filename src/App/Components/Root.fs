@@ -29,12 +29,14 @@ type RootTabs =
     | Main // Root
     | Sub // Path
     | Editor // Edit
+    | Creator // Create
 
     static member ReParse(x: RootTabs) =
         match string x with
         | y when y = string Main -> Some RootTabs.Main
         | y when y = string Sub -> Some RootTabs.Sub
         | y when y = string Editor -> Some RootTabs.Editor
+        | y when y = string Creator -> Some RootTabs.Creator
         | _ -> None
 
 // parts of the model saved for use on refresh
@@ -123,6 +125,7 @@ type FetchRes =
     | AclState of Acl[]
     | AclResolve of NavAclResolveResponse
     | AclSearchResolve of AclSearchResponse
+    | NavItemCreate of NavItem
 
 [<RequireQualifiedAccess>]
 type Msg =
@@ -131,7 +134,8 @@ type Msg =
     | FetchFail of string * exn
 
     | TabChange of RootTabs
-    | EditorMsg of NavEditor.ParentMsg
+    | EditorMsg of NavEditor.StandaloneParentMsg
+    | CreatorMsg of NavCreator.ParentMsg
     | FocusItem of NavItem
     | PathClick of string
     | PathChange of string
@@ -143,9 +147,10 @@ let dummyData: NavItem[] =
             Id = "1"
             Path = "Path"
             Parent = "Parent"
-            Type = "IDK"
+            Type = Link
             Name = "Name"
             Description = "Description"
+            Enabled = false
             Icon = "user"
             Weight = 0
             Url = "url"
@@ -189,6 +194,9 @@ module Commands =
 
     let getNavAclParamSearch token req =
         getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.searchAclRefValues req
+
+    let createNavItem token req =
+        getResponse token FetchRes.NavItemCreate "NavItemCreate" App.Adapters.Api.create req
 
 
 // TODO: timeout to expire error messages, make sure they get logged to console on expiration
@@ -371,7 +379,6 @@ module Updates =
                 printfn "Requesting Path '%s'" model.Path
                 { model with AclTypeState = InFlight }, Commands.getAcls accessToken
 
-
     let fetchResolve msg (model: Model) : Model * Cmd<Msg> =
         match msg with
         | AclState data ->
@@ -399,6 +406,7 @@ module Updates =
                 model with
                     AclSearchResponse = RemoteData.Responded(Ok data)
             }
+        | NavItemCreate data -> justModel { model with FocusedItem = Some data }
 
         | AclResolve x ->
             let nextMap =
@@ -435,6 +443,14 @@ module Updates =
 
 ()
 
+let (|BlockEmptyAclSearchRequests|_|) =
+    function
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavEditor.AclTypeChange { Name = NonValueString })),
+      { FocusedItem = None } -> Some()
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavEditor.AclSearchRequest { SearchText = NonValueString })), _ ->
+        Some()
+    | _ -> None
+
 let update msg (model: Model) : Model * Cmd<Msg> =
     printfn "Root Update running: %A ('%s')" msg model.Path
 
@@ -452,18 +468,19 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.FetchRequest(FetchReq.Nav(Some _)), { NavPathState = InFlight } -> block "InFlight NavPath"
     | Msg.FetchRequest FetchReq.AclTypes, { AclTypeState = InFlight } -> block "InFlight AclTypes"
 
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest _), { AclSearchResponse = InFlight } ->
-        block "InFlight AclSearchRequest"
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavEditor.AclSearchRequest _)),
+      { AclSearchResponse = InFlight } -> block "InFlight AclSearchRequest"
     | Msg.PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
     | Msg.PathChange _, { NavPathState = InFlight } -> block "InFlight PathChange"
     | Msg.PathClick _, { NavPathState = InFlight } -> block "InFlight PathClick"
 
     | Msg.TabChange v, { RootTab = y } when v = y -> block "already selected tab change"
-    | Msg.EditorMsg(NavEditor.ParentMsg.Cancel), { FocusedItem = None } -> block "No FocusedItem for edit"
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclTypeChange { Name = NonValueString }), { FocusedItem = None } ->
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Cancel), { FocusedItem = None } -> block "No FocusedItem for edit"
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavEditor.AclTypeChange { Name = NonValueString })),
+      { FocusedItem = None } -> block "No AclType for eager loading"
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavEditor.AclTypeChange { Name = NonValueString })), _ ->
         block "No AclType for eager loading"
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest { SearchText = NonValueString }), _ ->
-        block "Empty search found"
+    | BlockEmptyAclSearchRequests -> block "Empty search found"
 
     | Msg.PathReq,
       {
@@ -476,10 +493,11 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     // consider a confirm dialog for navigating from the editor?
     | Msg.TabChange v, _ -> justModel { model with RootTab = v }
 
-    | Msg.EditorMsg(NavEditor.ParentMsg.Cancel), _ -> justModel { model with FocusedItem = None }
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Cancel), _ -> justModel { model with FocusedItem = None }
 
     // resolve a user's search request for parameter ids by search text for display name
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclSearchRequest search), _ ->
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavEditor.AclSearchRequest search)), _
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavEditor.AclSearchRequest search)), _ ->
         match model.AppMode, model.FocusedItem with
         | ConfigType.Demo, _ -> block "Demo search not implemented"
         | ConfigType.Auth accessToken, Some fi ->
@@ -494,7 +512,10 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         | ConfigType.Auth _, None -> block "AclSearch without Focused Item"
 
     // resolve an acl type's parameters if it has any existing
-    | Msg.EditorMsg(NavEditor.ParentMsg.AclTypeChange v), _ ->
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavEditor.AclTypeChange v)), _
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavEditor.AclTypeChange v)), _ ->
+        printfn "AclType Changed to '%A'" v
+
         match model.AppMode, model.FocusedItem with
         | ConfigType.Demo, _ -> block "AclTypeChange demo not implemented"
         | ConfigType.Auth accessToken, Some fi ->
@@ -518,7 +539,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         | ConfigType.Auth _, None -> block "AclTypeChange without Focused Item"
 
 
-    | Msg.EditorMsg(NavEditor.Saved value), _ ->
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Saved value), _ ->
         // TODO: post updated value back to api
         printfn "Saved!"
         block "Save not implemented"
@@ -538,6 +559,12 @@ let update msg (model: Model) : Model * Cmd<Msg> =
                 Path = next
                 RootTab = RootTabs.Sub
         }
+    | Msg.CreatorMsg(NavCreator.ParentMsg.CreateNavItem cni), _ ->
+        match model.AppMode with
+        | ConfigType.Demo -> block "Save not implemented"
+        | ConfigType.Auth token ->
+            let cmd: Cmd<Msg> = Commands.createNavItem token cni
+            model, cmd
 
     // responses:
 
@@ -608,7 +635,7 @@ module Renderers =
 
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
-                if item.Type = "Folder" then
+                if item.Type = Folder then
                     tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
                     onClick (fun _ -> item.Name |> Msg.PathChange |> dispatch) List.empty
             ]
@@ -638,7 +665,7 @@ module Renderers =
             Html.label [ text title ]
             // https://fontawesome.com/docs/web/setup/get-started
             Html.ul [
-                for item in items do
+                for (item: NavItem) in items do
                     Html.li [
                         data_ "rootItem.Icon" item.Icon
                         data_ "rootItem" (Core.serialize item)
@@ -745,19 +772,52 @@ let view appMode =
                                     | Some item, Some aclTypes ->
                                         let r =
                                             NavEditor.renderEditor {
+                                                Core = {
+                                                    AppMode = appMode
+                                                    AclTypes = aclTypes
+                                                    NavItem = item
+                                                    AclSearchResponse =
+                                                        store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
+                                                    IsFocus = false
+                                                    EditorMode =
+                                                        NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
+                                                }
                                                 ResolvedAclParams = store |> Store.map MLens.getResolvedAcls
-                                                AppMode = appMode
-                                                AclTypes = aclTypes
-                                                NavItem = item
-                                                NavItemIconObservable = store |> Store.map MLens.getFocusedItem
-                                                AclSearchResponse =
-                                                    store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
-                                                DispatchParent = (Msg.EditorMsg >> dispatch)
+                                                NavItemIconObservable =
+                                                    store
+                                                    |> Store.map MLens.getFocusedItem
+                                                    |> Observable.choose id
+                                                    |> Observable.map (fun v -> v.Icon)
                                             }
 
                                         r
 
                                 fun () -> Bind.el2 gfi gAcl r
+
+                        }
+                        {
+                            Name = "Create"
+                            TabClickMsg = Msg.TabChange RootTabs.Creator
+                            IsActive = rt = RootTabs.Creator
+                            Render =
+                                let gAcl = store |> Store.map MLens.getAclTypes
+
+                                fun () ->
+                                    Bind.el (
+                                        gAcl,
+                                        function
+                                        | Some aclTypes ->
+                                            App.Components.NavCreator.renderAclCreator {
+                                                DispatchParent = (Msg.CreatorMsg >> dispatch)
+                                                AppMode = appMode
+                                                AclTypes = aclTypes
+                                                ResolvedAcls = store |> Store.map MLens.getResolvedAcls
+                                                Path = store.Value.Path
+                                                AclSearchResponse =
+                                                    store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
+                                            }
+                                        | None -> Html.div []
+                                    )
 
                         }
                     ]

@@ -19,6 +19,7 @@
     <Compile Include="Components/AclEditor.fs" />
     <Compile Include="Components/IconEditor.fs" />
     <Compile Include="Components/NavEditor.fs" />
+    <Compile Include="Components/NavCreator.fs" />
     <Compile Include="Components/Root.fs" />
     <Compile Include="Components/Diag.fs" />
 

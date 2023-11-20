@@ -1,3 +1,4 @@
+[<RequireQualifiedAccess>]
 module App.Components.NavEditor
 
 open BReusable
@@ -23,20 +24,43 @@ type EditorTabs =
 
 type NavEditorErrorType = string
 
-type CachedState = { Tab: EditorTabs }
-
-let stateStore: LocalStorage.IAccessor<CachedState> =
-    LocalStorage.StorageAccess("NavEditor_CachedState")
-
 type Model = {
     Tab: EditorTabs
     Item: NavItem
     Errors: (NavEditorErrorType * System.DateTime) list
 }
 
+type CachedState = { Tab: EditorTabs }
+
+
+type ParentMsg =
+    | AclTypeChange of Acl
+    | AclSearchRequest of AclRefValueArgs
+
+[<RequireQualifiedAccess>]
+type StandaloneParentMsg =
+    | ParentMsg of ParentMsg
+    | Cancel
+    | Saved of NavItem
+
+[<RequireQualifiedAccess>]
+type ChildParentMsg =
+    | ParentMsg of ParentMsg
+    | GotFocus
+
+type EditorMode =
+    | Standalone of Dispatch<StandaloneParentMsg>
+    | Child of name: string * Dispatch<ChildParentMsg>
+
+let getCacheStore em : LocalStorage.IAccessor<CachedState> =
+    match em with
+    | Standalone _ -> LocalStorage.StorageAccess("NavEditor_CachedState")
+    | Child(name, _) -> LocalStorage.StorageAccess($"NavEditor_{name}_CachedState")
+
+
 [<RequireQualifiedAccess>]
 module private MLens =
-    let getTab x = x.Tab
+    let getTab (x: Model) = x.Tab
     let getItem x = x.Item
 
     let addError msg (x: Model) = {
@@ -44,11 +68,6 @@ module private MLens =
             Errors = (msg, System.DateTime.Now) :: x.Errors
     }
 
-type ParentMsg =
-    | Cancel
-    | Saved of NavItem
-    | AclTypeChange of Acl
-    | AclSearchRequest of AclRefValueArgs
 
 type SaveMsg =
     | Requested
@@ -78,49 +97,89 @@ module Commands =
 
         Cmd.OfAsync.either f item id (mapError >> Error >> Responded >> Save)
 
+[<RequireQualifiedAccess>]
+type EditorParentDispatchType =
+    | Standalone of Dispatch<StandaloneParentMsg>
+    | Child of Dispatch<ChildParentMsg>
+
+    static member DispatchParent pdt msg =
+        match pdt with
+        | Standalone pDispatch -> pDispatch (StandaloneParentMsg.ParentMsg msg)
+        | Child pDispatch -> pDispatch (ChildParentMsg.ParentMsg msg)
+
+    static member DispatchChildOnly pdt msg =
+        match pdt with
+        | Child pDispatch -> pDispatch msg
+        | _ -> ()
+
+    static member DispatchSOOnly pdt msg =
+        match pdt with
+        | Standalone pDispatch -> pDispatch msg
+        | _ -> ()
+
 module Renderers =
-    let renderIconEditor (propName, propObs) (value: string) (dispatch: Dispatch<EditorMsgType>) =
+    let renderIconEditor
+        (propName, propObs)
+        isFocus
+        (value: string)
+        (dispatch: Dispatch<EditorMsgType>)
+        (pDispatch: EditorParentDispatchType)
+        =
         let dispatch2 =
             function
             | App.Components.IconEditor.IconEditorMsg.NameChange(propName, value) ->
                 dispatch (EditProp(propName, value))
+            | IconEditor.IconEditorMsg.GotFocus ->
+                EditorParentDispatchType.DispatchChildOnly pDispatch ChildParentMsg.GotFocus
 
         App.Components.IconEditor.renderIconEditor
             {
                 PropName = propName
                 PropObserver = propObs
                 PropValue = value
+                IsFocus = isFocus
             }
             dispatch2
 
-    let renderEditorFrame (value: NavItem) core (lDispatch: Dispatch<EditorMsgType>) (pDispatch: Dispatch<ParentMsg>) =
+    let renderEditorFrame
+        (value: NavItem)
+        core
+        (lDispatch: Dispatch<EditorMsgType>)
+        (pDispatch: EditorParentDispatchType)
+        =
         Html.divc "panel" [
             data_ "method" "renderEditorFrame"
             // path
             Html.pc "panel-heading" [
-                if value.Type = "Folder" then
+                if value.Type = Folder then
                     tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
                 Html.span [ text $"{value.Name}: {value.Path}" ]
             ]
 
             Html.divc "panel-block" core
 
-            Html.divc "panel-block" [
+            match pDispatch with
+            | EditorParentDispatchType.Standalone pDispatch ->
+                Html.divc "panel-block" [
 
-                Html.divc "left-left" [
-                    bButton "Save" [
-                        text "Save"
-                        onClick (fun _ -> EditorMsgType.Save SaveMsg.Requested |> lDispatch) []
+                    Html.divc "left-left" [
+                        bButton "Save" [
+                            text "Save"
+                            onClick (fun _ -> EditorMsgType.Save SaveMsg.Requested |> lDispatch) []
+                        ]
+                        rButton "Cancel" [
+                            text "Cancel"
+                            onClick (fun _ -> StandaloneParentMsg.Cancel |> pDispatch) []
+                        ]
                     ]
-                    rButton "Cancel" [ text "Cancel"; onClick (fun _ -> Cancel |> pDispatch) [] ]
                 ]
-            ]
+            | _ -> ()
             Html.pre [ text (Core.pretty value) ]
         ]
 
 let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
-let init item =
+let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
     let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     justModel {
@@ -131,10 +190,15 @@ let init item =
 
 module SideEffects =
 
-    let saveStateCache (next: Model) =
+    let saveStateCache (stateStore: LocalStorage.IAccessor<CachedState>) (next: Model) =
         Some { Tab = next.Tab } |> stateStore.TrySetValue
 
-let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType> =
+let update
+    (cState, appMode)
+    (dispatchParent: EditorParentDispatchType)
+    msg
+    (model: Model)
+    : Model * Cmd<EditorMsgType> =
     printfn "NavEditor update: %A" msg
 
     let block msg : Model * Cmd<EditorMsgType> =
@@ -143,7 +207,7 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
     match msg with
     // blocks
 
-    | EditAcl(AclEditor.AclParentMsg.Create(aclRef, acl)) when
+    | EditAcl(AclEditor.AclParentMsg.CreateAcl(aclRef, acl)) when
         model.Item.AclRefs |> Seq.exists (fun e -> e.Name = acl.Name)
         ->
         block $"Acl Create for existing acl '{acl.Name}'"
@@ -154,17 +218,21 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
         let next = { model with Tab = t }
 
         justModel
-        <| match SideEffects.saveStateCache next with
+        <| match SideEffects.saveStateCache cState next with
            | Ok() -> next
            | Error e -> MLens.addError e model
-    | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
 
+    | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
     | EditProp(name, value) ->
         let nextItem = cloneSet model.Item name value
         justModel { model with Item = nextItem }
 
+    | IconMsg(IconEditor.IconEditorMsg.GotFocus) ->
+        EditorParentDispatchType.DispatchChildOnly dispatchParent ChildParentMsg.GotFocus
+        justModel model
+
     | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
-        ParentMsg.AclTypeChange v |> dispatchParent
+        EditorParentDispatchType.DispatchParent dispatchParent (AclTypeChange v)
         justModel model
 
     | EditAcl(AclEditor.AclParentMsg.Change(aclName, pt, aclValue)) ->
@@ -189,6 +257,7 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
                  |> Array.ofSeq)
 
         justModel { model with Item = nextItem }
+
     | EditAcl(AclEditor.Remove acl) ->
         let nextItem =
             cloneSet
@@ -200,7 +269,7 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
 
         justModel { model with Item = nextItem }
 
-    | EditAcl(AclEditor.AclParentMsg.Create(aclRef, acl)) ->
+    | EditAcl(AclEditor.AclParentMsg.CreateAcl(aclRef, acl)) ->
         printfn "cloning item to add acl"
         // should we try to block repeated acl names?
         let nextItem =
@@ -209,11 +278,15 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
 
         justModel { model with Item = nextItem }
     | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
-        ParentMsg.AclSearchRequest v |> dispatchParent
+        EditorParentDispatchType.DispatchParent dispatchParent (ParentMsg.AclSearchRequest v)
         justModel model
+
     | Save(Responded(Error e)) -> MLens.addError e model |> justModel
+
     | Save(Responded(Ok item)) ->
-        ParentMsg.Saved item |> dispatchParent
+        EditorParentDispatchType.DispatchSOOnly dispatchParent
+        <| StandaloneParentMsg.Saved item
+
         justModel model
 
     // this is save requested, not resolved
@@ -224,26 +297,41 @@ let update appMode dispatchParent msg (model: Model) : Model * Cmd<EditorMsgType
 
 ()
 
-type NavEditorProps = {
+type NavEditorCoreProps = {
     AppMode: ConfigType<string>
-    ResolvedAclParams: System.IObservable<Map<string, AclDisplay>>
     AclTypes: Acl seq
-    NavItem: NavItem
-    NavItemIconObservable: System.IObservable<NavItem option>
     AclSearchResponse: AclSearchResponse option
-    DispatchParent: Dispatch<ParentMsg>
+    NavItem: NavItem
+    EditorMode: EditorMode
+    IsFocus: bool
+}
+
+type NavEditorProps = {
+    Core: NavEditorCoreProps
+    ResolvedAclParams: System.IObservable<Map<string, AclDisplay>>
+    NavItemIconObservable: System.IObservable<string>
 }
 
 // renames will go a different route, no path editing
-let renderEditor props =
+let renderEditor (props: NavEditorProps) =
+    let cState = getCacheStore props.Core.EditorMode
 
-    toGlobalWindow "navEditor_props" props
+    match props.Core.EditorMode with
+    | EditorMode.Standalone _ -> toGlobalWindow $"navEditor_props" props
+    | EditorMode.Child(name, _) -> toGlobalWindow $"navEditor_{name}_props" props
+
+    let dispatchParent =
+        match props.Core.EditorMode with
+        | EditorMode.Standalone dp -> EditorParentDispatchType.Standalone dp
+        | EditorMode.Child(_, dp) -> EditorParentDispatchType.Child dp
 
     let store, dispatch =
-        props.NavItem
-        |> Store.makeElmish init (update props.AppMode props.DispatchParent) ignore
+        props.Core.NavItem
+        |> Store.makeElmish (init cState) (update (cState, props.Core.AppMode) dispatchParent) ignore
 
-    toGlobalWindow "navEditor_model" store.Value
+    match props.Core.EditorMode with
+    | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
+    | EditorMode.Child(name, _) -> toGlobalWindow $"navEditor_{name}_model" store.Value
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
@@ -263,10 +351,9 @@ let renderEditor props =
                                     {
                                         PropName = "Icon"
                                         PropObserver =
-                                            props.NavItemIconObservable
-                                            |> Observable.choose id
-                                            |> Observable.map (fun v -> v.Icon)
+                                            props.NavItemIconObservable |> Observable.filter (String.isValueString)
                                         PropValue = value.Icon
+                                        IsFocus = props.Core.IsFocus
                                     }
                                     (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
                     }
@@ -278,9 +365,9 @@ let renderEditor props =
                             fun () ->
                                 AclEditor.renderAclsEditor {
                                     ItemAclRefs = value.AclRefs
-                                    AclTypes = props.AclTypes
+                                    AclTypes = props.Core.AclTypes
                                     ResolvedParams = props.ResolvedAclParams
-                                    AclSearchResponse = props.AclSearchResponse
+                                    AclSearchResponse = props.Core.AclSearchResponse
                                     DispatchParent = EditAcl >> dispatch
                                 }
                     }
@@ -299,6 +386,6 @@ let renderEditor props =
                     // oldCore
                     ]
                     dispatch
-                    props.DispatchParent
+                    dispatchParent
         )
     ]
