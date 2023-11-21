@@ -87,7 +87,7 @@ module Commands =
 
         let f item =
             async {
-                let! resp = Api.save token item
+                let! resp = Api.NavItems.save token item
 
                 // TODO: swap item with response item, or at least compare them?
                 return

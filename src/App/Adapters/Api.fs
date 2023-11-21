@@ -155,21 +155,6 @@ type NavAclResolveResponse = {
     Errors: AclDisplay[]
 }
 
-type ApiNavItem = {
-    Id: string
-    Path: string
-    Parent: string
-    Type: string
-    Name: string
-    Description: string
-    Icon: string
-    Weight: int
-    Enabled: bool option
-    Url: string
-    HasUrlKey: bool
-    // [<CompiledName("Acls")>]
-    Acls: AclRef[]
-}
 
 type NavItemType =
     | Link
@@ -183,40 +168,6 @@ type NavItemType =
         | y when y = string Folder -> Some Folder
         | _ -> None
 
-type NavItem = {
-    Id: string
-    Path: string
-    Parent: string
-    Type: NavItemType
-    Name: string
-    Description: string
-    Icon: string
-    Weight: int
-    Enabled: bool
-    Url: string
-    HasUrlKey: bool
-    [<CompiledName("Acls")>]
-    AclRefs: AclRef[]
-
-} with
-
-    static member OfApiNavItem(x: ApiNavItem) : NavItem =
-        let aclRefsPropName = nameof Unchecked.defaultof<NavItem>.AclRefs
-        let enabledPropName = nameof Unchecked.defaultof<NavItem>.Enabled
-
-        let b =
-            Core.cloneSets x [
-                aclRefsPropName, box x.Acls
-                enabledPropName, box (x.Enabled |> Option.defaultValue false)
-                match NavItemType.TryParse x.Type with
-                | Some t -> nameof x.Type, box t
-                | None -> ()
-            ]
-            |> box
-
-        b :?> NavItem
-
-type NavPathResponse = { Path: string; Items: NavItem[] }
 
 // maybe headers too?
 type FetchParams = {
@@ -285,21 +236,7 @@ let getMyInfo token : Async<Result<MyInfoResponse, exn>> =
         }
         List.empty
 
-
-// api/navigation/root
-let getNavRoot token () : Async<Result<NavItem[], exn>> =
-
-    fetchJson<ApiNavItem[]>
-        "NavItem[]"
-        {
-            Token = token
-            RelPath = "/api/navigation/root"
-            Arg = None
-        }
-        List.empty
-    |> Async.map (Result.map (Array.map (NavItem.OfApiNavItem)))
-
-let genNavUrl pathOpt =
+let private genNavUrl pathOpt =
     let b = "/api/navigation/root"
 
     match pathOpt with
@@ -310,24 +247,147 @@ let genNavUrl pathOpt =
         invalidArg "pathOpt" txt
     | None -> b
 
-let getNavPath token (path: string) : Async<Result<NavPathResponse, exn>> =
-    let path = genNavUrl (Some path)
+[<RequireQualifiedAccess>]
+type NavItemCreateType =
+    | Link of parentPath: string
+    | Folder
 
-    fetchJson<ApiNavItem[]>
-        "NavItem'[]"
-        {
-            Token = token
-            RelPath = path
-            Arg = None
+type CreatingNavItem = {
+
+    Path: string
+    // required
+    Type: NavItemCreateType
+    // required
+    // Name: Required<string>
+    Name: string
+    Description: string
+    Icon: string
+    Weight: int
+    Enabled: bool
+    Url: string
+    HasUrlKey: bool
+    [<CompiledName("Acls")>]
+    AclRefs: AclRef[]
+
+}
+
+module private ApiNavInternals =
+    type ApiNavItem = {
+        Id: string
+        Path: string
+        Parent: string
+        Type: string
+        Name: string
+        Description: string
+        Icon: string
+        Weight: int
+        Enabled: bool option
+        Url: string
+        HasUrlKey: bool
+        // [<CompiledName("Acls")>]
+        Acls: AclRef[]
+    }
+
+    type ApiNavPathResponse = { Path: string; Items: ApiNavItem[] }
+    // api/navigation/root
+    let getNavRoot token () : Async<Result<ApiNavItem[], exn>> =
+
+        fetchJson<ApiNavItem[]>
+            "NavItem[]"
+            {
+                Token = token
+                RelPath = "/api/navigation/root"
+                Arg = None
+            }
+            List.empty
+    // |> Async.map (Result.map (Array.map (NavItem.OfApiNavItem)))
+
+    let getNavPath token (path: string) : Async<Result<ApiNavPathResponse, exn>> =
+        let path = genNavUrl (Some path)
+
+        fetchJson<ApiNavItem[]>
+            "NavItem'[]"
+            {
+                Token = token
+                RelPath = path
+                Arg = None
+            }
+            List.empty
+        |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
+
+    let save token (item: ApiNavItem) =
+        let url = Some item.Path |> genNavUrl |> String.replace "/root/Root" "/Root"
+        printfn $"Attempting save to %s{url} - {item.Path}"
+
+        async {
+
+            let! result =
+                fetchJson<ApiNavItem>
+                    "NavItem"
+                    {
+                        Token = token
+                        RelPath = url
+                        Arg = None
+                    }
+                    [
+                        RequestProperties.Method HttpMethod.PATCH
+                        // https://github.com/fable-compiler/fable-fetch/issues/7
+                        // RequestProperties.Body (!^ item)
+                        RequestProperties.Body(!^(Core.serialize item))
+                    ]
+
+            match result with
+            | Ok v -> Core.log v
+            | _ -> ()
+
+            return result
         }
-        List.empty
-    |> Async.map (
-        Result.map (fun items -> {
-            Path = path
-            Items = items |> Array.map NavItem.OfApiNavItem
-        })
-    )
+    // link create will be a PUT
+    // Name and Type
+    // path must be root for folders
+    // otherwise target destination for links
+    let create token (cni: CreatingNavItem) =
+        async {
+            let url, itemType =
+                match cni.Type with
+                // | Folder when String.isValueString path  ->
+                //     return Result.Error "Folder must be in root"
+                | NavItemCreateType.Folder -> None |> genNavUrl, "Folder"
+                | NavItemCreateType.Link parentPath -> Option.ofValueString parentPath |> genNavUrl, "Link"
 
+            let item: ApiNavItem = {
+                Acls = cni.AclRefs
+                Description = cni.Description
+                Enabled = Some cni.Enabled
+                HasUrlKey = false
+                Icon = cni.Icon
+                Id = null
+                Name = cni.Name
+                Parent = null
+                Path = null
+                Type = itemType
+                Weight = cni.Weight
+                Url = cni.Url
+            }
+
+            // once we know the type make it fetch json
+            let! (result: Result<ApiNavItem, _>) =
+                fetchJson
+                    (nameof ApiNavItem)
+                    {
+                        Token = token
+                        RelPath = url
+                        Arg = None
+                    }
+                    [
+                        RequestProperties.Method HttpMethod.PUT
+                        // https://github.com/fable-compiler/fable-fetch/issues/7
+                        // RequestProperties.Body (!^ item)
+                        RequestProperties.Body(!^(Core.serialize item))
+                    ]
+
+            return result
+        }
 
 let getAcls token () : Async<Result<Acl[], exn>> =
     fetchJson<_>
@@ -365,54 +425,11 @@ let getNavAclResolve token nar =
         }
         List.empty
 
-let save token (item: NavItem) =
-    let n = nameof Unchecked.defaultof<ApiNavItem>.Acls
-    let url = Some item.Path |> genNavUrl |> String.replace "/root/Root" "/Root"
-    printfn $"Attempting save to %s{url} - {item.Path}"
-
-    let apiNavItem =
-        item
-        |> Core.controlledClone "NavItem -> ApiNavItem" [ n, box item.AclRefs ] [ nameof item.AclRefs ]
-        |> box
-        :?> ApiNavItem
-
-    async {
-
-        let! result =
-            fetchJson<ApiNavItem>
-                "NavItem"
-                {
-                    Token = token
-                    RelPath = url
-                    Arg = None
-                }
-                [
-                    RequestProperties.Method HttpMethod.PATCH
-                    // https://github.com/fable-compiler/fable-fetch/issues/7
-                    // RequestProperties.Body (!^ item)
-                    RequestProperties.Body(!^(Core.serialize apiNavItem))
-                ]
-
-        match result with
-        | Ok v -> Core.log v
-        | _ -> ()
-
-        return result
-    }
-
-
-[<RequireQualifiedAccess>]
-type NavItemCreateType =
-    | Link of parentPath: string
-    | Folder
-
-type CreatingNavItem = {
-
+type NavItem = {
+    Id: string
     Path: string
-    // required
-    Type: NavItemCreateType
-    // required
-    // Name: Required<string>
+    Parent: string
+    Type: NavItemType
     Name: string
     Description: string
     Icon: string
@@ -422,53 +439,65 @@ type CreatingNavItem = {
     HasUrlKey: bool
     [<CompiledName("Acls")>]
     AclRefs: AclRef[]
-
 }
 
+type NavPathResponse = { Path: string; Items: NavItem[] }
 
-// link create will be a PUT
-// Name and Type
-// path must be root for folders
-// otherwise target destination for links
-let create token (cni: CreatingNavItem) =
-    async {
-        let url, itemType =
-            match cni.Type with
-            // | Folder when String.isValueString path  ->
-            //     return Result.Error "Folder must be in root"
-            | NavItemCreateType.Folder -> None |> genNavUrl, "Folder"
-            | NavItemCreateType.Link parentPath -> Option.ofValueString parentPath |> genNavUrl, "Link"
+module private NavItemAdapters =
 
-        let item: ApiNavItem = {
-            Acls = cni.AclRefs
-            Description = cni.Description
-            Enabled = Some cni.Enabled
-            HasUrlKey = false
-            Icon = cni.Icon
-            Id = null
-            Name = cni.Name
-            Parent = null
-            Path = null
-            Type = itemType
-            Weight = cni.Weight
-            Url = cni.Url
+    // unsafe
+    let ofApiNavItem (x: ApiNavInternals.ApiNavItem) : NavItem =
+        let aclRefsPropName = nameof Unchecked.defaultof<NavItem>.AclRefs
+        let enabledPropName = nameof Unchecked.defaultof<NavItem>.Enabled
+
+        let b =
+            Core.cloneSets x [
+                aclRefsPropName, box x.Acls
+                enabledPropName, box (x.Enabled |> Option.defaultValue false)
+                match NavItemType.TryParse x.Type with
+                | Some t -> nameof x.Type, box t
+                | None -> ()
+            ]
+            |> box
+
+        b :?> NavItem
+
+    // unsafe
+    let toApiNavItem (item: NavItem) : ApiNavInternals.ApiNavItem =
+        let n = nameof Unchecked.defaultof<ApiNavInternals.ApiNavItem>.Acls
+
+        let apiNavItem =
+            item
+            |> Core.controlledClone "NavItem -> ApiNavItem" [ n, box item.AclRefs ] [ nameof item.AclRefs ]
+            |> box
+            :?> ApiNavInternals.ApiNavItem
+
+        apiNavItem
+
+    let toNavPathResponse (x: ApiNavInternals.ApiNavPathResponse) =
+        let result: NavPathResponse = {
+            Path = x.Path
+            Items = x.Items |> Array.map ofApiNavItem
         }
 
-        // once we know the type make it fetch json
-        let! (result: Result<ApiNavItem, _>) =
-            fetchJson
-                (nameof ApiNavItem)
-                {
-                    Token = token
-                    RelPath = url
-                    Arg = None
-                }
-                [
-                    RequestProperties.Method HttpMethod.PUT
-                    // https://github.com/fable-compiler/fable-fetch/issues/7
-                    // RequestProperties.Body (!^ item)
-                    RequestProperties.Body(!^(Core.serialize item))
-                ]
+        result
 
-        return result |> Result.map NavItem.OfApiNavItem
-    }
+
+module NavItems =
+    let getNavRoot token () =
+        ApiNavInternals.getNavRoot token ()
+        |> Async.map (Result.map (Array.map NavItemAdapters.ofApiNavItem))
+
+    let getNavPath token path =
+        ApiNavInternals.getNavPath token path
+        |> Async.map (Result.map NavItemAdapters.toNavPathResponse)
+
+    let create token cni =
+        ApiNavInternals.create token cni
+        |> Async.map (Result.map (NavItemAdapters.ofApiNavItem))
+
+    let save token (item: NavItem) =
+        let apiNavItem = NavItemAdapters.toApiNavItem item
+
+        ApiNavInternals.save token apiNavItem
+        |> Async.map (Result.map NavItemAdapters.ofApiNavItem)

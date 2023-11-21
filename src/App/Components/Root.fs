@@ -181,10 +181,10 @@ module Commands =
         Cmd.OfAsync.either f x id <| fun ex -> Msg.FetchFail(title, ex)
 
     let getNavRoot token =
-        getResponse token FetchRes.NavRoot "NavRoot" App.Adapters.Api.getNavRoot ()
+        getResponse token FetchRes.NavRoot "NavRoot" App.Adapters.Api.NavItems.getNavRoot ()
 
     let getNavPath (token, path) =
-        getResponse token FetchRes.NavPath "NavPath" App.Adapters.Api.getNavPath path
+        getResponse token FetchRes.NavPath "NavPath" App.Adapters.Api.NavItems.getNavPath path
 
     let getAcls token =
         getResponse token FetchRes.AclState "AclState" App.Adapters.Api.getAcls ()
@@ -196,7 +196,7 @@ module Commands =
         getResponse token FetchRes.AclSearchResolve "AclSearchResolve" App.Adapters.Api.searchAclRefValues req
 
     let createNavItem token req =
-        getResponse token FetchRes.NavItemCreate "NavItemCreate" App.Adapters.Api.create req
+        getResponse token FetchRes.NavItemCreate "NavItemCreate" App.Adapters.Api.NavItems.create req
 
 
 // TODO: timeout to expire error messages, make sure they get logged to console on expiration

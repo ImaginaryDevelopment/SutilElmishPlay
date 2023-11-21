@@ -100,7 +100,7 @@ let updateNavRoot, viewNavRoot =
             GetArgs = fun model -> model.AppMode
             Fetch =
                 function
-                | ConfigType.Auth token -> App.Adapters.Api.getNavRoot token ()
+                | ConfigType.Auth token -> App.Adapters.Api.NavItems.getNavRoot token ()
                 | ConfigType.Demo -> Async.ofResult (Ok Root.dummyData)
         }
 
