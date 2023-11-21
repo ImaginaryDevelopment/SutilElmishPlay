@@ -38,7 +38,7 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
             else
                 on "focus" (fun _ -> GotFocus |> dispatch) []
             Attr.value props.PropValue
-            Handlers.onValueInput dispatch (fun v -> NameChange(props.PropName, v))
+            Handlers.onValueInputD 300 dispatch (fun v -> NameChange(props.PropName, v))
         ]
 
     let nameSelect =

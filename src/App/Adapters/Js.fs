@@ -92,6 +92,17 @@ let cloneExcept (source: obj, exclusions: string seq) =
     // debugger()
     v
 
+// doesn't respect 'this'
+let debounce f timeoutMs =
+    let mutable timer = None
+
+    fun x ->
+        match timer with
+        | None -> ()
+        | Some timer -> JS.clearTimeout timer
+
+        timer <- Some <| JS.setTimeout (fun () -> f x) timeoutMs
+
 let inline toGlobal (name: string) (value: obj) : unit =
     // printfn "Adding global %s" name
     // Browser.Dom.self?(name) <- value

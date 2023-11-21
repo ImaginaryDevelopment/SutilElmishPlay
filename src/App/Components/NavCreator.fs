@@ -89,7 +89,7 @@ let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent 
             type' "text"
             // autofocus
             Attr.value store.Value.Name
-            Handlers.onValueInput dispatch Msg.NameChange
+            Handlers.onValueInputD 300 dispatch Msg.NameChange
         ]
     ]
     formField [ text "Create" ] [
@@ -118,6 +118,7 @@ let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent 
                         HasUrlKey = false
                     }
 
+                    // should we check for dupes here and disable if so?
                     if String.isValueString name |> not then
                         Attr.disabled true
                     else

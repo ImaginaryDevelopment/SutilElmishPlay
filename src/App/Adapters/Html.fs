@@ -31,8 +31,14 @@ module Handlers =
     let onValueChangeIf<'t> (dispatch: 't -> unit) f =
         Sutil.CoreElements.on "change" (Core.Handlers.getValue >> f >> Option.iter dispatch) List.empty
 
+    let onValueChangeIfD<'t> timeoutMs (dispatch: 't -> unit) f =
+        onValueChangeIf<'t> (Core.debounce dispatch timeoutMs) f
+
     let onValueInput<'t> (dispatch: 't -> unit) f =
         Sutil.CoreElements.on "input" (Core.Handlers.getValue >> f >> dispatch) List.empty
+
+    let onValueInputD<'t> timeoutMs (dispatch: 't -> unit) f =
+        onValueInput<'t> (Core.debounce dispatch timeoutMs) f
 
 module Observable =
     open System
