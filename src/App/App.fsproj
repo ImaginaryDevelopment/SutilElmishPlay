@@ -18,6 +18,7 @@
     <Compile Include="Components/Gen.fs" />
     <Compile Include="Components/AclEditor.fs" />
     <Compile Include="Components/IconEditor.fs" />
+    <Compile Include="Components/NavShared.fs" />
     <Compile Include="Components/NavEditor.fs" />
     <Compile Include="Components/NavCreator.fs" />
     <Compile Include="Components/Root.fs" />

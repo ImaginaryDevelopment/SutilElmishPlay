@@ -9,14 +9,20 @@ open App.Adapters.Html
 let formField labelContent controlContent =
     Html.divc "field" [ Html.labelc "label" labelContent; Html.divc "control" controlContent ]
 
+type TabType<'t> =
+    | Enabled of 't
+    | Disabled of className: string
+
 type BulmaTab<'t> = {
     Name: string
-    TabClickMsg: 't
+    TabType: TabType<'t>
     IsActive: bool
     Render: unit -> Core.SutilElement
 }
 
 let renderTabs containerClass items dispatch =
+    let isActiveCn = "is-active"
+    // Attr.className
     Html.divc containerClass [
         data_ "file" "Bulma"
         data_ "method" "renderTabs"
@@ -24,14 +30,17 @@ let renderTabs containerClass items dispatch =
             Html.ul [
                 for item in items do
                     Html.li [
-                        if item.IsActive then
-                            Attr.className "is-active"
-                        Html.a [
-                            if not item.IsActive then
-                                onClick (fun _ -> dispatch item.TabClickMsg) List.empty
+                        match item.TabType with
+                        | Disabled cn ->
+                            Html.button [ Attr.title "No Item selected"; Attr.disabled true; text item.Name ]
+                        | Enabled msg ->
+                            Html.a [
+                                match item.IsActive with
+                                | false -> onClick (fun _ -> dispatch msg) List.empty
+                                | true -> Attr.classes [ isActiveCn; "has-text-primary" ]
 
-                            text item.Name
-                        ]
+                                text item.Name
+                            ]
                     ]
             ]
         ]

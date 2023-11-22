@@ -24,6 +24,7 @@ type Model = {
     // NavItem: NavItem
     ItemType: NavItemType
     Path: string
+    Link: string
     Name: string
     Icon: string
     Acls: (AclRef * Acl) list
@@ -32,6 +33,27 @@ type Model = {
 
 module MLens =
     let getIcon x = x.Icon
+
+    let modelToCreatingItem (model: Model) : CreatingNavItem =
+        let niCt =
+            match model.ItemType with
+            | NavItemType.Link -> NavItemCreateType.Link model.Path
+            | NavItemType.Folder -> NavItemCreateType.Folder
+
+        {
+            AclRefs = model.Acls |> Seq.map fst |> Array.ofSeq
+            Path = model.Path
+            // required
+            Type = niCt
+            // required
+            Name = model.Name
+            Description = null
+            Icon = model.Icon
+            Weight = 0
+            Enabled = false
+            Url = null
+            HasUrlKey = false
+        }
 
 type ParentMsg =
     | CreateNavItem of CreatingNavItem
@@ -50,6 +72,7 @@ let init path : Model * Cmd<Msg> =
         ItemType = NavItemType.Link
         Path = path
         Name = ""
+        Link = ""
         Icon = "City"
         Acls = List.empty
         Focus = FocusType.Creator
@@ -70,20 +93,34 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
 
 
 let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent = [
-    Html.select [
-        text "ItemType"
-        Attr.className "select"
-        // Attr.disabled disabled
-        Handlers.onValueChangeIf dispatch (fun v -> NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
-        // Html.option [ text "" ]
-        for o in NavItemType.All do
-            Html.option [
-                Attr.value (string o)
-                text (string o)
-                if store.Value.ItemType = o then
-                    Attr.selected true
+    columns3
+        [
+            Html.divc "select" [
+                Html.select [
+                    text "ItemType"
+                    Attr.className "select"
+                    // Attr.disabled disabled
+                    Handlers.onValueChangeIf dispatch (fun v -> NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
+                    // Html.option [ text "" ]
+                    for o in NavItemType.All do
+                        Html.option [
+                            Attr.value (string o)
+                            text (string o)
+                            if store.Value.ItemType = o then
+                                Attr.selected true
+                        ]
+                ]
             ]
-    ]
+
+        ] [
+            if store.Value.ItemType = Link then
+                Html.inputc "input" [ type' "text"; Attr.value store.Value.Path; Attr.title "Path" ]
+        ] [
+            if store.Value.ItemType = Link then
+                Html.inputc "input" [ type' "text"; Attr.value store.Value.Link; Attr.title "Link" ]
+
+        ]
+
     formField [ text "Name" ] [
         Html.inputc "input" [
             type' "text"
@@ -98,25 +135,26 @@ let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent 
             fun (name, itemType, acls) ->
                 bButton "Create" [
                     text "Create"
-                    let niCt =
-                        match itemType with
-                        | NavItemType.Link -> NavItemCreateType.Link store.Value.Path
-                        | NavItemType.Folder -> NavItemCreateType.Folder
+                    let cni = MLens.modelToCreatingItem store.Value
+                    // let niCt =
+                    //     match itemType with
+                    //     | NavItemType.Link -> NavItemCreateType.Link store.Value.Path
+                    //     | NavItemType.Folder -> NavItemCreateType.Folder
 
-                    let cni: CreatingNavItem = {
-                        AclRefs = acls |> Seq.map fst |> Array.ofSeq
-                        Path = store.Value.Path
-                        // required
-                        Type = niCt
-                        // required
-                        Name = name
-                        Description = null
-                        Icon = store.Value.Icon
-                        Weight = 0
-                        Enabled = false
-                        Url = null
-                        HasUrlKey = false
-                    }
+                    // let cni: CreatingNavItem = {
+                    //     AclRefs = acls |> Seq.map fst |> Array.ofSeq
+                    //     Path = store.Value.Path
+                    //     // required
+                    //     Type = niCt
+                    //     // required
+                    //     Name = name
+                    //     Description = null
+                    //     Icon = store.Value.Icon
+                    //     Weight = 0
+                    //     Enabled = false
+                    //     Url = null
+                    //     HasUrlKey = false
+                    // }
 
                     // should we check for dupes here and disable if so?
                     if String.isValueString name |> not then
@@ -137,50 +175,53 @@ type AclCreatorProps = {
     AclSearchResponse: AclSearchResponse option
 }
 
+let private modelToItem (model: Model) : NavItem = {
+    Id = ""
+    Path = model.Path
+    Parent = "Parent"
+    Type = model.ItemType
+    Name = model.Name
+    Description = "Description"
+    Icon = model.Icon
+    Weight = 0
+    Enabled = true
+    Url = model.Link
+    HasUrlKey = false
+    AclRefs = model.Acls |> Seq.map fst |> Array.ofSeq
+}
+
+
 let renderAclCreator (props: AclCreatorProps) =
     toGlobalWindow "navCreator_props" props
 
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
 
+    let eItem = modelToItem store.Value
+
     Html.div [
 
         disposeOnUnmount [ store ]
-
-        Html.divc "box" [ yield! renderCreationEditor store dispatch props.DispatchParent ]
-        Html.divc "box" [
-            Bind.el (
-                store,
-                fun model ->
+        App.Components.NavShared.renderEditorFrame
+            (eItem.Name, eItem.Path, eItem)
+            [
+                Html.divc "box" [ yield! renderCreationEditor store dispatch props.DispatchParent ]
+                Html.divc "box" [
                     // Bind.el2 props.Path
-                    let item = {
-                        Id = ""
-                        Path = model.Path
-                        Parent = "Parent"
-                        Type = model.ItemType
-                        Name = model.Name
-                        Description = "Description"
-                        Icon = model.Icon
-                        Weight = 0
-                        Enabled = true
-                        Url = "url"
-                        HasUrlKey = false
-                        AclRefs = Array.empty
-                    }
-
                     NavEditor.renderEditor {
                         Core = {
                             AppMode = props.AppMode
                             AclTypes = props.AclTypes
-                            NavItem = item
-                            IsFocus = model.Focus = FocusType.Editor
+                            NavItem = eItem
+                            IsFocus = store.Value.Focus = FocusType.Editor
                             AclSearchResponse = props.AclSearchResponse
                             EditorMode = NavEditor.EditorMode.Child("NavCreator", Msg.EditorMsg >> dispatch)
                         }
                         ResolvedAclParams = props.ResolvedAcls
                         NavItemIconObservable = store |> Store.map MLens.getIcon
                     }
-            )
 
-        ]
+                ]
+            ]
+            List.empty
     ]

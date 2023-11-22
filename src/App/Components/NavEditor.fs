@@ -141,25 +141,11 @@ module Renderers =
             }
             dispatch2
 
-    let renderEditorFrame
-        (value: NavItem)
-        core
-        (lDispatch: Dispatch<EditorMsgType>)
-        (pDispatch: EditorParentDispatchType)
-        =
-        Html.divc "panel" [
-            data_ "method" "renderEditorFrame"
-            // path
-            Html.pc "panel-heading" [
-                if value.Type = Folder then
-                    tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
-                Html.span [ text $"{value.Name}: {value.Path}" ]
-            ]
-
-            Html.divc "panel-block" core
+    let renderFramed lDispatch pDispatch =
+        let siblings =
 
             match pDispatch with
-            | EditorParentDispatchType.Standalone pDispatch ->
+            | EditorParentDispatchType.Standalone pDispatch -> [
                 Html.divc "panel-block" [
 
                     Html.divc "left-left" [
@@ -173,9 +159,11 @@ module Renderers =
                         ]
                     ]
                 ]
-            | _ -> ()
-            Html.pre [ text (Core.pretty value) ]
-        ]
+              ]
+            | _ -> List.empty
+
+        siblings
+
 
 let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
@@ -224,8 +212,15 @@ let update
 
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
     | EditProp(name, value) ->
-        let nextItem = cloneSet model.Item name value
-        justModel { model with Item = nextItem }
+        try
+            let nextItem = cloneSet model.Item name value
+            justModel { model with Item = nextItem }
+        with ex ->
+            Core.log ex
+            eprintfn $"%s{ex.Message}"
+
+            MLens.addError $"Failed to set property: %s{name} on %s{serialize model.Item}" model
+            |> justModel
 
     | IconMsg(IconEditor.IconEditorMsg.GotFocus) ->
         EditorParentDispatchType.DispatchChildOnly dispatchParent ChildParentMsg.GotFocus
@@ -343,7 +338,7 @@ let renderEditor (props: NavEditorProps) =
                 [
                     {
                         Name = "Icon"
-                        TabClickMsg = TabChange IconTab
+                        TabType = Enabled <| TabChange IconTab
                         IsActive = tab = EditorTabs.IconTab
                         Render =
                             fun () ->
@@ -359,7 +354,7 @@ let renderEditor (props: NavEditorProps) =
                     }
                     {
                         Name = "Acls"
-                        TabClickMsg = TabChange AclTab
+                        TabType = Enabled <| TabChange AclTab
                         IsActive = tab = AclTab
                         Render =
                             fun () ->
@@ -379,13 +374,18 @@ let renderEditor (props: NavEditorProps) =
         Bind.el (
             store |> Store.map MLens.getItem,
             fun value ->
-                Renderers.renderEditorFrame
-                    value
-                    [
-                        core
-                    // oldCore
-                    ]
-                    dispatch
-                    dispatchParent
+                match props.Core.EditorMode with
+                | Standalone _ ->
+                    let siblings = Renderers.renderFramed dispatch dispatchParent
+                    App.Components.NavShared.renderEditorFrame (value.Name, value.Path, value) [ core ] siblings
+                | Child _ -> core
+        // Renderers.renderEditorFrame
+        //     value
+        //     [
+        //         core
+        //     // oldCore
+        //     ]
+        //     dispatch
+        //     dispatchParent
         )
     ]

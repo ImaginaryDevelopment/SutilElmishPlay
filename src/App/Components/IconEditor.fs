@@ -42,12 +42,13 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
         ]
 
     let nameSelect =
-        Html.divc "select" [
-            Bind.el (
-                props.PropObserver,
-                function
-                | ValueString iconPath ->
+        Bind.el (
+            props.PropObserver,
+            function
+            | ValueString iconPath when props.PropValue.Length > 0 ->
+                Html.divc "select" [
                     printfn "Rerender select : %s" iconPath
+
                     let toLower = System.Char.ToLowerInvariant
 
                     // not sure why this doesn't work with iconPath
@@ -67,9 +68,9 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
                                     Attr.selected true
                             ]
                     ]
-                | _ -> Html.div []
-            )
-        ]
+                ]
+            | _ -> Html.div []
+        )
 
     Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)

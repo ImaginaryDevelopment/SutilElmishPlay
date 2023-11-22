@@ -239,8 +239,12 @@ let init appMode =
             | Some {
                        RootTab = RootTabs.Editor
                        FocusedItemId = NonValueString
-                   } -> None
-            | Some cs -> Some cs.RootTab
+                   } ->
+                printfn "Blocking editor as root, no focused item"
+                None
+            | Some cs ->
+                printfn "Using %A as root tab from cache " cs.RootTab
+                Some cs.RootTab
             | None -> None
             |> Option.defaultValue RootTabs.Main
 
@@ -709,7 +713,7 @@ let view appMode =
             fun rt ->
                 let rootTab = {
                     Name = "Root"
-                    TabClickMsg = Msg.TabChange RootTabs.Main
+                    TabType = Enabled <| Msg.TabChange RootTabs.Main
                     IsActive = rt = RootTabs.Main
                     Render =
                         let r data =
@@ -725,7 +729,7 @@ let view appMode =
 
                 let pathTab = {
                     Name = "Path"
-                    TabClickMsg = Msg.TabChange RootTabs.Sub
+                    TabType = Enabled <| Msg.TabChange RootTabs.Sub
                     IsActive = rt = RootTabs.Sub
                     Render =
                         fun () ->
@@ -759,7 +763,10 @@ let view appMode =
                         pathTab
                         {
                             Name = "Edit"
-                            TabClickMsg = Msg.TabChange RootTabs.Editor
+                            TabType =
+                                store.Value.FocusedItem
+                                |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
+                                |> Option.defaultValue (TabType.Disabled "is-disabled")
                             IsActive = rt = RootTabs.Editor
                             Render =
                                 let gfi = store |> Store.map MLens.getFocusedItem
@@ -797,7 +804,7 @@ let view appMode =
                         }
                         {
                             Name = "Create"
-                            TabClickMsg = Msg.TabChange RootTabs.Creator
+                            TabType = Enabled <| Msg.TabChange RootTabs.Creator
                             IsActive = rt = RootTabs.Creator
                             Render =
                                 let gAcl = store |> Store.map MLens.getAclTypes
