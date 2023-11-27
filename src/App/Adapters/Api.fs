@@ -272,6 +272,8 @@ type CreatingNavItem = {
 }
 
 module private ApiNavInternals =
+
+    // are we doing display name?
     type ApiNavItem = {
         Id: string
         Path: string

@@ -28,6 +28,8 @@ type Model = {
     Name: string
     Icon: string
     Acls: (AclRef * Acl) list
+    Enabled: bool
+    Weight: int
     Focus: FocusType
 }
 
@@ -63,6 +65,7 @@ type Msg =
     | ItemTypeChange of NavItemType
     | NameChange of string
     | PathChange of string
+    | LinkChange of string
     | EditorMsg of NavEditor.ChildParentMsg
 
 let inline justModel m = m, Cmd.none
@@ -75,6 +78,8 @@ let init path : Model * Cmd<Msg> =
         Link = ""
         Icon = "City"
         Acls = List.empty
+        Weight = 0
+        Enabled = false
         Focus = FocusType.Creator
     },
     Cmd.none
@@ -91,43 +96,58 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
         dispatchParent (ParentMsg.EditorParentMsg pm)
         model, Cmd.none
 
+let private textInput titling (value: string) children onChange dispatch =
+    Html.inputc "input" [
+        type' "text"
+        Attr.value value
+        Attr.title titling
+        Attr.placeholder titling
+        yield! children
+        Handlers.onValueInputD Handlers.debounceDefault dispatch onChange
+    ]
 
 let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent = [
     columns3
         [
-            Html.divc "select" [
-                Html.select [
-                    text "ItemType"
-                    Attr.className "select"
-                    // Attr.disabled disabled
-                    Handlers.onValueChangeIf dispatch (fun v -> NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
-                    // Html.option [ text "" ]
-                    for o in NavItemType.All do
-                        Html.option [
-                            Attr.value (string o)
-                            text (string o)
-                            if store.Value.ItemType = o then
-                                Attr.selected true
-                        ]
+            if store.Value.ItemType = Link then
+                formField [ text "Path" ] [ textInput "Path" store.Value.Path [] Msg.PathChange dispatch ]
+        ] [
+            formField [ text "Type" ] [
+
+                Html.divc "select" [
+                    Html.select [
+                        text "ItemType"
+                        Attr.className "select"
+                        // Attr.disabled disabled
+                        Handlers.onValueChangeIf dispatch (fun v ->
+                            NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
+                        // Html.option [ text "" ]
+                        for o in NavItemType.All do
+                            Html.option [
+                                Attr.value (string o)
+                                text (string o)
+                                if store.Value.ItemType = o then
+                                    Attr.selected true
+                            ]
+                    ]
                 ]
             ]
 
         ] [
             if store.Value.ItemType = Link then
-                Html.inputc "input" [ type' "text"; Attr.value store.Value.Path; Attr.title "Path" ]
-        ] [
-            if store.Value.ItemType = Link then
-                Html.inputc "input" [ type' "text"; Attr.value store.Value.Link; Attr.title "Link" ]
-
+                formField [ text "Link" ] [ textInput "Link" store.Value.Link [] Msg.LinkChange dispatch ]
         ]
 
     formField [ text "Name" ] [
-        Html.inputc "input" [
-            type' "text"
-            // autofocus
-            Attr.value store.Value.Name
-            Handlers.onValueInputD 300 dispatch Msg.NameChange
-        ]
+        textInput
+            "Name"
+            store.Value.Name
+            [
+                if store.Value.Focus = FocusType.Creator then
+                    autofocus
+            ]
+            Msg.NameChange
+            dispatch
     ]
     formField [ text "Create" ] [
         Bind.el (
@@ -136,25 +156,6 @@ let private renderCreationEditor (store: IStore<Model>) dispatch dispatchParent 
                 bButton "Create" [
                     text "Create"
                     let cni = MLens.modelToCreatingItem store.Value
-                    // let niCt =
-                    //     match itemType with
-                    //     | NavItemType.Link -> NavItemCreateType.Link store.Value.Path
-                    //     | NavItemType.Folder -> NavItemCreateType.Folder
-
-                    // let cni: CreatingNavItem = {
-                    //     AclRefs = acls |> Seq.map fst |> Array.ofSeq
-                    //     Path = store.Value.Path
-                    //     // required
-                    //     Type = niCt
-                    //     // required
-                    //     Name = name
-                    //     Description = null
-                    //     Icon = store.Value.Icon
-                    //     Weight = 0
-                    //     Enabled = false
-                    //     Url = null
-                    //     HasUrlKey = false
-                    // }
 
                     // should we check for dupes here and disable if so?
                     if String.isValueString name |> not then

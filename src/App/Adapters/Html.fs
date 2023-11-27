@@ -25,6 +25,8 @@ let columns3 col1 col2 col3 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2; Html.divc "column" col3 ]
 
 module Handlers =
+    let debounceDefault = 300
+    // change only fires like on focus lost for text input
     let onValueChange<'t> (dispatch: 't -> unit) f =
         Sutil.CoreElements.on "change" (Core.Handlers.getValue >> f >> dispatch) List.empty
 
