@@ -11,9 +11,25 @@ open App.Adapters.Api
 open App.Adapters.Html
 
 open App.Components.Gen.Icons
+open Sutil.Styling
+open type Feliz.length
+
+let css = [
+    // rule "span.info" Gen.CssRules.titleIndicator
+    // rule ".panel.editorFrame>.panel-block>.box:last-child" [ Css.minHeight () ]
+    // rule ".panel.editorFrame>.panel-block>.box:last-child" [ Css.minHeight (em 25) ]
+    // rule ".panel.editorFrame>.panel-block>.box:not(:last-child)" [ Css.minHeight (em 25) ]
+    rule ".panel.editorFrame>.panel-block>.box" [
+        Css.minHeight (px 400)
+        Css.marginBottom 0
+        Css.marginTop 0
+        Css.marginLeft (px 5)
+        Css.marginRight (px 5)
+    ]
+]
 
 let renderEditorFrame (name, path, navItemType, value: 't) core siblings =
-    Html.divc "panel" [
+    Html.divc "panel editorFrame" [
         data_ "file" "NavShared"
         data_ "method" "renderEditorFrame"
         // path
@@ -29,6 +45,7 @@ let renderEditorFrame (name, path, navItemType, value: 't) core siblings =
         yield! siblings
         Html.pre [ text (Core.pretty value) ]
     ]
+    |> withStyle css
 
 let renderError vErrors x =
     vErrors
