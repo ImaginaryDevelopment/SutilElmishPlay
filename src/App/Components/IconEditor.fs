@@ -41,6 +41,7 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
             Handlers.onValueInputD 300 dispatch (fun v -> NameChange(props.PropName, v))
         ]
 
+    // TODO: name select search
     let nameSelect =
         Bind.el (
             props.PropObserver,

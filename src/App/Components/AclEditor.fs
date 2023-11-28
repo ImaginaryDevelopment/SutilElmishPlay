@@ -172,6 +172,7 @@ module Renderers =
     type AclTypeSelectorProps = {
         Focus: AclState option
         AclTypes: Acl seq
+        ExistingAclTypes: string list
         SelectedType: string
     }
 
@@ -195,10 +196,15 @@ module Renderers =
             Attr.disabled disabled
             Handlers.onValueChangeIf dispatch (fun v -> Option.ofValueString v |> Option.map Msg.TypeSelectChange)
             Html.option [ text "" ]
-            for o in props.AclTypes do
+            for o in
+                props.AclTypes
+                |> Seq.filter (fun aclT ->
+                    props.SelectedType = aclT.Name
+                    || props.ExistingAclTypes |> List.exists (fun eat -> eat = aclT.Name) |> not) do
                 Html.option [
                     Attr.value o.Name
                     text o.Name
+                    Attr.title <| pretty o
                     if props.SelectedType = o.Name then
                         Attr.selected true
                 ]
@@ -218,7 +224,7 @@ module Renderers =
             for (value, name) in ps do
                 Html.divc "columns" [
                     Html.divc "column" [
-                        bButton "Add" [
+                        bButton "Add Acl" [
                             tryIcon (App.Init.IconSearchType.MuiIcon "Add")
                             onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
                         ]
@@ -481,7 +487,7 @@ let renderAclsEditor (props: AclEditorProps) =
                 let selectedAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = selectedType)
 
                 Html.div [
-                    bButton "Add" [
+                    bButton "Create New Acl" [
                         tryIcon (App.Init.IconSearchType.MuiIcon "Add")
                         onClick (fun _ -> Msg.AclSelect None |> dispatch) []
                     ]
@@ -490,11 +496,13 @@ let renderAclsEditor (props: AclEditorProps) =
                             AclTypes = props.AclTypes
                             Focus = focusAclOpt
                             SelectedType = selectedType
+                            ExistingAclTypes = props.ItemAclRefs |> Seq.map (fun iar -> iar.Name) |> List.ofSeq
                         }
                         dispatch
                     match focusAclOpt, selectedAclType with
                     | Some focusItem, Some acl when focusItem.IsNew ->
-                        bButton "Add" [
+                        bButton "Save New Acl" [
+                            // floppy disk icon
                             tryIcon (App.Init.IconSearchType.MuiIcon "Save")
                             onClick (fun _ -> AclParentMsg.CreateAcl(focusItem.AclRef, acl) |> props.DispatchParent) []
                         ]

@@ -143,7 +143,7 @@ module Renderers =
             }
             dispatch2
 
-    let renderPropsEditor value dispatch =
+    let renderPropsEditor fError value dispatch =
         let ff name value =
             formField [ text name ] [ textInput name value [] (fun v -> EditProp(name, v)) dispatch ]
 
@@ -153,10 +153,11 @@ module Renderers =
                 // ff (nameof value.Enabled) (string value.Enabled)
                 formField [ text (nameof value.Enabled) ] [
                     checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
-                ] []
-                ff (nameof value.Weight) (string value.Weight) []
+                ]
+                <| fError (Some "Enabled")
+                ff (nameof value.Weight) (string value.Weight) <| fError (Some "Weight")
                 if value.Type = NavItemType.Link then
-                    ff (nameof value.Url) value.Url []
+                    ff (nameof value.Url) value.Url <| fError (Some "Url")
             ]
 
 
@@ -263,6 +264,8 @@ let update
                 (model.Item.AclRefs
                  |> Seq.map (fun v ->
                      if v.Name = aclName then
+                         printfn "Found vName aclName match: %s" aclName
+
                          {
                              v with
                                  Parameters =
@@ -273,9 +276,11 @@ let update
                                          v.Parameters |> Seq.filter (fun pv -> pv <> aclValue) |> Array.ofSeq
                          }
                      else
+                         printfn "No Match found for aclName: %s" aclName
                          v)
                  |> Array.ofSeq)
 
+        printfn "Edited acl"
         justModel { model with Item = nextItem }
 
     | EditAcl(AclEditor.Remove acl) ->
@@ -334,6 +339,7 @@ type NavEditorProps = {
 
 // renames will go a different route, no path editing
 let renderEditor (props: NavEditorProps) =
+    printfn "Render editor: %A" props.Core.NavItem.Type
     let cState = getCacheStore props.Core.EditorMode
 
     match props.Core.EditorMode with
@@ -353,6 +359,14 @@ let renderEditor (props: NavEditorProps) =
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
     | EditorMode.Child(name, _, _) -> toGlobalWindow $"navEditor_{name}_model" store.Value
 
+    let vItem, vErrors =
+        match props.Core.EditorMode with
+        | EditorMode.Standalone _ -> ValidNavItem.ValidateNavItem props.Core.NavItem
+        | EditorMode.Child(_, vItem, _) -> vItem
+        |> Option.ofResult
+
+    let getError = NavShared.renderError vErrors
+
     let core =
         let obsTab = store |> Store.map MLens.getTab
         let obsItem = store |> Store.map MLens.getItem
@@ -365,7 +379,7 @@ let renderEditor (props: NavEditorProps) =
                         Name = "Props"
                         TabType = Enabled <| TabChange EditorTabs.MainTab
                         IsActive = tab = EditorTabs.MainTab
-                        Render = Renderers.renderPropsEditor value dispatch
+                        Render = Renderers.renderPropsEditor getError value dispatch
 
                     }
                     {
@@ -410,7 +424,11 @@ let renderEditor (props: NavEditorProps) =
                 match props.Core.EditorMode with
                 | Standalone _ ->
                     let siblings = Renderers.renderFramed dispatch dispatchParent
-                    App.Components.NavShared.renderEditorFrame (value.Name, value.Path, value) [ core ] siblings
+
+                    App.Components.NavShared.renderEditorFrame
+                        (value.Name, value.Path, value.Type, value)
+                        [ core ]
+                        siblings
                 | Child _ -> core
         )
     ]

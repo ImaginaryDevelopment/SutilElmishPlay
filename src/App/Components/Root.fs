@@ -552,6 +552,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         justModel {
             model with
                 FocusedItem = Some(clone<NavItem> item)
+                RootTab = RootTabs.Editor
                 LastFocusedItemId = item.Id
         }
 
