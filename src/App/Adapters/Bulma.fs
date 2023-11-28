@@ -6,8 +6,12 @@ open Sutil.CoreElements
 open App.Adapters.Html
 
 // https://bulma.io/documentation/form/general/
-let formField labelContent controlContent =
-    Html.divc "field" [ Html.labelc "label" labelContent; Html.divc "control" controlContent ]
+let formField labelContent controlContent errorContent =
+    Html.divc "field" [
+        Html.labelc "label" labelContent
+        Html.divc "control" controlContent
+        Html.p [ yield! errorContent ]
+    ]
 
 type TabType<'t> =
     | Enabled of 't

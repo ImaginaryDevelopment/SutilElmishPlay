@@ -74,7 +74,7 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
 
     Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)
-        formField [ text "Icon Name" ] [ columns2 (Seq.ofList [ nameInput ]) (Seq.ofList [ nameSelect ]) ]
+        formField [ text "Icon Name" ] [ columns2 (Seq.ofList [ nameInput ]) (Seq.ofList [ nameSelect ]) ] []
 
     ]
 

@@ -153,10 +153,10 @@ module Renderers =
                 // ff (nameof value.Enabled) (string value.Enabled)
                 formField [ text (nameof value.Enabled) ] [
                     checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
-                ]
-                ff (nameof value.Weight) (string value.Weight)
+                ] []
+                ff (nameof value.Weight) (string value.Weight) []
                 if value.Type = NavItemType.Link then
-                    ff (nameof value.Url) value.Url
+                    ff (nameof value.Url) value.Url []
             ]
 
 
