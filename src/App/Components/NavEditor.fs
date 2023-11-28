@@ -51,12 +51,12 @@ type ChildParentMsg =
 
 type EditorMode =
     | Standalone of Dispatch<StandaloneParentMsg>
-    | Child of name: string * Dispatch<ChildParentMsg>
+    | Child of name: string * validation: NavValidation * Dispatch<ChildParentMsg>
 
 let getCacheStore em : LocalStorage.IAccessor<CachedState> =
     match em with
     | Standalone _ -> LocalStorage.StorageAccess("NavEditor_CachedState")
-    | Child(name, _) -> LocalStorage.StorageAccess($"NavEditor_{name}_CachedState")
+    | Child(name, _, _) -> LocalStorage.StorageAccess($"NavEditor_{name}_CachedState")
 
 
 [<RequireQualifiedAccess>]
@@ -338,12 +338,12 @@ let renderEditor (props: NavEditorProps) =
 
     match props.Core.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow $"navEditor_props" props
-    | EditorMode.Child(name, _) -> toGlobalWindow $"navEditor_{name}_props" props
+    | EditorMode.Child(name, _, _) -> toGlobalWindow $"navEditor_{name}_props" props
 
     let dispatchParent =
         match props.Core.EditorMode with
         | EditorMode.Standalone dp -> EditorParentDispatchType.Standalone dp
-        | EditorMode.Child(_, dp) -> EditorParentDispatchType.Child dp
+        | EditorMode.Child(_, _, dp) -> EditorParentDispatchType.Child dp
 
     let store, dispatch =
         props.Core.NavItem
@@ -351,7 +351,7 @@ let renderEditor (props: NavEditorProps) =
 
     match props.Core.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
-    | EditorMode.Child(name, _) -> toGlobalWindow $"navEditor_{name}_model" store.Value
+    | EditorMode.Child(name, _, _) -> toGlobalWindow $"navEditor_{name}_model" store.Value
 
     let core =
         let obsTab = store |> Store.map MLens.getTab

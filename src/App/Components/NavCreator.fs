@@ -138,14 +138,24 @@ let renderAclCreator (props: AclCreatorProps) =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
 
     let eItem = store.Value.Item
-    let vItem, vErrors = ValidNavItem.ValidateNavItem eItem |> Option.ofResult
+    let vResult = ValidNavItem.ValidateNavItem eItem
+    let vItem, vErrors = vResult |> Option.ofResult
+
+    let getError x =
+        vErrors
+        |> Option.bind (fun eMap -> eMap |> Map.tryFind x)
+        |> Option.defaultValue List.empty
+        |> function
+            | [] -> []
+            | errors -> [ Attr.classes [ "help"; "is-danger" ]; text (String.concat "," errors) ]
 
     let renderCreationEditor () = [
 
         columns3
             [
                 if store.Value.Item.Type = Link then
-                    formField [ text "Path" ] [ textInput "Path" store.Value.Item.Path [] Msg.PathChange dispatch ] []
+                    formField [ text "Path" ] [ textInput "Path" store.Value.Item.Path [] Msg.PathChange dispatch ]
+                    <| getError (Some "Path")
             ] [
                 formField [ text "Type" ] [
 
@@ -166,7 +176,8 @@ let renderAclCreator (props: AclCreatorProps) =
                                 ]
                         ]
                     ]
-                ] []
+                ]
+                <| getError (Some "Type")
 
             ] [
             // if store.Value.ItemType = Link then
@@ -183,7 +194,8 @@ let renderAclCreator (props: AclCreatorProps) =
                 ]
                 Msg.NameChange
                 dispatch
-        ] []
+        ]
+        <| getError (Some "Name")
 
         formField [ text "Create" ] [
             Bind.el (
@@ -202,7 +214,8 @@ let renderAclCreator (props: AclCreatorProps) =
                             | Some vItem -> onClick (fun _ -> ParentMsg.CreateNavItem vItem |> props.DispatchParent) []
                     ]
             )
-        ] []
+        ]
+        <| getError None
     ]
 
     Html.div [
@@ -221,7 +234,7 @@ let renderAclCreator (props: AclCreatorProps) =
                             NavItem = eItem
                             IsFocus = store.Value.Focus = FocusType.Editor
                             AclSearchResponse = props.AclSearchResponse
-                            EditorMode = NavEditor.EditorMode.Child("NavCreator", Msg.EditorMsg >> dispatch)
+                            EditorMode = NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
                         }
                         ResolvedAclParams = props.ResolvedAcls
                         NavItemIconObservable = store |> Store.map MLens.getIcon

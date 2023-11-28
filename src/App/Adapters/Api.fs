@@ -422,12 +422,13 @@ type NavItem = {
 
 type FieldName = string
 // determine is creation based on empty id
+type NavValidation = Result<ValidNavItem, Map<FieldName option, string list>>
 
-type ValidNavItem = {
+and ValidNavItem = {
     ValidNavItem: NavItem
 } with
 
-    static member ValidateNavItem(item: NavItem) : Result<ValidNavItem, Map<FieldName option, string list>> =
+    static member ValidateNavItem(item: NavItem) : NavValidation =
         let isCreating = not <| String.isValueString item.Id
         let isNested = String.isValueString item.Parent && item.Parent <> "/Root"
 
@@ -439,6 +440,9 @@ type ValidNavItem = {
                     "Empty link",
                     Some(nameof item.Url),
                     item.Type = NavItemType.Link && not <| String.isValueString item.Url
+                    "Name too short",
+                    Some(nameof item.Name),
+                    not <| String.isValueString item.Name || item.Name.Length < 3
                 ]
                 |> List.choose (fun (e, f, v) -> if v then Some(f, e) else None)
 
