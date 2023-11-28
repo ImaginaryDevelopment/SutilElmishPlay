@@ -17,8 +17,9 @@ open App.Components.Gen.Icons
 open App.Adapters.Config
 
 // [<Fable.Core.Erase>]
-[<Fable.Core.StringEnum>]
+[<Fable.Core.StringEnum; RequireQualifiedAccess>]
 type EditorTabs =
+    | MainTab
     | IconTab
     | AclTab
 
@@ -75,6 +76,7 @@ type SaveMsg =
 
 type EditorMsgType =
     | EditProp of prop: string * nextValue: string
+    | EnabledChange of bool
     | EditAcl of AclEditor.AclParentMsg
     | TabChange of EditorTabs
     | IconMsg of IconEditor.IconEditorMsg
@@ -141,12 +143,30 @@ module Renderers =
             }
             dispatch2
 
+    let renderPropsEditor value dispatch =
+        let ff name value =
+            formField [ text name ] [ textInput name value [] (fun v -> EditProp(name, v)) dispatch ]
+
+        fun () ->
+            Html.div [
+                data_ "method" "renderPropsEditor"
+                // ff (nameof value.Enabled) (string value.Enabled)
+                formField [ text (nameof value.Enabled) ] [
+                    checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
+                ]
+                ff (nameof value.Weight) (string value.Weight)
+                if value.Type = NavItemType.Link then
+                    ff (nameof value.Url) value.Url
+            ]
+
+
     let renderFramed lDispatch pDispatch =
         let siblings =
 
             match pDispatch with
             | EditorParentDispatchType.Standalone pDispatch -> [
                 Html.divc "panel-block" [
+                    data_ "method" "renderFramed"
 
                     Html.divc "left-left" [
                         bButton "Save" [
@@ -171,7 +191,7 @@ let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
     let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     justModel {
-        Tab = initialTab |> Option.defaultValue IconTab
+        Tab = initialTab |> Option.defaultValue EditorTabs.IconTab
         Item = item
         Errors = List.empty
     }
@@ -210,6 +230,11 @@ let update
            | Ok() -> next
            | Error e -> MLens.addError e model
 
+    | EnabledChange value ->
+        justModel {
+            model with
+                Item = { model.Item with Enabled = value }
+        }
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
     | EditProp(name, value) ->
         try
@@ -337,8 +362,15 @@ let renderEditor (props: NavEditorProps) =
                 "fill"
                 [
                     {
+                        Name = "Props"
+                        TabType = Enabled <| TabChange EditorTabs.MainTab
+                        IsActive = tab = EditorTabs.MainTab
+                        Render = Renderers.renderPropsEditor value dispatch
+
+                    }
+                    {
                         Name = "Icon"
-                        TabType = Enabled <| TabChange IconTab
+                        TabType = Enabled <| TabChange EditorTabs.IconTab
                         IsActive = tab = EditorTabs.IconTab
                         Render =
                             fun () ->
@@ -350,12 +382,12 @@ let renderEditor (props: NavEditorProps) =
                                         PropValue = value.Icon
                                         IsFocus = props.Core.IsFocus
                                     }
-                                    (IconMsg >> dispatch) // viewNavRoot (store,dispatch)
+                                    (IconMsg >> dispatch)
                     }
                     {
                         Name = "Acls"
-                        TabType = Enabled <| TabChange AclTab
-                        IsActive = tab = AclTab
+                        TabType = Enabled <| TabChange EditorTabs.AclTab
+                        IsActive = tab = EditorTabs.AclTab
                         Render =
                             fun () ->
                                 AclEditor.renderAclsEditor {
@@ -371,6 +403,7 @@ let renderEditor (props: NavEditorProps) =
 
     Html.div [
         disposeOnUnmount [ store ]
+        data_ "file" "NavEditor"
         Bind.el (
             store |> Store.map MLens.getItem,
             fun value ->
@@ -379,13 +412,5 @@ let renderEditor (props: NavEditorProps) =
                     let siblings = Renderers.renderFramed dispatch dispatchParent
                     App.Components.NavShared.renderEditorFrame (value.Name, value.Path, value) [ core ] siblings
                 | Child _ -> core
-        // Renderers.renderEditorFrame
-        //     value
-        //     [
-        //         core
-        //     // oldCore
-        //     ]
-        //     dispatch
-        //     dispatchParent
         )
     ]

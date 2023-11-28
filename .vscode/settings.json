@@ -11,7 +11,8 @@
         "perc",
         "spanc",
         "Sutil",
-        "uifabric"
+        "uifabric",
+        "upsert"
     ],
     "FSharp.inlayHints.typeAnnotations": false,
     "FSharp.inlayHints.parameterNames": false,

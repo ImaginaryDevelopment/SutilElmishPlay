@@ -86,6 +86,11 @@ module Option =
         | Ok v -> Some v
         | _ -> None
 
+    let ofResult x =
+        match x with
+        | Ok v -> Some v, None
+        | Error e -> None, Some e
+
     // f could also be an option
     let mapMaybe fOpt =
         function
@@ -141,3 +146,17 @@ module Async =
 
     let catch x = x |> Async.Catch |> map Result.ofChoice
     let ofResult x = async { return x }
+
+module Parse =
+    let tryBool x =
+        System.Boolean.TryParse x
+        |> function
+            | true, v -> Some v
+            | false, _ -> None
+
+module Map =
+    let upsert key value (m: Map<_, _ list>) =
+        if m |> Map.containsKey key then
+            m |> Map.add key (value :: m[key])
+        else
+            m |> Map.add key [ value ]

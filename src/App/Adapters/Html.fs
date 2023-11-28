@@ -24,6 +24,7 @@ let columns2 col1 col2 =
 let columns3 col1 col2 col3 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2; Html.divc "column" col3 ]
 
+
 module Handlers =
     let debounceDefault = 300
     // change only fires like on focus lost for text input
@@ -41,6 +42,25 @@ module Handlers =
 
     let onValueInputD<'t> timeoutMs (dispatch: 't -> unit) f =
         onValueInput<'t> (Core.debounce dispatch timeoutMs) f
+
+let textInput titling (value: string) children onChange dispatch =
+    Html.inputc "input" [
+        type' "text"
+        Attr.value value
+        Attr.title titling
+        Attr.placeholder titling
+        yield! children
+        Handlers.onValueInputD Handlers.debounceDefault dispatch onChange
+    ]
+
+let checkbox titling (value: bool) children (onChange: bool -> 't) (dispatch: Dispatch<'t>) =
+    Html.inputc "checkbox" [
+        type' "checkbox"
+        Attr.isChecked value
+        Attr.title titling
+        yield! children
+        Handlers.onValueChangeIf dispatch (Parse.tryBool >> Option.map onChange)
+    ]
 
 module Observable =
     open System

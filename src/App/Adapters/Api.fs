@@ -252,25 +252,6 @@ type NavItemCreateType =
     | Link of parentPath: string
     | Folder
 
-type CreatingNavItem = {
-
-    Path: string
-    // required
-    Type: NavItemCreateType
-    // required
-    // Name: Required<string>
-    Name: string
-    Description: string
-    Icon: string
-    Weight: int
-    Enabled: bool
-    Url: string
-    HasUrlKey: bool
-    [<CompiledName("Acls")>]
-    AclRefs: AclRef[]
-
-}
-
 module private ApiNavInternals =
 
     // are we doing display name?
@@ -344,33 +325,28 @@ module private ApiNavInternals =
 
             return result
         }
+
     // link create will be a PUT
     // Name and Type
     // path must be root for folders
     // otherwise target destination for links
-    let create token (cni: CreatingNavItem) =
+    let create token (item: ApiNavItem) =
         async {
-            let url, itemType =
-                match cni.Type with
-                // | Folder when String.isValueString path  ->
-                //     return Result.Error "Folder must be in root"
-                | NavItemCreateType.Folder -> None |> genNavUrl, "Folder"
-                | NavItemCreateType.Link parentPath -> Option.ofValueString parentPath |> genNavUrl, "Link"
-
-            let item: ApiNavItem = {
-                Acls = cni.AclRefs
-                Description = cni.Description
-                Enabled = Some cni.Enabled
-                HasUrlKey = false
-                Icon = cni.Icon
-                Id = null
-                Name = cni.Name
-                Parent = null
-                Path = null
-                Type = itemType
-                Weight = cni.Weight
-                Url = cni.Url
-            }
+            let url = genNavUrl (Option.ofValueString item.Path)
+            // let item: ApiNavItem = {
+            //     Acls = item.AclRefs
+            //     Description = item.Description
+            //     Enabled = Some item.Enabled
+            //     HasUrlKey = false
+            //     Icon = item.Icon
+            //     Id = null
+            //     Name = item.Name
+            //     Parent = null
+            //     Path = null
+            //     Type = itemType
+            //     Weight = item.Weight
+            //     Url = item.Url
+            // }
 
             // once we know the type make it fetch json
             let! (result: Result<ApiNavItem, _>) =
@@ -429,6 +405,7 @@ let getNavAclResolve token nar =
 
 type NavItem = {
     Id: string
+    // do we need path and parent?
     Path: string
     Parent: string
     Type: NavItemType
@@ -443,7 +420,37 @@ type NavItem = {
     AclRefs: AclRef[]
 }
 
+type FieldName = string
+// determine is creation based on empty id
+
+type ValidNavItem = {
+    ValidNavItem: NavItem
+} with
+
+    static member ValidateNavItem(item: NavItem) : Result<ValidNavItem, Map<FieldName option, string list>> =
+        let isCreating = not <| String.isValueString item.Id
+        let isNested = String.isValueString item.Parent && item.Parent <> "/Root"
+
+        let eMap =
+            let e =
+                [
+                    "Creation distinction failed", Some(nameof item.Url), isCreating && String.isValueString item.Id
+                    "Cannot nest folders", Some(nameof item.Parent), item.Type = NavItemType.Folder && isNested
+                    "Empty link",
+                    Some(nameof item.Url),
+                    item.Type = NavItemType.Link && not <| String.isValueString item.Url
+                ]
+                |> List.choose (fun (e, f, v) -> if v then Some(f, e) else None)
+
+            (Map.empty, e) ||> List.fold (fun m (f, e) -> m |> Map.upsert f e)
+
+        if Map.isEmpty eMap then
+            Ok { ValidNavItem = item }
+        else
+            Error eMap
+
 type NavPathResponse = { Path: string; Items: NavItem[] }
+
 
 module private NavItemAdapters =
 
@@ -494,9 +501,13 @@ module NavItems =
         ApiNavInternals.getNavPath token path
         |> Async.map (Result.map NavItemAdapters.toNavPathResponse)
 
-    let create token cni =
-        ApiNavInternals.create token cni
+    let create token (vni: ValidNavItem) =
+        NavItemAdapters.toApiNavItem vni.ValidNavItem
+        |> ApiNavInternals.create token
         |> Async.map (Result.map (NavItemAdapters.ofApiNavItem))
+
+    let createV token (cni: NavItem) =
+        ValidNavItem.ValidateNavItem cni |> Result.map (create token)
 
     let save token (item: NavItem) =
         let apiNavItem = NavItemAdapters.toApiNavItem item

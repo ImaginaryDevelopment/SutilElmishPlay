@@ -640,7 +640,7 @@ module Renderers =
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
                 if item.Type = Folder then
-                    tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen")
+                    Html.spanc "icon-text" [ tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen") ]
                     onClick (fun _ -> item.Name |> Msg.PathChange |> dispatch) List.empty
             ]
             Html.divc "column is-one-fifth buttonColumn" [
@@ -695,6 +695,13 @@ let css = [
     rule "div.buttonColumn" [ Css.height (em 1.0); Css.width (em 2.5); Css.flexShrink 0 ]
     rule ".tile .field" [ Css.marginRight (px 5) ]
     rule ".tile .field .control .box" [ Css.minWidth (px 450) ]
+    // rule "div.columns" [Css.minHeight]
+    // TODO: fix button overlap on div.buttonColumn
+    // turning off button's 1em font size appeared to fix display issues
+    // what is the fix that works?
+    // rule "div.buttonColumn" [ Css.fontSize (em 0.75) ]
+    rule "div.buttonColumn button.button" [ Css.fontSize (em 0.7) ]
+// rule "span.icon" [ Css.marginTop (px 5) ]
 ]
 
 let view appMode =
