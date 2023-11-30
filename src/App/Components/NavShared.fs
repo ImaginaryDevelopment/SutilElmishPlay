@@ -16,9 +16,6 @@ open type Feliz.length
 
 let css = [
     // rule "span.info" Gen.CssRules.titleIndicator
-    // rule ".panel.editorFrame>.panel-block>.box:last-child" [ Css.minHeight () ]
-    // rule ".panel.editorFrame>.panel-block>.box:last-child" [ Css.minHeight (em 25) ]
-    // rule ".panel.editorFrame>.panel-block>.box:not(:last-child)" [ Css.minHeight (em 25) ]
     rule ".panel.editorFrame>.panel-block>.box" [
         Css.minHeight (px 400)
         Css.marginBottom 0
@@ -28,16 +25,16 @@ let css = [
     ]
 ]
 
-let renderEditorFrame (name, path, navItemType, value: 't) core siblings =
+let renderEditorFrame (value: NavItem) core siblings =
     Html.divc "panel editorFrame" [
         data_ "file" "NavShared"
         data_ "method" "renderEditorFrame"
         // path
         Html.pc "panel-heading" [
-            if navItemType = Folder then "FolderOpen" else "Link"
+            if value.Type = Folder then "FolderOpen" else "Link"
             |> App.Init.IconSearchType.MuiIcon
             |> tryIcon
-            Html.span [ text $"%s{name}: %s{path}" ]
+            Html.span [ text $"%s{value.Name}: %s{value.Path}" ]
         ]
 
         Html.divc "panel-block" core

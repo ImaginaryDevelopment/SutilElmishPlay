@@ -24,10 +24,11 @@ type BulmaTab<'t> = {
     Render: unit -> Core.SutilElement
 }
 
-let renderTabs containerClass items dispatch =
+let renderTabs containerClasses items dispatch =
     let isActiveCn = "is-active"
     // Attr.className
-    Html.divc containerClass [
+    Html.div [
+        Attr.classes [ "tabContainer"; yield! containerClasses ]
         data_ "file" "Bulma"
         data_ "method" "renderTabs"
         Html.divc "tabs" [

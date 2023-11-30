@@ -7,6 +7,15 @@ open Fable.Core.JsInterop
 
 let log x = Browser.Dom.console.log (x)
 
+let logGroup nameOpt =
+    match nameOpt with
+    | None -> Browser.Dom.console.group ()
+    | Some name -> Browser.Dom.console.group name
+
+    { new System.IDisposable with
+        member _.Dispose() = Browser.Dom.console.groupEnd ()
+    }
+
 let mutable windowData = true
 
 // https://medium.com/@zaid.naom/f-interop-with-javascript-in-fable-the-complete-guide-ccc5b896a59f
@@ -41,7 +50,7 @@ let controlledClone name adds removes source =
 
     try
         let nextItem = clone source
-        removes |> Seq.iter (fun v -> delete source v)
+        removes |> Seq.iter (fun v -> delete nextItem v)
         adds |> Seq.iter (fun (propName, value) -> nextItem?(propName) <- value)
         nextItem
     with ex ->

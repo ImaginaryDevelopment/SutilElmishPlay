@@ -17,7 +17,7 @@ type RemoteStates = {
     MyInfoState: RemoteData<MyInfoResponse>
     NavRootState: RemoteData<NavItem[]>
     AclState: RemoteData<Acl[]>
-    AclParamSearchState: RemoteData<AclSearchResponse>
+    AclParamSearchState: RemoteData<AclSearchResult>
 }
 
 type Model = {
@@ -44,7 +44,7 @@ type Msg =
     | MyInfo of RemoteMsg<unit, MyInfoResponse>
     | NavRoot of RemoteMsg<unit, NavItem[]>
     | Acl of RemoteMsg<unit, Acl[]>
-    | AclParam of RemoteMsg<AclRefValueArgs, AclSearchResponse>
+    | AclParam of RemoteMsg<AclRefValueArgs, AclSearchResult>
 
 // enable mass scaffolding of api endpoint testers
 
@@ -61,7 +61,11 @@ let init (dia: DiagInitArgs) =
             AclState = NotRequested
             AclParamSearchState = NotRequested
         }
-        AclParamSearchInput = { AclName = ""; SearchText = "" }
+        AclParamSearchInput = {
+            AclName = ""
+            SearchText = ""
+            Max = None
+        }
     },
     Cmd.none
 
@@ -75,17 +79,8 @@ module Commands =
 
         Cmd.OfAsync.perform f () id
 
-// let getAclParamSearch token req : Cmd<Msg> =
-//     let f () = async {
-
-//         let! resp = App.Adapters.Api.searchAclRefValues token req
-//         return Msg.AclParam (Response resp)
-//     }
-
-//     Cmd.OfAsync.perform f () id
-
-
 let setAState f model = { model with States = f model.States }
+
 
 let updateNavRoot, viewNavRoot =
     let gma = {
@@ -176,6 +171,48 @@ let updateAclSearch, viewAclSearch =
 
     update, view
 
+module Renderers =
+    let renderApiTabs store dispatch =
+        let myInfoComponent =
+            Gen.GenericFetcher.createView
+                {
+                    Title = "MyInfo"
+                    Gma = {
+                        GetState = fun model -> model.States.MyInfoState
+                        WrapMsg = Msg.MyInfo
+                    }
+                    GetObserver = fun store f -> store |> Store.map f
+                    GetReqArg = fun _ -> ()
+                }
+                (store, dispatch)
+
+        {
+            Name = "DiagTabRoot"
+            ActiveTab = 0
+            Tabs = [|
+                {
+                    Label = "MyInfo"
+                    Value = 0
+                    Component = myInfoComponent
+                }
+                {
+                    Label = "Root"
+                    Value = 1
+                    Component = viewNavRoot (store, dispatch)
+                }
+                {
+                    Label = "Acls"
+                    Value = 2
+                    Component = viewAcls (store, dispatch)
+                }
+                {
+                    Label = "AclSearch"
+                    Value = 3
+                    Component = viewAclSearch (store, dispatch)
+                }
+            |]
+        }
+
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     printfn "Diag update"
 
@@ -204,18 +241,6 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | Acl rr, _ -> updateAcl rr model
     | AclParam rr, _ -> updateAclSearch rr model
 
-// | AclParam(Request _), {States = {AclParamSearchState = InFlight}} -> model, Cmd.none
-// | AclParam(Request req), _ ->
-//     match model.AppMode with
-//     | Auth token ->
-//         model |> MLens.setAclParamSearchState InFlight, Commands.searchAclRefValues token
-//     | Demo ->
-//         model
-//         |> setAState (fun states -> {
-//             states with
-//                 AclParamSearchState = Responded(Error(System.Exception("Not Implemented")))
-//         }),
-//         Cmd.none
 
 ()
 
@@ -225,46 +250,7 @@ let view dia =
     Core.toGlobalWindow "diag_model" store.Value
 
     let tabStore =
-        let tabParent =
-            let myInfoComponent =
-                Gen.GenericFetcher.createView
-                    {
-                        Title = "MyInfo"
-                        Gma = {
-                            GetState = fun model -> model.States.MyInfoState
-                            WrapMsg = Msg.MyInfo
-                        }
-                        GetObserver = fun store f -> store |> Store.map f
-                        GetReqArg = fun _ -> ()
-                    }
-                    (store, dispatch)
-
-            {
-                Name = "DiagTabRoot"
-                ActiveTab = 0
-                Tabs = [|
-                    {
-                        Label = "MyInfo"
-                        Value = 0
-                        Component = myInfoComponent
-                    }
-                    {
-                        Label = "Root"
-                        Value = 1
-                        Component = viewNavRoot (store, dispatch)
-                    }
-                    {
-                        Label = "Acls"
-                        Value = 2
-                        Component = viewAcls (store, dispatch)
-                    }
-                    {
-                        Label = "AclSearch"
-                        Value = 3
-                        Component = viewAclSearch (store, dispatch)
-                    }
-                |]
-            }
+        let tabParent = Renderers.renderApiTabs store dispatch
 
         () |> Store.makeElmishSimple (fun _ -> tabParent) Tabs.update ignore
 
@@ -274,14 +260,19 @@ let view dia =
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ store ]
-        Html.ul[Html.li[data_ "icon" "intentionally missing"
-                        Bulma.FontAwesome.fa "mo"]
+        Html.divc "box" [
 
-                Html.li [ Html.div [ tryIcon (App.Init.MuiIcon "Link") ] ]
-                Html.li [ tryIcon (App.Init.FAIcon "intercom") ]
+            Html.ul[Html.li[data_ "icon" "intentionally missing"
+                            Bulma.FontAwesome.fa "mo"]
 
-                Html.li [
-                    Html.div [ data_ "icon" "fort-awesome"; tryIcon (App.Init.FAIcon "fort-awesome") ]
-                ]]
+                    Html.li [ Html.divc "icon" [ Html.div [ tryIcon (App.Init.MuiIcon "Link") ] ] ]
+                    Html.li [ Html.divc "icon" [ tryIcon (App.Init.FAIcon "intercom") ] ]
+
+                    Html.li [
+                        Html.divc "icon" [
+                            Html.div [ data_ "icon" "fort-awesome"; tryIcon (App.Init.FAIcon "fort-awesome") ]
+                        ]
+                    ]]
+        ]
         App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
     ]

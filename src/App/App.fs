@@ -11,6 +11,25 @@ open App.Adapters.Config
 open App.Adapters.Msal
 open App.Components.Gen
 
+module Css =
+
+    open Sutil.Styling
+    open type Feliz.length
+
+    let globalCss = [
+
+        rule "span.info" CssRules.titleIndicator
+        rule ":global(.tabContainer)" [ Css.width (percent 100); Css.backgroundColor ("black") ]
+        rule ".fill" [ Css.width (percent 100) ]
+
+
+        rule "div.iconColumn" [ Css.height (em 1.0); Css.width (em 1.0); Css.flexShrink 0 ]
+        rule "div.buttonColumn" [ Css.height (em 1.0); Css.width (em 2.5); Css.flexShrink 0 ]
+    // rule ".tile .field" [ Css.marginRight (px 5) ]
+    // rule ".tile .field .control .box" [ Css.minWidth (px 450) ]
+    // rule "div.buttonColumn button.button" [ Css.fontSize (em 0.7) ]
+    ]
+
 type Model = {
     AuthInfo: Result<AuthenticationResult * TokenRequestResult, exn> option
 }
@@ -23,7 +42,8 @@ type MsalMode =
     | Redirect
 
 // Model helpers
-let getAuthInfo m = m.AuthInfo
+module MLens =
+    let getAuthInfo m = m.AuthInfo
 
 let console = Browser.Dom.console
 let window = Browser.Dom.window
@@ -40,7 +60,7 @@ let mustAuthEl model f =
     | Demo -> Html.div [ f Demo ]
     | ConfigType.Auth _ ->
         Bind.el (
-            model |> Store.map getAuthInfo,
+            model |> Store.map MLens.getAuthInfo,
             fun ai ->
                 match ai with
                 | Some(Ok auth) -> Html.div [ f (Auth auth) ]
@@ -52,7 +72,6 @@ let mustAuthEl model f =
 App.Adapters.Mui.all |> ignore
 
 let init () : Model * Cmd<Message> =
-
     let msalC =
         Msal.createConfig App.Adapters.Config.authConfig.AppGuid Config.authConfig.AppAuth window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
@@ -120,6 +139,7 @@ let update (msg: Message) (model: Model) : Model * Cmd<Message> =
 
         { model with AuthInfo = Some x }, Cmd.none
 
+open Css
 // In Sutil, the view() function is called *once*
 let view () =
 
@@ -163,7 +183,7 @@ let view () =
 
         let mustAuthEl f =
             Bind.el (
-                model |> Store.map getAuthInfo,
+                model |> Store.map MLens.getAuthInfo,
                 fun ai ->
                     match ai with
                     | Some(Ok auth) -> Html.div [ f auth ]
@@ -172,7 +192,7 @@ let view () =
             )
 
         Bind.el (
-            model |> Store.map getAuthInfo,
+            model |> Store.map MLens.getAuthInfo,
             fun ai ->
                 match ai with
                 | None ->
@@ -188,6 +208,9 @@ let view () =
         mustAuthEl (fun (ai, token) -> Html.div [ App.Components.Gen.Tabs.view (Choice2Of2 tabStore) ])
 
     ]
+
+let _removeMySheet =
+    globalCss |> Sutil.Styling.addGlobalStyleSheet (Browser.Dom.document)
 
 App.Init.FA.dom |> ignore
 // Start the app

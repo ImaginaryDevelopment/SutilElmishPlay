@@ -64,7 +64,7 @@ type Model = {
     AppMode: ConfigType<string>
     NavRootState: RemoteData<NavItem[]>
     NavPathState: RemoteData<NavPathResponse>
-    AclSearchResponse: RemoteData<AclSearchResponse>
+    AclSearchResponse: RemoteData<AclSearchResult>
     // we don't need to track not requested, in flight is implied by (value, None)
     AclResolutions: string list
     ResolvedAcls: Map<string, AclDisplay>
@@ -124,7 +124,7 @@ type FetchRes =
     | NavPath of NavPathResponse
     | AclState of Acl[]
     | AclResolve of NavAclResolveResponse
-    | AclSearchResolve of AclSearchResponse
+    | AclSearchResolve of AclSearchResult
     | NavItemCreate of NavItem
 
 [<RequireQualifiedAccess>]
@@ -405,10 +405,10 @@ module Updates =
                         |> Option.orElse model.FocusedItem
             }
 
-        | AclSearchResolve data ->
+        | AclSearchResolve aclSearchResult ->
             justModel {
                 model with
-                    AclSearchResponse = RemoteData.Responded(Ok data)
+                    AclSearchResponse = RemoteData.Responded(Ok aclSearchResult)
             }
         | NavItemCreate data -> justModel { model with FocusedItem = Some data }
 
@@ -691,6 +691,9 @@ module Renderers =
 let css = [
 
     rule "label>span.info" Gen.CssRules.titleIndicator
+    rule ".tabContainer" [ Css.width (percent 100) ]
+    rule ".fill" [ Css.width (percent 100) ]
+
 
     rule "div.iconColumn" [ Css.height (em 1.0); Css.width (em 1.0); Css.flexShrink 0 ]
     rule "div.buttonColumn" [ Css.height (em 1.0); Css.width (em 2.5); Css.flexShrink 0 ]
@@ -759,7 +762,7 @@ let view appMode =
 
                 // bulma tabs
                 renderTabs
-                    ""
+                    []
                     [
                         rootTab
                         pathTab

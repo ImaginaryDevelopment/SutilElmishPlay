@@ -325,7 +325,7 @@ let update
 type NavEditorCoreProps = {
     AppMode: ConfigType<string>
     AclTypes: Acl seq
-    AclSearchResponse: AclSearchResponse option
+    AclSearchResponse: AclSearchResult option
     NavItem: NavItem
     EditorMode: EditorMode
     IsFocus: bool
@@ -373,7 +373,7 @@ let renderEditor (props: NavEditorProps) =
 
         Bind.el2 obsTab obsItem (fun (tab, value) ->
             renderTabs
-                "fill"
+                []
                 [
                     {
                         Name = "Props"
@@ -425,10 +425,7 @@ let renderEditor (props: NavEditorProps) =
                 | Standalone _ ->
                     let siblings = Renderers.renderFramed dispatch dispatchParent
 
-                    App.Components.NavShared.renderEditorFrame
-                        (value.Name, value.Path, value.Type, value)
-                        [ core ]
-                        siblings
+                    App.Components.NavShared.renderEditorFrame value [ core ] siblings
                 | Child _ -> core
         )
     ]

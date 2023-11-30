@@ -129,9 +129,14 @@ type AclDisplay = {
     DisplayName: string
 }
 
-type AclSearchResponse = {
+type AclSearchApiResponse = {
     Search: string
     Results: AclDisplay[]
+}
+
+type AclSearchResult = {
+    AclName: string
+    Data: AclSearchApiResponse
 }
 
 type NavAclResolveSubError = {
@@ -182,9 +187,9 @@ type FetchArgs = {
 
 let addQueryParam n v (url: string) =
     if url.Contains "?" then
-        $"{url}&{n}={v}"
+        $"{url}&%s{n}=%s{v}"
     else
-        $"{url}?{n}={v}"
+        $"{url}?%s{n}=%s{v}"
 
 let addQueryValues url m =
     (url, m) ||> Map.fold (fun url k v -> url |> addQueryParam k v)
@@ -303,6 +308,8 @@ module private ApiNavInternals =
         printfn $"Attempting save to %s{url} - {item.Path}"
 
         async {
+            let sItem = Core.serialize item
+            using (Core.logGroup (Some "ApiSave")) <| fun _ -> Core.log sItem
 
             let! result =
                 fetchJson<ApiNavItem>
@@ -316,7 +323,7 @@ module private ApiNavInternals =
                         RequestProperties.Method HttpMethod.PATCH
                         // https://github.com/fable-compiler/fable-fetch/issues/7
                         // RequestProperties.Body (!^ item)
-                        RequestProperties.Body(!^(Core.serialize item))
+                        RequestProperties.Body(!^(sItem))
                     ]
 
             match result with
@@ -378,17 +385,29 @@ let getAcls token () : Async<Result<Acl[], exn>> =
         List.empty
 
 // for selecting parameters for a new acl
-type AclRefValueArgs = { AclName: string; SearchText: string }
+// server has its own max: 16
+// we should ensure min is > 0
+type AclRefValueArgs = {
+    AclName: string
+    SearchText: string
+    Max: int option
+}
 
 let searchAclRefValues token arv =
-    fetchJson<AclSearchResponse>
+    fetchJson<AclSearchApiResponse>
         "AclSearchResponse"
         {
             Token = token
-            RelPath = $"/api/Navigation/Acls?Acl={arv.AclName}&Search={arv.SearchText}"
+            RelPath =
+                let urlBase = $"/api/Navigation/Acls?Acl={arv.AclName}&Search={arv.SearchText}"
+
+                match arv.Max with
+                | Some i when i > 0 -> urlBase |> addQueryParam "Max" (string i)
+                | _ -> urlBase
             Arg = None
         }
         List.empty
+    |> Async.map (Result.map (fun aclSR -> { AclName = arv.AclName; Data = aclSR }))
 
 type NavAclInquiry = { AclName: string; NavId: string }
 

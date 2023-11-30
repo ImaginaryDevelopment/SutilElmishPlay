@@ -48,6 +48,7 @@ type AclParentMsg =
     // None is a valid option
     | TypeChange of Acl
     | SearchRequest of AclRefValueArgs
+    | ResolveRequest of NavAclInquiry
     | CreateAcl of AclRef * Acl
     | Change of aclName: string * AclParamModificationType * aclParam: string
     | Remove of Acl
@@ -56,6 +57,7 @@ type Msg =
     | TypeSelectChange of string
     | AclSelect of AclRef option
     | AclSearchChange of string
+    | AclParamAdd of string
 
 
 type AclRefState =
@@ -128,6 +130,7 @@ let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
     // blocks
 
     | AclSearchChange _, { SearchState = Searching } -> justError "Server is busy"
+    | AclParamAdd _, { FocusedAcl = None } -> justError "No Acl selected"
     // | AclSearchRequest, {SearchState = Searching, _} -> justError "A Search is already in flight"
     | TypeSelectChange _, { FocusedAcl = None } -> justError "Start a new acl first"
     | TypeSelectChange _, { FocusedAcl = Some { IsNew = false } } -> justError "Cannot change type on existing acl"
@@ -137,6 +140,13 @@ let update (itemAcls: AclRef seq) (msg: Msg) (model: Model) =
     // actions
 
     | Msg.AclSearchChange text, { SearchState = AcceptInput } -> justModel { model with SearchText = text }
+    | Msg.AclParamAdd value, { FocusedAcl = Some fa } ->
+        model
+        |> MLens.updateAclRef fa (fun ar -> {
+            ar with
+                Parameters = ar.Parameters |> Set.ofSeq |> Set.add value |> Set.toArray
+        })
+        |> justModel
     | TypeSelectChange v, { FocusedAcl = Some x } ->
         printfn "TypeSelected change"
         model |> MLens.updateAclRef x (fun x -> { x with Name = v }) |> justModel
@@ -210,7 +220,7 @@ module Renderers =
                 ]
         ]
 
-    let renderAclSearchResults aclParams (aclType: Acl) dispatchParent =
+    let renderAclSearchResults aclParams (aclType: Acl) onParamAdd =
         let ps =
             match aclParams with
             | [] ->
@@ -224,9 +234,11 @@ module Renderers =
             for (value, name) in ps do
                 Html.divc "columns" [
                     Html.divc "column" [
-                        bButton "Add Acl" [
+                        bButton "Add Acl Param" [
                             tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                            onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
+
+                            // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
+                            onClick (fun _ -> onParamAdd (name, value)) []
                         ]
                     ]
                     Html.divc "column" [ text name; Attr.title value ]
@@ -243,7 +255,7 @@ module Renderers =
         (aclParams: (string * string) list)
         (idMap: Map<string, AclRefState>)
         (aclType: Acl)
-        (item: AclRef)
+        (item: AclState)
         dispatch
         dispatchParent
         =
@@ -252,12 +264,15 @@ module Renderers =
             data_ "method" "renderAclParams"
             Html.divc "columns" [
                 Html.divc "column" [
-                    if item.Parameters.Length > 0 || aclType.ParameterType <> AclParameterType.None then
+                    if
+                        item.AclRef.Parameters.Length > 0
+                        || aclType.ParameterType <> AclParameterType.None
+                    then
                         Html.divc "box" [
                             // needs border or underline or font weight work
                             Html.h2 [ text "Existing" ]
                             Html.ul [
-                                for p in item.Parameters do
+                                for p in item.AclRef.Parameters do
                                     Html.li [
                                         match idMap |> Map.tryFind p with
                                         | Some AclRefState.Requested
@@ -295,6 +310,7 @@ module Renderers =
                                     AclParentMsg.SearchRequest {
                                         SearchText = v
                                         AclName = aclType.Name
+                                        Max = Some 6
                                     }
                                     |> dispatchParent)
                                 []
@@ -302,7 +318,12 @@ module Renderers =
                 ]
                 Html.divc "column is-three-fifths" [
                     data_ "purpose" "params"
-                    renderAclSearchResults aclParams aclType dispatchParent
+                    renderAclSearchResults aclParams aclType (fun (pName, pValue) ->
+                        if item.IsNew then
+                            Msg.AclParamAdd pValue |> dispatch
+                        else
+                            AclParentMsg.Change(aclType.Name, AclParamModificationType.AddParam, pValue)
+                            |> dispatchParent)
                 ]
             ]
         ]
@@ -371,31 +392,12 @@ open type Feliz.length
 open type Feliz.borderStyle
 
 let css = [
-    rule "span.info" Gen.CssRules.titleIndicator
+    // rule "span.info" Gen.CssRules.titleIndicator
     rule "h2" [ Css.borderBottom (px 1, solid, "black") ]
-    rule ".fill .tabs" [ Css.width (percent 100) ]
 
     // not working
     // rule ".panel-block>*" [
     //     Css.custom("!width", "100%")
-    // ]
-
-    // rule "button.button" [
-    // //     Css.marginBottom (px -15)
-    // //     Css.marginTop (px -15)
-    //     // Css.fontSize (em 0.7)
-    //     Css.paddingTop (px 0)
-    //     Css.paddingBottom (px 0)
-    //     Css.marginBottom (px 0)
-    //     Css.marginTop (px 0)
-    // ]
-
-    // rule "button.button>.icon" [
-    //     // Css.fontSize (rem 0.1)
-    //     Css.paddingTop (px 0)
-    //     Css.paddingBottom (px 0)
-    //     Css.marginBottom (px 0)
-    //     Css.marginTop (px 0)
     // ]
 
     rule "div.buttonColumn" [
@@ -412,7 +414,7 @@ type AclEditorProps = {
     ItemAclRefs: AclRef seq
     AclTypes: Acl seq
     ResolvedParams: System.IObservable<Map<string, AclDisplay>>
-    AclSearchResponse: AclSearchResponse option
+    AclSearchResponse: AclSearchResult option
     DispatchParent: Dispatch<AclParentMsg>
 }
 
@@ -447,7 +449,8 @@ let renderAclsEditor (props: AclEditorProps) =
                 let aclParams =
                     if selectedAclType.Searchable |> Option.defaultValue false then
                         props.AclSearchResponse
-                        |> Option.map (fun acl -> acl.Results |> Seq.map (fun v -> v.Reference, v.DisplayName))
+                        |> Option.filter (fun aclR -> aclR.AclName = selectedAclType.Name)
+                        |> Option.map (fun aclR -> aclR.Data.Results |> Seq.map (fun v -> v.Reference, v.DisplayName))
                     else
                         selectedAclType.SelectableParameters |> Option.map (Seq.map Tuple2.replicate)
                     |> Option.map List.ofSeq
@@ -461,7 +464,7 @@ let renderAclsEditor (props: AclEditorProps) =
                             aclParams
                             m
                             selectedAclType
-                            focusedAcl.AclRef
+                            focusedAcl
                             dispatch
                             props.DispatchParent)
                 )

@@ -114,24 +114,8 @@ type AclCreatorProps = {
     ResolvedAcls: System.IObservable<Map<string, AclDisplay>>
     Path: string
     AclTypes: Acl seq
-    AclSearchResponse: AclSearchResponse option
+    AclSearchResponse: AclSearchResult option
 }
-
-// let private modelToItem (model: Model) : NavItem = {
-//     Id = ""
-//     Path = model.Item.Path
-//     Parent = "Parent"
-//     Type = model.Item.ItemType
-//     Name = model.Name
-//     Description = "Description"
-//     Icon = model.Icon
-//     Weight = 0
-//     Enabled = true
-//     Url = model.Link
-//     HasUrlKey = false
-//     AclRefs = model.Acls |> Seq.map fst |> Array.ofSeq
-// }
-
 
 let renderAclCreator (props: AclCreatorProps) =
     toGlobalWindow "navCreator_props" props
@@ -146,38 +130,34 @@ let renderAclCreator (props: AclCreatorProps) =
 
     let renderCreationEditor () = [
 
-        columns3
-            [
-                if store.Value.Item.Type = Link then
-                    formField [ text "Path" ] [ textInput "Path" store.Value.Item.Path [] Msg.PathChange dispatch ]
-                    <| getError (Some "Path")
-            ] [
-                formField [ text "Type" ] [
+        columns2 [
+            if store.Value.Item.Type = Link then
+                formField [ text "Path" ] [ textInput "Path" store.Value.Item.Path [] Msg.PathChange dispatch ]
+                <| getError (Some "Path")
+        ] [
+            formField [ text "Type" ] [
 
-                    Html.divc "select" [
-                        Html.select [
-                            text "ItemType"
-                            Attr.className "select"
-                            // Attr.disabled disabled
-                            Handlers.onValueChangeIf dispatch (fun v ->
-                                NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
-                            // Html.option [ text "" ]
-                            for o in NavItemType.All do
-                                Html.option [
-                                    Attr.value (string o)
-                                    text (string o)
-                                    if store.Value.Item.Type = o then
-                                        Attr.selected true
-                                ]
-                        ]
+                Html.divc "select" [
+                    Html.select [
+                        text "ItemType"
+                        Attr.className "select"
+                        // Attr.disabled disabled
+                        Handlers.onValueChangeIf dispatch (fun v ->
+                            NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
+                        // Html.option [ text "" ]
+                        for o in NavItemType.All do
+                            Html.option [
+                                Attr.value (string o)
+                                text (string o)
+                                if store.Value.Item.Type = o then
+                                    Attr.selected true
+                            ]
                     ]
                 ]
-                <| getError (Some "Type")
-
-            ] [
-            // if store.Value.ItemType = Link then
-            //     formField [ text "Link" ] [ textInput "Link" store.Value.Link [] Msg.LinkChange dispatch ]
             ]
+            <| getError (Some "Type")
+
+        ]
 
         formField [ text "Name" ] [
             textInput
@@ -217,7 +197,7 @@ let renderAclCreator (props: AclCreatorProps) =
 
         disposeOnUnmount [ store ]
         App.Components.NavShared.renderEditorFrame
-            (eItem.Name, eItem.Path, eItem.Type, eItem)
+            eItem
             [
                 Html.divc "box" [ yield! renderCreationEditor () ]
                 Html.divc "box" [
