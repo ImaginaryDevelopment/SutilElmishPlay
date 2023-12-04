@@ -7,6 +7,7 @@ open Sutil.CoreElements
 
 open App.Init
 open App.Adapters
+open App.Adapters.Schema
 open App.Adapters.Api
 open App.Adapters.Html
 open App.Adapters.Bulma
@@ -14,11 +15,6 @@ open Core
 open Gen.Icons
 
 module Handlers = App.Adapters.Html.Handlers
-
-// TODO: is this complete and a proper representation? move to api perhaps
-// type AclType =
-//     | Selectable of values: string[] option * multiValue: bool
-//     | Reference of multiValue: bool
 
 type AclState = { IsNew: bool; AclRef: AclRef }
 

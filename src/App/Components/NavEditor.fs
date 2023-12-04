@@ -8,6 +8,7 @@ open Sutil
 open Sutil.CoreElements
 
 open App.Adapters
+open App.Adapters.Schema
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Api
@@ -28,25 +29,23 @@ type NavEditorErrorType = string
 type Model = {
     Tab: EditorTabs
     Item: NavItem
+    IconSearchValue: string
     Errors: (NavEditorErrorType * System.DateTime) list
 }
 
 type CachedState = { Tab: EditorTabs }
 
 
-type ParentMsg =
-    | AclTypeChange of Acl
-    | AclSearchRequest of AclRefValueArgs
 
 [<RequireQualifiedAccess>]
 type StandaloneParentMsg =
-    | ParentMsg of ParentMsg
+    | ParentMsg of NavShared.ParentMsg
     | Cancel
     | Saved of NavItem
 
 [<RequireQualifiedAccess>]
 type ChildParentMsg =
-    | ParentMsg of ParentMsg
+    | ParentMsg of NavShared.ParentMsg
     | GotFocus
 
 type EditorMode =
@@ -123,6 +122,7 @@ module Renderers =
     let renderIconEditor
         (propName, propObs)
         isFocus
+        iconSearchValue
         (value: string)
         (dispatch: Dispatch<EditorMsgType>)
         (pDispatch: EditorParentDispatchType)
@@ -140,6 +140,7 @@ module Renderers =
                 PropObserver = propObs
                 PropValue = value
                 IsFocus = isFocus
+                SearchValue = iconSearchValue
             }
             dispatch2
 
@@ -194,6 +195,7 @@ let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
     justModel {
         Tab = initialTab |> Option.defaultValue EditorTabs.IconTab
         Item = item
+        IconSearchValue = ""
         Errors = List.empty
     }
 
@@ -203,7 +205,7 @@ module SideEffects =
         Some { Tab = next.Tab } |> stateStore.TrySetValue
 
 let update
-    (cState, appMode)
+    (cState, appMode, getResolvedAcls: unit -> Map<string, AclDisplay>)
     (dispatchParent: EditorParentDispatchType)
     msg
     (model: Model)
@@ -253,7 +255,7 @@ let update
         justModel model
 
     | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
-        EditorParentDispatchType.DispatchParent dispatchParent (AclTypeChange v)
+        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclTypeChange v)
         justModel model
 
     | EditAcl(AclEditor.AclParentMsg.Change(aclName, pt, aclValue)) ->
@@ -271,6 +273,7 @@ let update
                                  Parameters =
                                      match pt with
                                      | AclEditor.AclParamModificationType.AddParam ->
+                                         printfn "NavEditor AddParam: %s" aclValue
                                          v.Parameters |> Set.ofArray |> Set.add aclValue |> Set.toArray
                                      | AclEditor.AclParamModificationType.RemoveParam ->
                                          v.Parameters |> Seq.filter (fun pv -> pv <> aclValue) |> Array.ofSeq
@@ -281,7 +284,39 @@ let update
                  |> Array.ofSeq)
 
         printfn "Edited acl"
-        justModel { model with Item = nextItem }
+        // TODO: check for map not having resolved the acls, how do we make sure that's not already in flight?
+        // is the map AclName -> AclDisplay or AclDisplay guid to AclDisplay?
+        let resolvedAcls = getResolvedAcls ()
+
+        let unresolvedAcls =
+            nextItem.AclRefs
+            |> Seq.collect (fun aclR ->
+                aclR.Parameters
+                |> Seq.choose (fun p ->
+                    // check for in flight resolves?
+                    match resolvedAcls |> Map.tryFind aclR.Name with
+                    | None -> Some(aclR.Name, p)
+                    | Some _ -> None))
+            |> Map.ofSeqGroups
+
+        let nextModel = { model with Item = nextItem }
+
+        if not <| Map.isEmpty unresolvedAcls then
+            let aclParamResolveRequest =
+                unresolvedAcls
+                |> Map.toSeq
+                |> Seq.collect (fun (k, v) -> v |> Seq.map (fun v -> { AclName = k; NavId = v }))
+                |> List.ofSeq
+                |> NavShared.ParentMsg.AclParamResolveRequest
+
+            match dispatchParent with
+            | EditorParentDispatchType.Child dispatchParent ->
+                aclParamResolveRequest |> ChildParentMsg.ParentMsg |> dispatchParent
+            | EditorParentDispatchType.Standalone dispatchParent ->
+                aclParamResolveRequest |> StandaloneParentMsg.ParentMsg |> dispatchParent
+
+        justModel nextModel
+
 
     | EditAcl(AclEditor.Remove acl) ->
         let nextItem =
@@ -303,7 +338,7 @@ let update
 
         justModel { model with Item = nextItem }
     | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
-        EditorParentDispatchType.DispatchParent dispatchParent (ParentMsg.AclSearchRequest v)
+        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclSearchRequest v)
         justModel model
 
     | Save(Responded(Error e)) -> MLens.addError e model |> justModel
@@ -333,7 +368,7 @@ type NavEditorCoreProps = {
 
 type NavEditorProps = {
     Core: NavEditorCoreProps
-    ResolvedAclParams: System.IObservable<Map<string, AclDisplay>>
+    ResolvedAclParams: ObsSlip<Map<string, AclDisplay>>
     NavItemIconObservable: System.IObservable<string>
 }
 
@@ -353,7 +388,10 @@ let renderEditor (props: NavEditorProps) =
 
     let store, dispatch =
         props.Core.NavItem
-        |> Store.makeElmish (init cState) (update (cState, props.Core.AppMode) dispatchParent) ignore
+        |> Store.makeElmish
+            (init cState)
+            (update (cState, props.Core.AppMode, (fun () -> props.ResolvedAclParams.Value)) dispatchParent)
+            ignore
 
     match props.Core.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
@@ -373,7 +411,7 @@ let renderEditor (props: NavEditorProps) =
 
         Bind.el2 obsTab obsItem (fun (tab, value) ->
             renderTabs
-                []
+                [ "fill" ]
                 [
                     {
                         Name = "Props"
@@ -394,6 +432,7 @@ let renderEditor (props: NavEditorProps) =
                                         PropObserver =
                                             props.NavItemIconObservable |> Observable.filter (String.isValueString)
                                         PropValue = value.Icon
+                                        SearchValue = store.Value.IconSearchValue
                                         IsFocus = props.Core.IsFocus
                                     }
                                     (IconMsg >> dispatch)

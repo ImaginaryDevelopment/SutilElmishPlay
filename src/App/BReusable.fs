@@ -160,3 +160,103 @@ module Map =
             m |> Map.add key (value :: m[key])
         else
             m |> Map.add key [ value ]
+
+    let ofSeqGroups items =
+        items
+        |> Seq.groupBy fst
+        |> Map.ofSeq
+        |> Map.map (fun _ v -> v |> Seq.map snd |> List.ofSeq)
+// let ofSeqPairs items =
+//     (Map.empty, items)
+//     ||> Seq.fold(fun m (key,value) ->
+//         m |> upsert key value
+//     )
+
+// System.Collections.Generic.
+type Observed<'t>(valueOpt: 't option) =
+    let sync = obj ()
+    let mutable value = valueOpt
+    let observers = System.Collections.Generic.List<System.IObserver<'t>>()
+    let remove observer () = observers.Remove observer |> ignore
+
+    member _.SetValue v =
+        value <- Some v
+        observers |> Seq.iter (fun obs -> obs.OnNext v)
+
+    member _.Value = value
+
+
+    interface System.IObservable<'t> with
+        member this.Subscribe(observer: System.IObserver<'t>) : System.IDisposable =
+            observers.Add observer
+
+            { new System.IDisposable with
+                member this.Dispose() = lock sync <| remove observer
+            }
+
+// my own take that includes the ability to peek the current value
+// based on https://stackoverflow.com/questions/54031423/how-do-i-create-a-subject-f-observable
+type Subject<'t>(current: 't option) =
+    let sync = obj ()
+    let mutable current = current
+    let mutable stopped = false
+    let observers = ResizeArray<System.IObserver<'t>>()
+    let iter f = observers |> Seq.iter f
+
+    let onCompleted () =
+        if not stopped then
+            stopped <- true
+            iter (fun observer -> observer.OnCompleted())
+
+    let onError ex () =
+        if not stopped then
+            stopped <- true
+            iter (fun observer -> observer.OnError ex)
+
+    let next value () =
+        if not stopped then
+            current <- Some value
+            iter (fun observer -> observer.OnNext(value))
+
+    let remove observer () = observers.Remove observer |> ignore
+
+    member _.Value = current
+    member _.Next value = lock sync <| next value
+    member _.Error ex = lock sync <| onError ex
+    member _.Completed() = lock sync <| onCompleted
+
+    interface System.IObserver<'t> with
+        member x.OnCompleted() = x.Completed()
+        member x.OnError ex = x.Error ex
+        member x.OnNext value = x.Next value
+
+    interface System.IObservable<'t> with
+        member this.Subscribe(observer: System.IObserver<'t>) =
+            observers.Add observer
+
+            { new System.IDisposable with
+                member this.Dispose() = lock sync <| remove observer
+            }
+
+// pass the current value, and an observable
+type ObsSlip<'t>(value: 't, obs: System.IObservable<'t>) =
+    let mutable value = value
+    let d = obs.Subscribe(fun v -> value <- v)
+    member _.Value = value
+
+    interface System.IObservable<'t> with
+        member this.Subscribe(observer: System.IObserver<'t>) = obs.Subscribe observer
+
+    interface System.IDisposable with
+        member _.Dispose() = d.Dispose()
+
+// type ObsOptSlip<'t>(value: 't option, obs: System.IObservable<'t>) =
+//     let mutable value = value
+//     let d = obs.Subscribe(fun v -> value <- Some v)
+//     member _.TryGetValue() = value
+
+//     interface System.IObservable<'t> with
+//         member this.Subscribe(observer: System.IObserver<'t>) = obs.Subscribe observer
+
+//     interface System.IDisposable with
+//         member _.Dispose() = d.Dispose()

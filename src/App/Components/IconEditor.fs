@@ -18,12 +18,14 @@ open Core
 
 type IconEditorMsg =
     | NameChange of propName: string * value: string
+    | SearchChange of string
     | GotFocus
 
 type IconEditorProps = {
     PropName: string
     PropObserver: System.IObservable<string>
     PropValue: string
+    SearchValue: string
     IsFocus: bool
 }
 
@@ -75,6 +77,9 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
 
     Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)
+        formField [ text "Search" ] [
+            textInput "Icon Search" props.SearchValue [] (fun v -> IconEditorMsg.SearchChange v) dispatch
+        ] []
         formField [ text "Icon Name" ] [ columns2 (Seq.ofList [ nameInput ]) (Seq.ofList [ nameSelect ]) ] []
 
     ]

@@ -1,14 +1,17 @@
 module App.Adapters.Api
 
-open BReusable
+
+
 open Fetch
 open Fetch.Types
 
 open Fable.Core
 open Fable.Core.JsInterop
 
-
 open Browser
+
+open BReusable
+open App.Adapters.Schema
 
 
 type MyInfoResponse = {
@@ -124,10 +127,6 @@ type Acl = {
 ///
 type AclRef = { Name: string; Parameters: string[] }
 
-type AclDisplay = {
-    Reference: string // guid
-    DisplayName: string
-}
 
 type AclSearchApiResponse = {
     Search: string

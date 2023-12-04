@@ -25,6 +25,12 @@ let css = [
     ]
 ]
 
+
+type ParentMsg =
+    | AclTypeChange of Acl
+    | AclSearchRequest of AclRefValueArgs
+    | AclParamResolveRequest of NavAclInquiry list
+
 let renderEditorFrame (value: NavItem) core siblings =
     Html.divc "panel editorFrame" [
         data_ "file" "NavShared"

@@ -11,6 +11,7 @@ open Sutil.Styling
 open type Feliz.length
 
 open App.Adapters
+open App.Adapters.Schema
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Config
@@ -49,13 +50,13 @@ type CachedState = {
 let stateStore: LocalStorage.IAccessor<CachedState> =
     LocalStorage.StorageAccess.CreateStorage("Root_CachedState")
 
-let resolveAclsAccess =
+let resolvedAclLookupAccess =
     //Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
-    Core.LocalStorage.StorageAccessor<Map<string, string>, _>(
+    Core.LocalStorage.StorageAccessor<ResolvedAclLookup, _>(
         "Root_AclsAccess",
         {
-            Getter = Map.ofArray
-            Setter = Map.toArray
+            Getter = Map.ofArray >> Map.map Map.ofArray
+            Setter = Map.map Map.toArray >> Map.toArray
         }
     )
     :> Core.LocalStorage.IAccessor<_>
@@ -66,8 +67,12 @@ type Model = {
     NavPathState: RemoteData<NavPathResponse>
     AclSearchResponse: RemoteData<AclSearchResult>
     // we don't need to track not requested, in flight is implied by (value, None)
+    // do we need to worry about tracking which acl name these in flights are?
+    // does this track acl resolutions, or acl ref resolutions or both?
     AclResolutions: string list
-    ResolvedAcls: Map<string, AclDisplay>
+    // aclName -> aclRef guid -> AclDisplay
+    ResolvedAclLookup: ResolvedAclLookup
+    // acl types, not a specific acl, or its children
     AclTypeState: RemoteData<Acl[]>
     FocusedItem: NavItem option
     LastFocusedItemId: string
@@ -103,7 +108,7 @@ module private MLens =
     let getPath x = x.Path
     let getRootTab x = x.RootTab
     let getErrors x = x.Errors
-    let getResolvedAcls x = x.ResolvedAcls
+    let getResolvedAclLookup x = x.ResolvedAclLookup
 
     let addError msg (x: Model) = {
         x with
@@ -198,6 +203,23 @@ module Commands =
     let createNavItem token req =
         getResponse token FetchRes.NavItemCreate "NavItemCreate" App.Adapters.Api.NavItems.create req
 
+    let getAclResolved token req =
+        getResponse token FetchRes.AclResolve "AclResolve" App.Adapters.Api.getNavAclResolve req
+
+// module Commands =
+//     let resolveAclParams token nar : Cmd<Result<NavAclResolveResponse, string>> =
+//         let mapError (ex: exn) = $"Save Error: {ex.Message}"
+
+//         let f item =
+//             async {
+//                 let! resp = App.Adapters.Api.getNavAclResolve token item
+
+//                 // TODO: swap item with response item, or at least compare them?
+//                 return resp
+//             }
+
+//         Cmd.OfAsync.either f nar (Result.mapError mapError) (fun x -> mapError x |> Result.Error)
+
 
 // TODO: timeout to expire error messages, make sure they get logged to console on expiration
 let init appMode =
@@ -219,7 +241,7 @@ let init appMode =
             let cmd2: Cmd<Msg> = Commands.getAcls token
             InFlight, Cmd.batch [ cmd1; cmd2 ]
 
-    let resolvedAcls = resolveAclsAccess.TryGetValue()
+    let resolvedAclLookup = resolvedAclLookupAccess.TryGetValue()
 
     {
         AppMode = appMode
@@ -248,8 +270,8 @@ let init appMode =
             | None -> None
             |> Option.defaultValue RootTabs.Main
 
-        ResolvedAcls =
-            resolvedAcls
+        ResolvedAclLookup =
+            resolvedAclLookup
             |> Option.map (
                 Map.map (fun k v -> {
                     AclDisplay.DisplayName = v
@@ -546,6 +568,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Saved value), _ ->
         // TODO: post updated value back to api
         printfn "Saved!"
+        model.AclResolutions
         block "Save not implemented"
 
     | Msg.FocusItem item, _ ->
@@ -705,11 +728,14 @@ let css = [
 let view appMode =
     let store, dispatch = appMode |> Store.makeElmish init update ignore
 
+    let obsSlip =
+        new ObsSlip<_>(store.Value.ResolvedAcls, store |> Store.map MLens.getResolvedAcls)
+
     toGlobalWindow "root_model" store.Value
     // let selected : IStore<NavItem option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
-        disposeOnUnmount [ store ]
+        disposeOnUnmount [ store; obsSlip ]
         data_ "file" "Root"
 
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
@@ -794,7 +820,7 @@ let view appMode =
                                                     EditorMode =
                                                         NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
                                                 }
-                                                ResolvedAclParams = store |> Store.map MLens.getResolvedAcls
+                                                ResolvedAclParams = obsSlip
                                                 NavItemIconObservable =
                                                     store
                                                     |> Store.map MLens.getFocusedItem
@@ -823,7 +849,7 @@ let view appMode =
                                                 DispatchParent = (Msg.CreatorMsg >> dispatch)
                                                 AppMode = appMode
                                                 AclTypes = aclTypes
-                                                ResolvedAcls = store |> Store.map MLens.getResolvedAcls
+                                                ResolvedAcls = obsSlip
                                                 Path = store.Value.Path
                                                 AclSearchResponse =
                                                     store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet

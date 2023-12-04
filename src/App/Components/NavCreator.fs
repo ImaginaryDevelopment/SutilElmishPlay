@@ -7,13 +7,13 @@ open BReusable
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Schema
 open App.Adapters.Api
 open App.Adapters.Html
 open App.Adapters.Config
 open App.Adapters.Bulma
 
 open Core
-
 
 
 type FocusType =
@@ -32,31 +32,9 @@ module MLens =
     let getItem x = x.Item
     let setItemProp model f = { model with Item = f model.Item }
 
-
-// let modelToCreatingItem (model: Model) : CreatingNavItem =
-//     let niCt =
-//         match model.ItemType with
-//         | NavItemType.Link -> NavItemCreateType.Link model.Path
-//         | NavItemType.Folder -> NavItemCreateType.Folder
-
-//     {
-//         AclRefs = model.Acls |> Seq.map fst |> Array.ofSeq
-//         Path = model.Path
-//         // required
-//         Type = niCt
-//         // required
-//         Name = model.Name
-//         Description = null
-//         Icon = model.Icon
-//         Weight = 0
-//         Enabled = false
-//         Url = null
-//         HasUrlKey = false
-//     }
-
 type ParentMsg =
     | CreateNavItem of ValidNavItem
-    | EditorParentMsg of NavEditor.ParentMsg
+    | EditorParentMsg of NavShared.ParentMsg
 
 type Msg =
     | ItemTypeChange of NavItemType
@@ -111,7 +89,7 @@ type ModelState =
 type AclCreatorProps = {
     DispatchParent: Dispatch<ParentMsg>
     AppMode: ConfigType<string>
-    ResolvedAcls: System.IObservable<Map<string, AclDisplay>>
+    ResolvedAcls: ObsSlip<ResolvedAclLookup>
     Path: string
     AclTypes: Acl seq
     AclSearchResponse: AclSearchResult option

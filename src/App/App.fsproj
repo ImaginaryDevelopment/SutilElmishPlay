@@ -5,6 +5,7 @@
   <ItemGroup>
     <Compile Include="BReusable.fs" />
 
+    <Compile Include="Adapters/Schema.fs" />
     <Compile Include="Adapters/Js.fs" />
     <Compile Include="Adapters/Html.fs" />
     <Compile Include="Adapters/Bulma.fs" />
