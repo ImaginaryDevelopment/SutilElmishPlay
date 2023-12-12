@@ -11,12 +11,16 @@ open App.Adapters.Api
 
 open App.Components.Gen
 open App.Components.Gen.Icons
+open App.Adapters.Bulma
+open App.Adapters.Api.Schema
+open App.Adapters.Api.Shared
+open App.Adapters.Schema
 
 
 type RemoteStates = {
     MyInfoState: RemoteData<MyInfoResponse>
     NavRootState: RemoteData<NavItem[]>
-    AclState: RemoteData<Acl[]>
+    AclState: RemoteData<AclType[]>
     AclParamSearchState: RemoteData<AclSearchResult>
 }
 
@@ -43,7 +47,7 @@ module private MLens =
 type Msg =
     | MyInfo of RemoteMsg<unit, MyInfoResponse>
     | NavRoot of RemoteMsg<unit, NavItem[]>
-    | Acl of RemoteMsg<unit, Acl[]>
+    | Acl of RemoteMsg<unit, AclType[]>
     | AclParam of RemoteMsg<AclRefValueArgs, AclSearchResult>
 
 // enable mass scaffolding of api endpoint testers
@@ -62,7 +66,7 @@ let init (dia: DiagInitArgs) =
             AclParamSearchState = NotRequested
         }
         AclParamSearchInput = {
-            AclName = ""
+            AclName = AclName ""
             SearchText = ""
             Max = None
         }
@@ -70,10 +74,11 @@ let init (dia: DiagInitArgs) =
     Cmd.none
 
 module Commands =
-    let getMyInfo token =
+    let getMyInfo token : Cmd<Msg> =
         let f () =
             async {
-                let! resp = App.Adapters.Api.getMyInfo token
+                let! resp = getMyInfo token
+                let resp = resp |> Result.mapError Choice2Of2
                 return Msg.MyInfo(Response resp)
             }
 
@@ -95,8 +100,10 @@ let updateNavRoot, viewNavRoot =
             GetArgs = fun model -> model.AppMode
             Fetch =
                 function
-                | ConfigType.Auth token -> App.Adapters.Api.NavItems.getNavRoot token ()
-                | ConfigType.Demo -> Async.ofResult (Ok Root.dummyData)
+                | ConfigType.Auth token ->
+                    App.Adapters.Api.Mapped.NavItems.getNavRoot token ()
+                    |> Async.map (Result.mapError Choice2Of2)
+                | ConfigType.Demo -> Async.ofValue (Ok Root.dummyData)
         }
 
     let view =
@@ -123,8 +130,10 @@ let updateAcl, viewAcls =
             GetArgs = fun model -> model.AppMode
             Fetch =
                 function
-                | Demo -> Async.ofResult (Ok Array.empty)
-                | Auth token -> App.Adapters.Api.getAcls token () // 'tFetchArg -> Async<Result<'t,ErrorType>>
+                | Demo -> Async.ofValue (Ok Array.empty)
+                | Auth token ->
+                    App.Adapters.Api.Mapped.getAclTypes token ()
+                    |> Async.map (Result.mapError Choice2Of2) // 'tFetchArg -> Async<Result<'t,ErrorType>>
         }
 
     let view =
@@ -157,8 +166,8 @@ let updateAclSearch, viewAclSearch =
             Fetch =
                 function
                 // TODO: validate search params?
-                | Auth token, si -> App.Adapters.Api.searchAclRefValues token si
-                | Demo, _ -> Async.ofResult (Error <| System.Exception("Not Implemented"))
+                | Auth token, si -> searchAclRefValues token si |> Async.map (Result.mapError Choice2Of2)
+                | Demo, _ -> Async.ofValue (Error <| Choice2Of2(System.Exception("Not Implemented")))
         }
 
     let view =
@@ -226,7 +235,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             model
             |> setAState (fun states -> {
                 states with
-                    MyInfoState = Responded(Error(System.Exception("Not Implemented")))
+                    MyInfoState = Responded(Error(Choice2Of2(System.Exception("Not Implemented"))))
             }),
             Cmd.none
     | MyInfo(Response x), _ ->
@@ -260,6 +269,9 @@ let view dia =
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
         disposeOnUnmount [ store ]
+        // renderTabs [
+
+        // ]
         Html.divc "box" [
 
             Html.ul[Html.li[data_ "icon" "intentionally missing"

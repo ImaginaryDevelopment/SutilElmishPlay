@@ -32,7 +32,7 @@ type IconEditorProps = {
 let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>) =
     toGlobalWindow "iconEditor_props" props
 
-    let nameInput =
+    let nameInput: SutilElement =
         Html.inputc "input" [
             type' "text"
             if props.IsFocus then
@@ -44,7 +44,7 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
         ]
 
     // TODO: name select search
-    let nameSelect =
+    let nameSelect: SutilElement =
         Bind.el (
             props.PropObserver,
             function
@@ -77,10 +77,12 @@ let renderIconEditor (props: IconEditorProps) (dispatch: Dispatch<IconEditorMsg>
 
     Html.div [
         tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)
+
         formField [ text "Search" ] [
             textInput "Icon Search" props.SearchValue [] (fun v -> IconEditorMsg.SearchChange v) dispatch
+            bButton "Search" [ text "Search Icons" ]
         ] []
-        formField [ text "Icon Name" ] [ columns2 (Seq.ofList [ nameInput ]) (Seq.ofList [ nameSelect ]) ] []
+        formField [ text "Icon Name" ] [ columns2 [ nameInput ] [ nameSelect ] ] []
 
     ]
 

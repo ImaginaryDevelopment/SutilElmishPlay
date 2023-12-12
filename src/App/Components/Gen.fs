@@ -4,7 +4,7 @@ open Sutil
 open Sutil.Core
 open Sutil.CoreElements
 
-type ErrorType = exn
+open App.Adapters.Schema
 
 module CssRules =
     open Sutil.Styling
@@ -236,6 +236,7 @@ module Tabs =
                         if tab.Value = tabValue then
                             Attr.className "active"
                         Html.span [
+                            Attr.id ("Gen_Tabs_" + tab.Label)
                             if tab.Value <> tabValue then
                                 onClick (fun _ -> Msg.TabClick tab.Value |> dispatch) []
                             text tab.Label

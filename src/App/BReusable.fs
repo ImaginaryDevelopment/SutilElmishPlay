@@ -68,6 +68,11 @@ let (|ValueString|NonValueString|) value =
         NonValueString()
 
 module Option =
+    let getOrFail msg =
+        function
+        | None -> failwith msg
+        | Some v -> v
+
     let ofValueString =
         function
         | ValueString v -> Some v
@@ -109,6 +114,11 @@ module Option =
             | None -> Some value
             | Some f -> f value
 
+    let ofValueList =
+        function
+        | [] -> None
+        | x -> Some x
+
 let (|EqualsI|_|) y = Option.ofBool (String.equalsIStr y)
 
 let equalsIStr (item: 't) (x: string) =
@@ -145,7 +155,7 @@ module Async =
         }
 
     let catch x = x |> Async.Catch |> map Result.ofChoice
-    let ofResult x = async { return x }
+    let ofValue x = async { return x }
 
 module Parse =
     let tryBool x =
@@ -156,16 +166,43 @@ module Parse =
 
 module Map =
     let upsert key value (m: Map<_, _ list>) =
-        if m |> Map.containsKey key then
-            m |> Map.add key (value :: m[key])
-        else
-            m |> Map.add key [ value ]
+        m
+        |> Map.change key (fun others -> value :: (others |> Option.defaultValue List.empty) |> Some)
+    // if m |> Map.containsKey key then
+    //     m |> Map.add key (value :: m[key])
+    // else
+    //     m |> Map.add key [ value ]
+
+    // does not remap any keys, choosing values only
+    let mapChoose f m =
+        (Map.empty, m)
+        ||> Map.fold (fun m k v ->
+            match f k v with
+            | None -> m
+            | Some fv -> m |> Map.add k fv)
+
+    let choose f m =
+        (Map.empty, m)
+        ||> Map.fold (fun m k v ->
+            match f k v with
+            | None -> m
+            | Some(fk, fv) -> m |> Map.add fk fv)
 
     let ofSeqGroups items =
         items
         |> Seq.groupBy fst
         |> Map.ofSeq
         |> Map.map (fun _ v -> v |> Seq.map snd |> List.ofSeq)
+
+    let addNest rootKey subKey value (m: Map<_, Map<_, _>>) =
+        m
+        |> Map.tryFind rootKey
+        |> function
+            | None -> m |> Map.add rootKey ([ subKey, value ] |> Map.ofSeq)
+            | Some subMap -> m |> Map.add rootKey (subMap |> Map.add subKey value)
+
+    let tryGetValueMap m = if Map.isEmpty m then None else Some m
+
 // let ofSeqPairs items =
 //     (Map.empty, items)
 //     ||> Seq.fold(fun m (key,value) ->
@@ -250,6 +287,10 @@ type ObsSlip<'t>(value: 't, obs: System.IObservable<'t>) =
     interface System.IDisposable with
         member _.Dispose() = d.Dispose()
 
+module ObsSlip =
+    let map f (x: ObsSlip<_>) =
+        let value = f x.Value
+        new ObsSlip<_>(value, x |> Observable.map f)
 // type ObsOptSlip<'t>(value: 't option, obs: System.IObservable<'t>) =
 //     let mutable value = value
 //     let d = obs.Subscribe(fun v -> value <- Some v)

@@ -5,12 +5,16 @@
   <ItemGroup>
     <Compile Include="BReusable.fs" />
 
-    <Compile Include="Adapters/Schema.fs" />
+    <Compile Include="Schema.fs" />
+
     <Compile Include="Adapters/Js.fs" />
     <Compile Include="Adapters/Html.fs" />
     <Compile Include="Adapters/Bulma.fs" />
     <Compile Include="Adapters/Config.fs" />
-    <Compile Include="Adapters/Api.fs" />
+    <Compile Include="Adapters/Api/Schema.fs" />
+    <Compile Include="Adapters/Api/Shared.fs" />
+    <Compile Include="Adapters/Api/Raw.fs" />
+    <Compile Include="Adapters/Api/Mapped.fs" />
     <Compile Include="Adapters/Msal.fs" />
     <Compile Include="Adapters/Mui.generated.fs" />
 

@@ -1,4 +1,4 @@
-module App
+module AppMain
 
 open Browser.Types
 open Fable.Core

@@ -12,6 +12,9 @@ open App.Adapters.Schema
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Api
+open App.Adapters.Api.Shared
+open App.Adapters.Api.Schema
+open App.Adapters.Api.Mapped
 
 open App.Components.Gen
 open App.Components.Gen.Icons
@@ -88,7 +91,7 @@ module Commands =
 
         let f item =
             async {
-                let! resp = Api.NavItems.save token item
+                let! resp = NavItems.save token item
 
                 // TODO: swap item with response item, or at least compare them?
                 return
@@ -119,30 +122,6 @@ type EditorParentDispatchType =
         | _ -> ()
 
 module Renderers =
-    let renderIconEditor
-        (propName, propObs)
-        isFocus
-        iconSearchValue
-        (value: string)
-        (dispatch: Dispatch<EditorMsgType>)
-        (pDispatch: EditorParentDispatchType)
-        =
-        let dispatch2 =
-            function
-            | App.Components.IconEditor.IconEditorMsg.NameChange(propName, value) ->
-                dispatch (EditProp(propName, value))
-            | IconEditor.IconEditorMsg.GotFocus ->
-                EditorParentDispatchType.DispatchChildOnly pDispatch ChildParentMsg.GotFocus
-
-        App.Components.IconEditor.renderIconEditor
-            {
-                PropName = propName
-                PropObserver = propObs
-                PropValue = value
-                IsFocus = isFocus
-                SearchValue = iconSearchValue
-            }
-            dispatch2
 
     let renderPropsEditor fError value dispatch =
         let ff name value =
@@ -204,8 +183,53 @@ module SideEffects =
     let saveStateCache (stateStore: LocalStorage.IAccessor<CachedState>) (next: Model) =
         Some { Tab = next.Tab } |> stateStore.TrySetValue
 
+    let getUnresolved (aclTypes: AclType seq) (resolvedAcls: ResolvedAclLookup) navItem dispatchParent =
+        let unresolvedAcls =
+            navItem
+            |> NavItem.GetRefParams aclTypes
+            |> Map.choose (fun k (aclType, v) ->
+                match resolvedAcls |> Map.tryFind k with
+                | None -> // all params need resolved
+                    Some(k, (aclType, v))
+                | Some ra ->
+                    let unresolved = ra.Keys |> Set.ofSeq |> Set.difference v
+                    Some(k, (aclType, unresolved)))
+
+        if not <| Map.isEmpty unresolvedAcls then
+            let aclParamResolveRequests =
+                let f k (acl, v) : NavAclInquiry = {
+                    AclName = k
+                    NavId = NavId v
+                    AclType = acl
+                }
+
+                unresolvedAcls
+                |> Map.toSeq
+                |> Seq.collect (fun (k, (aclType, v)) ->
+                    v
+                    |> Seq.map (fun v ->
+                        let req: AclRefLookup = { // NavAclInquiry
+                            AclName = k
+                            AclRefId = v
+                            AclType = aclType.AclParamType
+                        }
+
+                        req))
+                |> Seq.map NavShared.ParentMsg.AclParamResolveRequest
+                |> List.ofSeq
+
+            match dispatchParent with
+            | EditorParentDispatchType.Child dispatchParent ->
+                aclParamResolveRequests
+                |> List.map ChildParentMsg.ParentMsg
+                |> List.iter dispatchParent
+            | EditorParentDispatchType.Standalone dispatchParent ->
+                aclParamResolveRequests
+                |> List.map StandaloneParentMsg.ParentMsg
+                |> List.iter dispatchParent
+
 let update
-    (cState, appMode, getResolvedAcls: unit -> Map<string, AclDisplay>)
+    (cState, appMode, aclTypes, getResolvedAcls: unit -> ResolvedAclLookup)
     (dispatchParent: EditorParentDispatchType)
     msg
     (model: Model)
@@ -218,12 +242,15 @@ let update
     match msg with
     // blocks
 
-    | EditAcl(AclEditor.AclParentMsg.CreateAcl(aclRef, acl)) when
-        model.Item.AclRefs |> Seq.exists (fun e -> e.Name = acl.Name)
+    | EditAcl(AclEditor.AclParentMsg.CreateAcl(aclRef, _)) when
+        model.Item.AclRefs.Keys |> Seq.exists (fun e -> e = aclRef.Name)
         ->
-        block $"Acl Create for existing acl '{acl.Name}'"
+        block $"Acl Create for existing acl '{AclName.getText aclRef.Name}'"
 
     // actions
+    | EditAcl(AclEditor.AclResolveRequest req) ->
+        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclParamResolveRequest req)
+        justModel model
 
     | TabChange t ->
         let next = { model with Tab = t }
@@ -238,6 +265,7 @@ let update
             model with
                 Item = { model.Item with Enabled = value }
         }
+    | IconMsg(IconEditor.SearchChange value) -> justModel { model with IconSearchValue = value }
     | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
     | EditProp(name, value) ->
         try
@@ -259,82 +287,43 @@ let update
         justModel model
 
     | EditAcl(AclEditor.AclParentMsg.Change(aclName, pt, aclValue)) ->
-        let nextItem =
-            cloneSet
-                model.Item
-                (nameof model.Item.AclRefs)
-                (model.Item.AclRefs
-                 |> Seq.map (fun v ->
-                     if v.Name = aclName then
-                         printfn "Found vName aclName match: %s" aclName
-
-                         {
-                             v with
-                                 Parameters =
-                                     match pt with
-                                     | AclEditor.AclParamModificationType.AddParam ->
-                                         printfn "NavEditor AddParam: %s" aclValue
-                                         v.Parameters |> Set.ofArray |> Set.add aclValue |> Set.toArray
-                                     | AclEditor.AclParamModificationType.RemoveParam ->
-                                         v.Parameters |> Seq.filter (fun pv -> pv <> aclValue) |> Array.ofSeq
-                         }
-                     else
-                         printfn "No Match found for aclName: %s" aclName
-                         v)
-                 |> Array.ofSeq)
 
         printfn "Edited acl"
-        // TODO: check for map not having resolved the acls, how do we make sure that's not already in flight?
-        // is the map AclName -> AclDisplay or AclDisplay guid to AclDisplay?
-        let resolvedAcls = getResolvedAcls ()
 
-        let unresolvedAcls =
-            nextItem.AclRefs
-            |> Seq.collect (fun aclR ->
-                aclR.Parameters
-                |> Seq.choose (fun p ->
-                    // check for in flight resolves?
-                    match resolvedAcls |> Map.tryFind aclR.Name with
-                    | None -> Some(aclR.Name, p)
-                    | Some _ -> None))
-            |> Map.ofSeqGroups
+        let nextItem =
+            match pt with
+            | AclEditor.AclParamModificationType.AddParam -> NavItem.AddAclRefParam aclName aclValue model.Item
+            | AclEditor.AclParamModificationType.RemoveParam ->
+                NavItem.TryChangeAclNameParam aclName (Set.remove aclValue) model.Item
 
-        let nextModel = { model with Item = nextItem }
+        match nextItem with
+        | Ok nextItem ->
+            // TODO: check for map not having resolved the acls, how do we make sure that's not already in flight?
+            // is the map AclName -> AclDisplay or AclDisplay guid to AclDisplay?
+            let resolvedAcls = getResolvedAcls ()
 
-        if not <| Map.isEmpty unresolvedAcls then
-            let aclParamResolveRequest =
-                unresolvedAcls
-                |> Map.toSeq
-                |> Seq.collect (fun (k, v) -> v |> Seq.map (fun v -> { AclName = k; NavId = v }))
-                |> List.ofSeq
-                |> NavShared.ParentMsg.AclParamResolveRequest
+            SideEffects.getUnresolved aclTypes resolvedAcls nextItem dispatchParent
 
-            match dispatchParent with
-            | EditorParentDispatchType.Child dispatchParent ->
-                aclParamResolveRequest |> ChildParentMsg.ParentMsg |> dispatchParent
-            | EditorParentDispatchType.Standalone dispatchParent ->
-                aclParamResolveRequest |> StandaloneParentMsg.ParentMsg |> dispatchParent
+            let nextModel = { model with Item = nextItem }
 
-        justModel nextModel
-
+            justModel nextModel
+        | Error e -> MLens.addError e model, Cmd.none
 
     | EditAcl(AclEditor.Remove acl) ->
-        let nextItem =
-            cloneSet
-                model.Item
-                (nameof model.Item.AclRefs)
-                (model.Item.AclRefs
-                 |> Seq.filter (fun aclRef -> aclRef.Name <> acl.Name)
-                 |> Array.ofSeq)
+        let nextItem = {
+            model.Item with
+                AclRefs = model.Item.AclRefs.Remove acl.Name
+        }
 
         justModel { model with Item = nextItem }
 
     | EditAcl(AclEditor.AclParentMsg.CreateAcl(aclRef, acl)) ->
         printfn "cloning item to add acl"
         // should we try to block repeated acl names?
-        let nextItem =
-            let n = nameof model.Item.AclRefs
-            cloneSet model.Item n (model.Item.AclRefs |> Seq.append [ aclRef ] |> Array.ofSeq)
+        let nextItem = {
+            model.Item with
+                AclRefs = model.Item.AclRefs |> Map.add aclRef.Name acl
+        }
 
         justModel { model with Item = nextItem }
     | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
@@ -359,7 +348,7 @@ let update
 
 type NavEditorCoreProps = {
     AppMode: ConfigType<string>
-    AclTypes: Acl seq
+    AclTypes: AclType seq
     AclSearchResponse: AclSearchResult option
     NavItem: NavItem
     EditorMode: EditorMode
@@ -368,7 +357,7 @@ type NavEditorCoreProps = {
 
 type NavEditorProps = {
     Core: NavEditorCoreProps
-    ResolvedAclParams: ObsSlip<Map<string, AclDisplay>>
+    ResolvedAclParams: ObsSlip<ResolvedAclLookup>
     NavItemIconObservable: System.IObservable<string>
 }
 
@@ -390,7 +379,9 @@ let renderEditor (props: NavEditorProps) =
         props.Core.NavItem
         |> Store.makeElmish
             (init cState)
-            (update (cState, props.Core.AppMode, (fun () -> props.ResolvedAclParams.Value)) dispatchParent)
+            (update
+                (cState, props.Core.AppMode, props.Core.AclTypes, (fun () -> props.ResolvedAclParams.Value))
+                dispatchParent)
             ignore
 
     match props.Core.EditorMode with
@@ -444,7 +435,10 @@ let renderEditor (props: NavEditorProps) =
                         Render =
                             fun () ->
                                 AclEditor.renderAclsEditor {
-                                    ItemAclRefs = value.AclRefs
+                                    ItemAcls =
+                                        value.AclRefs
+                                        |> Map.toSeq
+                                        |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
                                     AclTypes = props.Core.AclTypes
                                     ResolvedParams = props.ResolvedAclParams
                                     AclSearchResponse = props.Core.AclSearchResponse

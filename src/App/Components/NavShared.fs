@@ -7,7 +7,8 @@ open Core
 open Sutil
 open Sutil.CoreElements
 
-open App.Adapters.Api
+open App.Adapters.Api.Schema
+open App.Adapters.Api.Shared
 open App.Adapters.Html
 
 open App.Components.Gen.Icons
@@ -27,9 +28,10 @@ let css = [
 
 
 type ParentMsg =
-    | AclTypeChange of Acl
+    | AclTypeChange of AclType
     | AclSearchRequest of AclRefValueArgs
-    | AclParamResolveRequest of NavAclInquiry list
+    | NavAclParamResolveRequest of NavAclInquiry list
+    | AclParamResolveRequest of AclRefLookup
 
 let renderEditorFrame (value: NavItem) core siblings =
     Html.divc "panel editorFrame" [

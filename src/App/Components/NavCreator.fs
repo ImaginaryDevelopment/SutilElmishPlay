@@ -8,7 +8,11 @@ open Sutil
 open Sutil.CoreElements
 
 open App.Adapters.Schema
+
 open App.Adapters.Api
+open App.Adapters.Api.Schema
+open App.Adapters.Api.Mapped
+
 open App.Adapters.Html
 open App.Adapters.Config
 open App.Adapters.Bulma
@@ -23,7 +27,7 @@ type FocusType =
 type Model = {
     // NavItem: NavItem
     Item: NavItem
-    Acls: (AclRef * Acl) list
+    Acls: (AclData * AclType) list
     Focus: FocusType
 }
 
@@ -49,7 +53,7 @@ let inline justModel m = m, Cmd.none
 let init path : Model * Cmd<Msg> =
     {
         Item = {
-            Id = null
+            Id = NavId null
             Parent = null
             Type = NavItemType.Link
             Description = null
@@ -57,7 +61,7 @@ let init path : Model * Cmd<Msg> =
             Name = ""
             Url = ""
             HasUrlKey = false
-            AclRefs = Array.empty
+            AclRefs = Map.empty
             Icon = "City"
             Weight = 0
             Enabled = false
@@ -91,7 +95,7 @@ type AclCreatorProps = {
     AppMode: ConfigType<string>
     ResolvedAcls: ObsSlip<ResolvedAclLookup>
     Path: string
-    AclTypes: Acl seq
+    AclTypes: AclType seq
     AclSearchResponse: AclSearchResult option
 }
 
