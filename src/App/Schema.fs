@@ -1,7 +1,10 @@
 module App.Adapters.Schema
 
+open Fable.Core
+
 type ErrorType = Choice<string[], exn>
 
+[<Erase>]
 type AclName =
     | AclName of string // Allow-By-Group, Allow-By-User, etc...
 
@@ -9,7 +12,10 @@ type AclName =
         function
         | AclName name -> name
 
+[<Erase>]
 type AclRefId = AclRefId of string
+
+[<Erase>]
 type NavId = NavId of string
 
 type AclDisplay = {

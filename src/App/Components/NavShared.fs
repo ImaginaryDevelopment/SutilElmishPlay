@@ -51,10 +51,16 @@ let renderEditorFrame (value: NavItem) core siblings =
     ]
     |> withStyle css
 
-let renderError vErrors x =
+let renderErrors title errors = [
+    Attr.title title
+    Attr.classes [ "help"; "is-danger" ]
+    text (String.concat "," errors)
+]
+
+let renderErrorMapMaybe (vErrors: Map<'t option, _> option) fToString (x: 't option) =
     vErrors
     |> Option.bind (fun eMap -> eMap |> Map.tryFind x)
     |> Option.defaultValue List.empty
     |> function
         | [] -> []
-        | errors -> [ Attr.classes [ "help"; "is-danger" ]; text (String.concat "," errors) ]
+        | errors -> renderErrors (fToString x) errors

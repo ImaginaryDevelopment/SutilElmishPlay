@@ -514,6 +514,11 @@ let renderAclsEditor (props: AclEditorProps) =
                 Bind.el (
                     props.ResolvedParams,
                     (fun m ->
+                        printfn
+                            "Rendering Acl Params with %i aclNames and %i items"
+                            m.Count
+                            (m |> Map.toSeq |> Seq.collect (snd >> Map.toSeq) |> Seq.length)
+
                         Renderers.renderAclParams
                             {
                                 SearchText = store.Value.SearchText

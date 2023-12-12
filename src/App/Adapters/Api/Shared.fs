@@ -173,6 +173,18 @@ let getAclReferenceDisplay
                 Arg = None
             }
             List.empty
-        |> Async.map (Result.map (fun narResp -> AclName aclName, narResp))
+        |> Async.map (
+            Result.map (fun narResp ->
+                if narResp.Errors |> Array.isEmpty |> not then
+                    narResp.Errors
+                    |> Array.iter (fun e ->
+                        eprintfn $"Resolve '%s{aclName}' error: '%A{e.AdditionalInfo}'"
+                        Core.log e)
+
+                narResp.Resolved
+                |> Array.iter (fun r -> printfn $"Resolved %s{aclName} - '%s{r.DisplayName}' from '%A{r.Reference}'")
+
+                AclName aclName, narResp)
+        )
         |> Async.map (Result.mapError Choice2Of2)
     | _ -> Async.ofValue (Error <| Choice1Of2 [| "Type is not a reference type" |])

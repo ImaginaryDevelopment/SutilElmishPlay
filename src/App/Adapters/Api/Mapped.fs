@@ -8,7 +8,6 @@ open App.Adapters.Api.Schema.Raw
 open App.Adapters.Api.Shared
 open App.Adapters.Api.Raw
 
-
 type FieldName = string
 // determine is creation based on empty id
 type NavValidation = Result<ValidNavItem, Map<FieldName option, string list>>
@@ -36,6 +35,7 @@ and ValidNavItem = {
                 ]
                 |> List.choose (fun (e, f, v) -> if v then Some(f, e) else None)
 
+            printfn "Name is : %s" item.Name
             (Map.empty, e) ||> List.fold (fun m (f, e) -> m |> Map.upsert f e)
 
         if Map.isEmpty eMap then

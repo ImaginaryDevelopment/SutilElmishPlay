@@ -34,6 +34,7 @@ type Model = {
 module MLens =
     let getIcon (x: Model) = x.Item.Icon
     let getItem x = x.Item
+    let getFocus x = x.Focus
     let setItemProp model f = { model with Item = f model.Item }
 
 type ParentMsg =
@@ -77,7 +78,9 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
     match msg with
     | ItemTypeChange nit -> MLens.setItemProp model (fun item -> { item with Type = nit }), Cmd.none
     | PathChange next -> MLens.setItemProp model (fun item -> { item with Path = next }), Cmd.none
-    | NameChange next -> MLens.setItemProp model (fun item -> { item with Name = next }), Cmd.none
+    | NameChange next ->
+        printfn "Setting name to %s" next
+        MLens.setItemProp model (fun item -> { item with Name = next }), Cmd.none
 
     | EditorMsg NavEditor.ChildParentMsg.GotFocus -> { model with Focus = FocusType.Editor }, Cmd.none
     | EditorMsg(NavEditor.ChildParentMsg.ParentMsg pm) ->
@@ -105,16 +108,12 @@ let renderAclCreator (props: AclCreatorProps) =
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
 
-    let eItem = store.Value.Item
-    let vResult = ValidNavItem.ValidateNavItem eItem
-    let vItem, vErrors = vResult |> Option.ofResult
-    let getError = NavShared.renderError vErrors
 
-    let renderCreationEditor () = [
+    let renderCreationEditor getError allErrors (item: NavItem) vItem = [
 
         columns2 [
             if store.Value.Item.Type = Link then
-                formField [ text "Path" ] [ textInput "Path" store.Value.Item.Path [] Msg.PathChange dispatch ]
+                formField [ text "Path" ] [ textInput "Path" item.Path [] Msg.PathChange dispatch ]
                 <| getError (Some "Path")
         ] [
             formField [ text "Type" ] [
@@ -131,7 +130,7 @@ let renderAclCreator (props: AclCreatorProps) =
                             Html.option [
                                 Attr.value (string o)
                                 text (string o)
-                                if store.Value.Item.Type = o then
+                                if item.Type = o then
                                     Attr.selected true
                             ]
                     ]
@@ -155,53 +154,76 @@ let renderAclCreator (props: AclCreatorProps) =
         <| getError (Some "Name")
 
         formField [ text "Create" ] [
-            Bind.el (
-                store |> Store.map (fun s -> s.Item),
-                fun item ->
-                    bButton "Create" [
-                        text "Create"
-                        // let cni = MLens.modelToCreatingItem store.Value
+            bButton "Create" [
+                text "Create"
 
-                        // should we check for dupes here and disable if so?
-                        if String.isValueString item.Name |> not then
-                            Attr.disabled true
-                        else
-                            match vItem with
-                            | None -> ()
-                            | Some vItem -> onClick (fun _ -> ParentMsg.CreateNavItem vItem |> props.DispatchParent) []
-                    ]
-            )
+                // let cni = MLens.modelToCreatingItem store.Value
+
+                // should we check for dupes here and disable if so?
+                if String.isValueString item.Name |> not then
+                    Attr.disabled true
+                else
+                    match vItem with
+                    | None -> ()
+                    | Some vItem -> onClick (fun _ -> ParentMsg.CreateNavItem vItem |> props.DispatchParent) []
+            ]
         ]
         <| getError None
+        formField [ text "Errors" ] allErrors []
     ]
 
     Html.div [
 
         disposeOnUnmount [ store ]
-        App.Components.NavShared.renderEditorFrame
-            eItem
-            [
-                Html.divc "box" [ yield! renderCreationEditor () ]
-                Html.divc "box" [
-                    // Bind.el2 props.Path
-                    Bind.el (
-                        store |> Store.map MLens.getItem,
-                        fun _ ->
-                            NavEditor.renderEditor {
-                                Core = {
-                                    AppMode = props.AppMode
-                                    AclTypes = props.AclTypes
-                                    NavItem = eItem
-                                    IsFocus = store.Value.Focus = FocusType.Editor
-                                    AclSearchResponse = props.AclSearchResponse
-                                    EditorMode =
-                                        NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
+        Bind.el2 (store |> Store.map MLens.getItem) (store |> Store.map MLens.getFocus) (fun (item, focus) ->
+            // this may not get recalculated when validation changes
+            let eItem = store.Value.Item
+            let vResult = ValidNavItem.ValidateNavItem eItem
+            let vItem, vErrors = vResult |> Option.ofResult
+
+            let allErrors: SutilElement list =
+                vErrors
+                |> Option.map (fun vm ->
+                    (List.empty, vm)
+                    ||> Map.fold (fun errs fnOpt fnErrs ->
+                        let fn = fnOpt |> Option.defaultValue ""
+                        let adds = NavShared.renderErrors fn fnErrs
+                        errs @ adds))
+                |> Option.defaultValue List.empty
+
+            let getError =
+                NavShared.renderErrorMapMaybe vErrors (function
+                    | None -> ""
+                    | Some v -> v)
+
+            App.Components.NavShared.renderEditorFrame
+                eItem
+                [
+                    Html.divc "box" (renderCreationEditor getError allErrors item vItem)
+                    Html.divc "box" [
+                        // Bind.el2 props.Path
+                        Bind.el (
+                            store |> Store.map MLens.getItem,
+                            fun _ ->
+                                NavEditor.renderEditor {
+                                    Core = {
+                                        AppMode = props.AppMode
+                                        AclTypes = props.AclTypes
+                                        NavItem = eItem
+                                        IsFocus = focus = FocusType.Editor
+                                        AclSearchResponse = props.AclSearchResponse
+                                        EditorMode =
+                                            NavEditor.EditorMode.Child(
+                                                "NavCreator",
+                                                vResult,
+                                                Msg.EditorMsg >> dispatch
+                                            )
+                                    }
+                                    ResolvedAclParams = props.ResolvedAcls
+                                    NavItemIconObservable = store |> Store.map MLens.getIcon
                                 }
-                                ResolvedAclParams = props.ResolvedAcls
-                                NavItemIconObservable = store |> Store.map MLens.getIcon
-                            }
-                    )
+                        )
+                    ]
                 ]
-            ]
-            List.empty
+                List.empty)
     ]

@@ -130,7 +130,6 @@ module Renderers =
         fun () ->
             Html.div [
                 data_ "method" "renderPropsEditor"
-                // ff (nameof value.Enabled) (string value.Enabled)
                 formField [ text (nameof value.Enabled) ] [
                     checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
                 ]
@@ -394,7 +393,10 @@ let renderEditor (props: NavEditorProps) =
         | EditorMode.Child(_, vItem, _) -> vItem
         |> Option.ofResult
 
-    let getError = NavShared.renderError vErrors
+    let getError =
+        NavShared.renderErrorMapMaybe vErrors (function
+            | None -> ""
+            | Some v -> v)
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
