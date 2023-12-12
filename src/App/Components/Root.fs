@@ -124,6 +124,7 @@ type Model = {
     // includes in flight and finished navIds
     // implies all Acls that are Refs are sent for resolution
     NavIdsSentForResolution: NavId Set
+    AclsSentForResolution: Map<AclName, AclRefId>
     // aclName -> aclRef guid -> AclDisplay
     ResolvedAclLookup: AclLookupState
     // acl types, not a specific acl, or its children
@@ -378,6 +379,7 @@ let init appMode =
         AppMode = appMode
         NavRootState = if iState = InFlight then InFlight else NotRequested
         NavPathState = NotRequested
+        AclsSentForResolution = Map.empty
         NavIdsSentForResolution = Set.empty
         AclSearchResponse = NotRequested
         AclTypeState = if iState = InFlight then InFlight else NotRequested
@@ -613,83 +615,13 @@ module Updates =
                         |> Option.orElse model.FocusedItem
             }
 
-()
-
-let (|BlockEmptyAclSearchRequests|_|) =
-    function
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavShared.AclTypeChange { Name = AclName NonValueString })),
-      { FocusedItem = None } -> Some()
-    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavShared.AclSearchRequest { SearchText = NonValueString })), _ ->
-        Some()
-    | _ -> None
-
-let update msg (model: Model) : Model * Cmd<Msg> =
-    printfn "Root Update running: %A ('%s')" msg model.Path
-
-    let inline block title = block title msg model
-
-    let atOpt =
-        match model.AppMode with
-        | ConfigType.Demo -> None
-        | ConfigType.Auth accessToken -> Some accessToken
-
-
-    match msg, model with
-    // block actions
-    | Msg.FetchRequest(FetchReq.Nav(None)), { NavRootState = InFlight } -> block "InFlight NavRoot"
-    | Msg.FetchRequest(FetchReq.Nav(Some _)), { NavPathState = InFlight } -> block "InFlight NavPath"
-    | Msg.FetchRequest FetchReq.AclTypes, { AclTypeState = InFlight } -> block "InFlight AclTypes"
-
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavShared.AclSearchRequest _)),
-      { AclSearchResponse = InFlight } -> block "InFlight AclSearchRequest"
-    | Msg.PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
-    | Msg.PathChange _, { NavPathState = InFlight } -> block "InFlight PathChange"
-    | Msg.PathClick _, { NavPathState = InFlight } -> block "InFlight PathClick"
-
-    | Msg.TabChange v, { RootTab = y } when v = y -> block "already selected tab change"
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Cancel), { FocusedItem = None } -> block "No FocusedItem for edit"
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavShared.AclTypeChange { Name = AclName NonValueString })),
-      { FocusedItem = None } -> block "No AclType for eager loading"
-    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavShared.AclTypeChange { Name = AclName NonValueString })), _ ->
-        block "No AclType for eager loading"
-    | BlockEmptyAclSearchRequests -> block "Empty search found"
-
-    | Msg.PathReq,
-      {
-          NavPathState = _
-          Path = NonValueString _
-      } -> block "PathReq NoPath"
-
-    // actions
-
-    // consider a confirm dialog for navigating from the editor?
-    | Msg.TabChange v, _ -> justModel { model with RootTab = v }
-
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Cancel), _ -> justModel { model with FocusedItem = None }
-
-    // resolve a user's search request for parameter ids by search text for display name
-    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavShared.AclSearchRequest search)), _
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavShared.AclSearchRequest search)), _ ->
-        match model.AppMode, model.FocusedItem with
-        | ConfigType.Demo, _ -> block "Demo search not implemented"
-        | ConfigType.Auth accessToken, Some fi ->
-            let cmd = Commands.getNavAclParamSearch accessToken search
-
-            {
-                model with
-                    AclSearchResponse = InFlight
-            },
-            cmd
-
-        | ConfigType.Auth _, None -> block "AclSearch without Focused Item"
-
-    // resolve an acl type's parameters if it has any existing
-    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavShared.AclTypeChange v)), _
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg(NavShared.AclTypeChange v)), _ ->
+    let updateAclType (v: AclType) model block : Model * Cmd<Msg> =
         printfn "AclType Changed to '%A'" v
 
         match model.AppMode, model.FocusedItem, model.AclTypeState with
+        | _, _, RemoteData.Responded(Error e) -> block $"Unable to get AclTypes: %A{e}"
         | ConfigType.Demo, _, _ -> block "AclTypeChange demo not implemented"
+        | ConfigType.Auth _, None, _ -> block "AclTypeChange without Focused Item"
         | ConfigType.Auth accessToken, Some fi, RemoteData.Responded(Ok aclTypes) when
             model.NavIdsSentForResolution |> Set.contains fi.Id |> not
             ->
@@ -714,15 +646,98 @@ let update msg (model: Model) : Model * Cmd<Msg> =
                 }
             | _ -> justModel model
         | ConfigType.Auth _, Some _, RemoteData.Responded(Ok _) -> justModel model
-        | ConfigType.Auth _, None, _ -> block "AclTypeChange without Focused Item"
-        | _, _, RemoteData.Responded(Error e) -> block <| sprintf "Unable to get AclTypes: %A" e
+        | _, _, RemoteData.InFlight -> block $"AclTypes are not yet available"
+        | _, _, RemoteData.NotRequested -> block $"AclTypes have not been requested"
+
+    let updateEditorSharedMsg (msg: NavShared.ParentMsg) model block : Model * Cmd<Msg> =
+        match msg, model with
+        // blocks
+        | NavShared.AclTypeChange { Name = AclName NonValueString }, { FocusedItem = None } ->
+            block "No AclType for eager loading"
+        | NavShared.AclSearchRequest { SearchText = NonValueString }, _ -> block "Empty search found"
+
+        | NavShared.AclSearchRequest _, { AclSearchResponse = InFlight } -> block "InFlight AclSearchRequest"
+
+        // outsourcing
+
+        // resolve an acl type's parameters if it has any existing
+        | NavShared.AclTypeChange v, _
+        | NavShared.AclTypeChange v, _ -> updateAclType v model block
+        | NavShared.AclParamResolveRequest arl, _ ->
+            match model.AppMode with
+            | ConfigType.Auth token -> model, Commands.getAclResolved token arl
+            | _ -> block "Demo acl resolve not implemented"
+
+        // resolve a user's search request for parameter ids by search text for display name
+        | NavShared.AclSearchRequest req, _ ->
+            match model.AppMode, model.FocusedItem with
+            | ConfigType.Auth accessToken, Some _ ->
+                let cmd = Commands.getNavAclParamSearch accessToken req
+
+                {
+                    model with
+                        AclSearchResponse = InFlight
+                },
+                cmd
+            | ConfigType.Demo, _ -> block "Demo search not implemented"
+            | _, None -> block "AclSearch without Focused Item"
+
+    let updateEditorMsg (msg: NavEditor.StandaloneParentMsg) model block : Model * Cmd<Msg> =
+        match msg, model with
+        // blocks
+        | NavEditor.StandaloneParentMsg.Cancel, { FocusedItem = None } -> block "No FocusedItem for edit"
+        // outsourcing
+        // this is redundant and for completeness
+        | NavEditor.StandaloneParentMsg.ParentMsg msg, _ -> updateEditorSharedMsg msg model block
+        // actions
+        | NavEditor.StandaloneParentMsg.Cancel, _ -> justModel { model with FocusedItem = None }
+
+        | NavEditor.StandaloneParentMsg.Saved _, _ ->
+            // TODO: post updated value back to api
+            printfn "Saved!"
+            // is there anything to do?
+            block "Save completed"
 
 
-    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.Saved _), _ ->
-        // TODO: post updated value back to api
-        printfn "Saved!"
-        // is there anything to do?
-        block "Save completed"
+()
+
+let update msg (model: Model) : Model * Cmd<Msg> =
+    printfn "Root Update running: %A ('%s')" msg model.Path
+
+    let inline block title = block title msg model
+
+    let atOpt =
+        match model.AppMode with
+        | ConfigType.Demo -> None
+        | ConfigType.Auth accessToken -> Some accessToken
+
+
+    match msg, model with
+    // block actions
+    | Msg.FetchRequest(FetchReq.Nav(None)), { NavRootState = InFlight } -> block "InFlight NavRoot"
+    | Msg.FetchRequest(FetchReq.Nav(Some _)), { NavPathState = InFlight } -> block "InFlight NavPath"
+    | Msg.FetchRequest FetchReq.AclTypes, { AclTypeState = InFlight } -> block "InFlight AclTypes"
+
+    | Msg.PathReq, { NavPathState = InFlight } -> block "InFlight PathReq"
+    | Msg.PathChange _, { NavPathState = InFlight } -> block "InFlight PathChange"
+    | Msg.PathClick _, { NavPathState = InFlight } -> block "InFlight PathClick"
+
+    | Msg.TabChange v, { RootTab = y } when v = y -> block "already selected tab change"
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg(NavShared.AclTypeChange { Name = AclName NonValueString })), _ ->
+        block "No AclType for eager loading"
+
+    | Msg.PathReq, { Path = NonValueString _ } -> block "PathReq NoPath"
+
+    // outsourcing of blocks and actions
+    | Msg.CreatorMsg(NavCreator.EditorParentMsg msg), _
+    | Msg.EditorMsg(NavEditor.StandaloneParentMsg.ParentMsg msg), _ -> Updates.updateEditorSharedMsg msg model block
+
+    | Msg.EditorMsg msg, _ -> Updates.updateEditorMsg msg model block
+
+    // actions
+
+    // consider a confirm dialog for navigating from the editor?
+    | Msg.TabChange v, _ -> justModel { model with RootTab = v }
 
     | Msg.FocusItem item, _ ->
         justModel {
@@ -752,7 +767,6 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.FetchFail(title, ex), _ -> model |> MLens.addChcError title ex |> justModel
 
     | Msg.FetchResolve msg, _ -> Updates.fetchResolve msg model
-
 
     // requests for remotes:
 

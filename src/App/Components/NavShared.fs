@@ -30,7 +30,6 @@ let css = [
 type ParentMsg =
     | AclTypeChange of AclType
     | AclSearchRequest of AclRefValueArgs
-    | NavAclParamResolveRequest of NavAclInquiry list
     | AclParamResolveRequest of AclRefLookup
 
 let renderEditorFrame (value: NavItem) core siblings =
