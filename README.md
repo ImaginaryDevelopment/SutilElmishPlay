@@ -19,8 +19,10 @@ The simplest Sutil Elmish application. This gives you a development area and sho
     npm run start
 ```
 
-### Build
+### Build/Publish
 
 ```shell
 npm run build
 ```
+
+ which will dump into public\bundle.js
