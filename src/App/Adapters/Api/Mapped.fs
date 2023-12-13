@@ -137,6 +137,14 @@ module NavItems =
         ValidNavItem.ValidateNavItem cni |> Result.map (create token)
 
     let save token (item: NavItem) =
+
+        let sItem = Core.serialize item
+
+        using (Core.logGroup (Some "SaveItem"))
+        <| fun _ ->
+            Core.log sItem
+            Core.log item
+
         let apiNavItem = NavItemAdapters.toApiNavItem item
 
         ApiNavInternals.save token apiNavItem

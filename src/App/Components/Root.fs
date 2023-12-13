@@ -702,7 +702,7 @@ module Updates =
 ()
 
 let update msg (model: Model) : Model * Cmd<Msg> =
-    printfn "Root Update running: %A ('%s')" msg model.Path
+    printfn "Root Update running: %s ('%s')" (string msg |> String.truncateDisplay debug 20) model.Path
 
     let inline block title = block title msg model
 
@@ -849,6 +849,8 @@ module Renderers =
             Html.divc "column" [
                 Html.label [
                     text item.Name
+                    if not item.Enabled then
+                        Attr.className "strike"
                     Html.spanc "info" [ text "*"; Attr.title (Core.pretty stripped) ]
                     Html.spanc "info" [ text "*"; Attr.title (Core.pretty item.AclRefs) ]
                 ]
@@ -881,6 +883,7 @@ module Renderers =
 let css = [
 
     rule "label>span.info" Gen.CssRules.titleIndicator
+    rule "label.strike" [ Css.textDecorationLineThrough ]
     rule ".tabContainer" [ Css.width (percent 100) ]
     rule ".fill" [ Css.width (percent 100) ]
 

@@ -60,6 +60,23 @@ module String =
         | null -> null
         | _ -> value.Replace(delimiter, replacement)
 
+    // skip allows debug overrides
+    let truncateDisplay skip limit value =
+        if limit < 1 then
+            failwith "Limit was less than 1"
+
+        let len =
+            value |> Option.ofObj |> Option.map (String.length) |> Option.defaultValue -1
+
+        if not skip && len > limit then
+            // what if the length isn't greater than 3?
+            if len < 4 then
+                value[0..limit]
+            else
+                value[0 .. limit - 3] + "..."
+        else
+            value
+
 
 let (|ValueString|NonValueString|) value =
     if String.isValueString value then
@@ -162,6 +179,7 @@ module Parse =
         System.Boolean.TryParse x
         |> function
             | true, v -> Some v
+            | false, _ when x = "on" -> Some true
             | false, _ -> None
 
 module Map =

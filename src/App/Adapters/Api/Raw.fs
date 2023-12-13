@@ -61,7 +61,11 @@ module ApiNavInternals =
 
         async {
             let sItem = Core.serialize item
-            using (Core.logGroup (Some "ApiSave")) <| fun _ -> Core.log sItem
+
+            using (Core.logGroup (Some "SaveApi"))
+            <| fun _ ->
+                Core.log sItem
+                Core.log item
 
             let! result =
                 fetchJson<ApiNavItem>
