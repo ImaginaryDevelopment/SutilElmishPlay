@@ -32,7 +32,6 @@ type NavEditorErrorType = string
 type Model = {
     Tab: EditorTabs
     Item: NavItem
-    IconSearchValue: string
     Errors: (NavEditorErrorType * System.DateTime) list
 }
 
@@ -81,7 +80,7 @@ type EditorMsgType =
     | EnabledChange of bool
     | EditAcl of AclEditor.AclParentMsg
     | TabChange of EditorTabs
-    | IconMsg of IconEditor.IconEditorMsg
+    | IconMsg of IconEditor.IconEditorParentMsg
     | Save of SaveMsg
 
 module Commands =
@@ -173,7 +172,6 @@ let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
     justModel {
         Tab = initialTab |> Option.defaultValue EditorTabs.IconTab
         Item = item
-        IconSearchValue = ""
         Errors = List.empty
     }
 
@@ -264,8 +262,7 @@ let update
             model with
                 Item = { model.Item with Enabled = value }
         }
-    | IconMsg(IconEditor.SearchChange value) -> justModel { model with IconSearchValue = value }
-    | IconMsg(IconEditor.IconEditorMsg.NameChange(name, value))
+    | IconMsg(IconEditor.IconEditorParentMsg.NameChange(name, value))
     | EditProp(name, value) ->
         try
             let nextItem = cloneSet model.Item name value
@@ -277,7 +274,7 @@ let update
             MLens.addError $"Failed to set property: %s{name} on %s{serialize model.Item}" model
             |> justModel
 
-    | IconMsg(IconEditor.IconEditorMsg.GotFocus) ->
+    | IconMsg(IconEditor.IconEditorParentMsg.GotFocus) ->
         EditorParentDispatchType.DispatchChildOnly dispatchParent ChildParentMsg.GotFocus
         justModel model
 
@@ -425,7 +422,6 @@ let renderEditor (props: NavEditorProps) =
                                         PropObserver =
                                             props.NavItemIconObservable |> Observable.filter (String.isValueString)
                                         PropValue = value.Icon
-                                        SearchValue = store.Value.IconSearchValue
                                         IsFocus = props.Core.IsFocus
                                     }
                                     (IconMsg >> dispatch)

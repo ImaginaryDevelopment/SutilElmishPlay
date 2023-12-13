@@ -14,3 +14,4 @@ bundle.js
 
 # Fable Mocha Tests output
 dist/tests
+.env.local
