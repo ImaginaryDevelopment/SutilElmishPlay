@@ -29,7 +29,7 @@ jobs:
     #- name: Test
     #  run: dotnet test --no-build --verbosity normal
     - name: Npm Restore
-      run: npm restore
+      run: npm install
     - name: Publish
       run: npm run build
     - uses: actions/upload-artifact@v3
