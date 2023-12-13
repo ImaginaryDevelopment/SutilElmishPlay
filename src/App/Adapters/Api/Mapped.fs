@@ -26,7 +26,7 @@ and ValidNavItem = {
                 [
                     "Creation distinction failed", Some(nameof item.Url), isCreating && String.isValueString itemId
                     "Cannot nest folders", Some(nameof item.Parent), item.Type = NavItemType.Folder && isNested
-                    "Empty link",
+                    "Link: Empty Url",
                     Some(nameof item.Url),
                     item.Type = NavItemType.Link && not <| String.isValueString item.Url
                     "Name too short",

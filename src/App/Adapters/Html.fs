@@ -59,7 +59,7 @@ let checkbox titling (value: bool) children (onChange: bool -> 't) (dispatch: Di
         Attr.isChecked value
         Attr.title titling
         yield! children
-        Handlers.onValueChangeIf dispatch (Parse.tryBool >> Option.map onChange)
+        Handlers.onValueChange dispatch (fun _ -> not value |> onChange)
     ]
 
 module Observable =
