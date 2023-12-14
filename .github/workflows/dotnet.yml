@@ -57,5 +57,5 @@ jobs:
           add-paths: |
             public/bundle.js
             public/index.html
-          base: pages-ci
+          # base: pages-ci
           branch: github-pages
