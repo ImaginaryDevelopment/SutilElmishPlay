@@ -22,7 +22,7 @@ jobs:
 
       - name: Switch branch # https://stackoverflow.com/questions/26961371/switch-on-another-branch-create-if-not-exists-without-checking-if-already-exi
         run: |
-          git checkout -B github-pages
+          git checkout -B gh-pages
           git merge master
 
       - name: Restore tools
