@@ -21,9 +21,10 @@ jobs:
           dotnet-version: 7.0.x
 
       - name: Switch branch # https://stackoverflow.com/questions/26961371/switch-on-another-branch-create-if-not-exists-without-checking-if-already-exi
+        # git checkout -B gh-pages
         run: |
           git fetch origin gh-pages
-          git checkout -B gh-pages
+          git checkout gh-pages
           git merge master
 
       - name: Restore tools
@@ -69,7 +70,7 @@ jobs:
         # https://github.com/peter-evans/create-pull-request/tree/main
         uses: peter-evans/create-pull-request@v5
         with:
-          #   add-paths: |
-          #     dist/bundle.js
-          #     dist/index.html
+          add-paths: |
+            dist/bundle.js
+            dist/index.html
           branch: pages-update
