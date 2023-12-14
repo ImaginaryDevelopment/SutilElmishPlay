@@ -5,36 +5,57 @@ name: .NET
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: 7.0.x
-    - name: Restore tools
-      run: dotnet tool restore
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build --no-restore
-    #- name: Test
-    #  run: dotnet test --no-build --verbosity normal
-    - name: Npm Restore
-      run: npm install
-    - name: Publish
-      run: npm run build
-    - uses: actions/upload-artifact@v3
-      with:
-        name: js
-        path: |
-          public/bundle.js
-          public/index.html
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 7.0.x
+      - name: Switch branch # https://stackoverflow.com/questions/26961371/switch-on-another-branch-create-if-not-exists-without-checking-if-already-exi
+        run: |
+          git checkout -B pages-ci
+          git merge master
+
+      - name: Restore tools
+        run: dotnet tool restore
+      - name: Restore dependencies
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore
+      #- name: Test
+      #  run: dotnet test --no-build --verbosity normal
+      - name: Npm Restore
+        run: npm install
+      - name: Publish
+        run: npm run build
+      - uses: actions/upload-artifact@v3
+        with:
+          name: js
+          path: |
+            public/bundle.js
+            public/index.html
+
+      # - name: CreateBranch
+      # https://stackoverflow.com/questions/63619329/github-action-get-commit-message
+      # run: |
+      #   git checkout -B pages-pr
+      #   git add *
+      #   git commit -m "${{github.event.head_commit.message}}"
+
+      - name: Create Pull Request
+        # https://github.com/peter-evans/create-pull-request/tree/main
+        uses: peter-evans/create-pull-request@v5
+        with:
+          path: |
+            public/bundle.js
+            public/index.html
+          base: pages-ci
+          branch: github-pages

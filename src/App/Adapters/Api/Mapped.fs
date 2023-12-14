@@ -35,7 +35,6 @@ and ValidNavItem = {
                 ]
                 |> List.choose (fun (e, f, v) -> if v then Some(f, e) else None)
 
-            printfn "Name is : %s" item.Name
             (Map.empty, e) ||> List.fold (fun m (f, e) -> m |> Map.upsert f e)
 
         if Map.isEmpty eMap then
