@@ -1,5 +1,7 @@
 module AppMain
 
+open BReusable
+
 open Browser.Types
 open Fable.Core
 
@@ -73,6 +75,12 @@ App.Adapters.Mui.all |> ignore
 
 let init () : Model * Cmd<Message> =
     let msalC =
+        match App.Adapters.Config.authConfig.AppGuid, Config.authConfig.AppAuth with
+        | NonValueString, NonValueString -> failwith "App not configured"
+        | NonValueString, _ -> failwith "Missing App Guid"
+        | _, NonValueString -> failwith "Missing AppAuth"
+        | ValueString _, ValueString _ -> ()
+
         Msal.createConfig App.Adapters.Config.authConfig.AppGuid Config.authConfig.AppAuth window.location.origin
         // |> Adapters.Msal.createPublicClientApplication
         // |> Adapters.Msal.PublicClientApplication.Create
