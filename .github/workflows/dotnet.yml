@@ -24,6 +24,10 @@ jobs:
         run: |
           git checkout -B github-pages
           git merge master
+      - name: Make dist
+        run: |
+          if (not exist dist) { mkdir dist }
+          ver
 
       - name: Restore tools
         run: dotnet tool restore
