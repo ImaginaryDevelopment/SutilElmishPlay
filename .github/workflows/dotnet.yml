@@ -35,30 +35,37 @@ jobs:
       #  run: dotnet test --no-build --verbosity normal
       - name: Npm Restore
         run: npm install
+
       - name: Publish
         run: npm run build
+
       - uses: actions/upload-artifact@v3
         with:
           name: js
           path: |
             public/bundle.js
             public/index.html
+      - name: Copy to dist
+        run: |
+          IF exist dist ( echo dist exists ) ELSE ( mkdir dist && echo dist created)
+          copy public/bundle.js dist/bundle.js
+          copy public/index.html dist/index.html
       # - name: Commit changes
       #   run: |
       #     git add --force public/bundle.js
       #     git add public/index.html
       #     git commit -m "${{github.event.head_commit.message}}"
-
       # - name: CreateBranch
       # https://stackoverflow.com/questions/63619329/github-action-get-commit-message
       # run: |
       #   git checkout -B pages-pr
       #   git add *
       #   git commit -m "${{github.event.head_commit.message}}"
-
       - name: Create Pull Request
         # https://github.com/peter-evans/create-pull-request/tree/main
         uses: peter-evans/create-pull-request@v5
         with:
-          # add-paths: public/bundle.js
+          add-paths: |
+            dist/bundle.js
+            dist/index.html
           branch: pages-update
