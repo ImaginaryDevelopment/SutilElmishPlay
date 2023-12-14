@@ -43,11 +43,11 @@ jobs:
           path: |
             public/bundle.js
             public/index.html
-      - name: Commit changes
-        run: |
-          git add public/bundle.js
-          git add public/index.html
-          git commit -m "${{github.event.head_commit.message}}"
+      # - name: Commit changes
+      #   run: |
+      #     git add --force public/bundle.js
+      #     git add public/index.html
+      #     git commit -m "${{github.event.head_commit.message}}"
 
       # - name: CreateBranch
       # https://stackoverflow.com/questions/63619329/github-action-get-commit-message
@@ -61,4 +61,6 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           # base: pages-ci
+          add-paths: |
+            public/bundle.js
           branch: github-pages
