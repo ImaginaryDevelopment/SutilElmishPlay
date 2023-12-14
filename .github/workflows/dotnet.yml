@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: 7.0.x
+
       - name: Switch branch # https://stackoverflow.com/questions/26961371/switch-on-another-branch-create-if-not-exists-without-checking-if-already-exi
         run: |
           git checkout -B pages-ci
@@ -42,6 +43,11 @@ jobs:
           path: |
             public/bundle.js
             public/index.html
+      - name: Commit changes
+        run: |
+          git add public/bundle.js
+          git add public/index.html
+          git commit -m "${{github.event.head_commit.message}}"
 
       # - name: CreateBranch
       # https://stackoverflow.com/questions/63619329/github-action-get-commit-message
@@ -54,8 +60,5 @@ jobs:
         # https://github.com/peter-evans/create-pull-request/tree/main
         uses: peter-evans/create-pull-request@v5
         with:
-          add-paths: |
-            public/bundle.js
-            public/index.html
           # base: pages-ci
           branch: github-pages
