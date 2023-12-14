@@ -54,7 +54,7 @@ jobs:
         # https://github.com/peter-evans/create-pull-request/tree/main
         uses: peter-evans/create-pull-request@v5
         with:
-          path: |
+          add-paths: |
             public/bundle.js
             public/index.html
           base: pages-ci
