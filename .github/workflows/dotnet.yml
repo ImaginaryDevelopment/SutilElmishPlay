@@ -22,7 +22,7 @@ jobs:
 
       - name: Switch branch # https://stackoverflow.com/questions/26961371/switch-on-another-branch-create-if-not-exists-without-checking-if-already-exi
         run: |
-          git checkout -B pages-ci
+          git checkout -B github-pages
           git merge master
 
       - name: Restore tools
@@ -60,7 +60,6 @@ jobs:
         # https://github.com/peter-evans/create-pull-request/tree/main
         uses: peter-evans/create-pull-request@v5
         with:
-          # base: pages-ci
           add-paths: |
             public/bundle.js
-          branch: github-pages
+          branch: pages-update
