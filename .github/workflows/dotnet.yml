@@ -25,7 +25,9 @@ jobs:
           git checkout -B github-pages
           git merge master
       - name: Make dist
+        # https://stackoverflow.com/questions/16906170/create-directory-if-it-does-not-exist
         run: |
+
           md -Force dist
 
       - name: Restore tools
