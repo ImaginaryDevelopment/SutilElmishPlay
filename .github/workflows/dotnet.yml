@@ -45,9 +45,11 @@ jobs:
           path: |
             public/bundle.js
             public/index.html
-      - name: Copy to dist
+      - name:
+          Copy to dist
+          # IF exist dist ( echo dist exists ) ELSE ( mkdir dist && echo dist created)
         run: |
-          IF exist dist ( echo dist exists ) ELSE ( mkdir dist && echo dist created)
+          if (not exist dist) mkdir dist
           copy public/bundle.js dist/bundle.js
           copy public/index.html dist/index.html
       # - name: Commit changes
