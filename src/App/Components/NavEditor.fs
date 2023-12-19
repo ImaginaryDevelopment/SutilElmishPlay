@@ -226,7 +226,7 @@ module SideEffects =
                 |> List.iter dispatchParent
 
 let update
-    (cState, appMode, aclTypes, getResolvedAcls: unit -> ResolvedAclLookup)
+    (cState, appMode, aclTypes)
     (dispatchParent: EditorParentDispatchType)
     msg
     (model: Model)
@@ -296,7 +296,7 @@ let update
         | Ok nextItem ->
             // TODO: check for map not having resolved the acls, how do we make sure that's not already in flight?
             // is the map AclName -> AclDisplay or AclDisplay guid to AclDisplay?
-            let resolvedAcls = getResolvedAcls ()
+            let resolvedAcls = App.Global.resolvedAclLookup.Value
 
             SideEffects.getUnresolved aclTypes resolvedAcls nextItem dispatchParent
 
@@ -345,7 +345,6 @@ let update
 type NavEditorCoreProps = {
     AppMode: ConfigType<string>
     AclTypes: AclType seq
-    AclSearchResponse: AclSearchResult option
     NavItem: NavItem
     EditorMode: EditorMode
     IsFocus: bool
@@ -353,7 +352,6 @@ type NavEditorCoreProps = {
 
 type NavEditorProps = {
     Core: NavEditorCoreProps
-    ResolvedAclParams: ObsSlip<ResolvedAclLookup>
     NavItemIconObservable: System.IObservable<string>
 }
 
@@ -375,9 +373,7 @@ let renderEditor (props: NavEditorProps) =
         props.Core.NavItem
         |> Store.makeElmish
             (init cState)
-            (update
-                (cState, props.Core.AppMode, props.Core.AclTypes, (fun () -> props.ResolvedAclParams.Value))
-                dispatchParent)
+            (update (cState, props.Core.AppMode, props.Core.AclTypes) dispatchParent)
             ignore
 
     match props.Core.EditorMode with
@@ -438,9 +434,12 @@ let renderEditor (props: NavEditorProps) =
                                         |> Map.toSeq
                                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
                                     AclTypes = props.Core.AclTypes
-                                    ResolvedParams = props.ResolvedAclParams
-                                    AclSearchResponse = props.Core.AclSearchResponse
-                                    DispatchParent = EditAcl >> dispatch
+                                    DispatchParent =
+                                        (fun msg ->
+                                            printfn "AclEditor ParentMsg:%A" msg
+                                            msg)
+                                        >> EditAcl
+                                        >> dispatch
                                 }
                     }
                 ]

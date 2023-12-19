@@ -19,6 +19,7 @@
     <Compile Include="Adapters/Mui.generated.fs" />
 
     <Compile Include="Init.fs" />
+    <Compile Include="Global.fs" />
 
     <Compile Include="Components/Gen.fs" />
     <Compile Include="Components/AclEditor.fs" />

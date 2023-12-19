@@ -212,6 +212,12 @@ module Map =
         |> Map.ofSeq
         |> Map.map (fun _ v -> v |> Seq.map snd |> List.ofSeq)
 
+    let addChildren key values m =
+        m
+        |> Map.change key (function
+            | Some existing -> Some(List.ofSeq values @ existing)
+            | None -> Some(List.ofSeq values))
+
     let addNest rootKey subKey value (m: Map<_, Map<_, _>>) =
         m
         |> Map.tryFind rootKey

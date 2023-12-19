@@ -1,4 +1,5 @@
 module App.Init
+// purpose: Hold the initialization code for ? (primarily icons it seems)
 
 open System
 open Fable.Core.JsInterop

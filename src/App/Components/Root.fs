@@ -53,26 +53,6 @@ type CachedState = {
 let stateStore: LocalStorage.IAccessor<CachedState> =
     LocalStorage.StorageAccess.CreateStorage("Root_CachedState")
 
-let private resolvedAclLookupAccess: Core.LocalStorage.IAccessor<ResolvedAclLookup> =
-    let setter: ResolvedAclLookup -> _ =
-        Map.toArray
-        >> Array.map (fun (AclName n, aMap) ->
-            n,
-            aMap
-            |> Map.toArray
-            |> Array.map (fun (AclRefId ari, ars) -> ari, Core.serialize ars))
-
-    let getter: (string * (string * string) array) array -> ResolvedAclLookup =
-        let x =
-            Array.map (fun (n, pairs) ->
-                AclName n,
-                pairs
-                |> Array.map (fun (ari, value) -> AclRefId ari, Core.deserialize<AclDisplay> value |> Option.get)
-                |> Map.ofArray)
-
-        x >> Map.ofArray
-    //Core.LocalStorage.StorageAccess<Map<string,string>>.CreateStorage "Root_AclsAccess"
-    Core.LocalStorage.StorageAccessor<_, _>("Root_AclsAccess", { Setter = setter; Getter = getter }) :> _
 
 
 // root is the only one that needs to know if a lookup is already in flight
@@ -84,49 +64,16 @@ type AclRefState =
 // root is the only one that needs to know if a lookup is already in flight
 type AclLookupState = AclLookup<AclRefState>
 
-module AclLookup =
-    // if an existing response is there, don't look up again, overwrite response if previous is error
-    let addInFlight aclName aclRefId (m: AclLookupState) =
-        m
-        |> Map.change aclName (function
-            | None -> Some([ aclRefId, Requested ] |> Map.ofSeq)
-            | Some subMap ->
-                subMap
-                |> Map.change aclRefId (function
-                    | None -> Some Requested
-                    | Some(Response(Error _)) -> Some Requested
-                    | Some x -> Some x)
-                |> Some
-
-        )
-
-
-    let updateCacheFromState (m: AclLookupState) : Result<unit, string> =
-        m
-        |> Map.mapChoose (fun aclName subMap ->
-            subMap
-            |> Map.choose (fun aclRefId ->
-                function
-                | Response(Error _)
-                | Requested -> None
-                | Response(Ok ad) -> Some(aclRefId, ad))
-            |> Map.tryGetValueMap)
-        |> Map.tryGetValueMap
-        |> Option.map (fun remapped -> resolvedAclLookupAccess.TrySetValue(Some remapped))
-        |> Option.defaultValue (Ok())
 
 type Model = {
     AppMode: ConfigType<string>
     NavRootState: RemoteData<NavItem[]>
     NavPathState: RemoteData<App.Adapters.Api.Mapped.NavPathResponse>
-    AclSearchResponse: RemoteData<AclSearchResult>
+    // AclSearchResponse: RemoteData<AclSearchResult>
     // list of NavIds that have had a bulk resolution request sent out
     // includes in flight and finished navIds
     // implies all Acls that are Refs are sent for resolution
     NavIdsSentForResolution: NavId Set
-    AclsSentForResolution: Map<AclName, AclRefId>
-    // aclName -> aclRef guid -> AclDisplay
-    ResolvedAclLookup: AclLookupState
     // acl types, not a specific acl, or its children
     AclTypeState: RemoteData<AclType[]>
     FocusedItem: NavItem option
@@ -158,12 +105,10 @@ module private MLens =
     let getFocusedItem x = x.FocusedItem
     let getNavPathState x = x.NavPathState
     let getAclTypeState x = x.AclTypeState
-    let getAclSearchResponse x = x.AclSearchResponse
     let getAclTypes x = x.AclTypeState |> RemoteData.TryGet
     let getPath x = x.Path
     let getRootTab x = x.RootTab
     let getErrors x = x.Errors
-    let getResolvedAclLookup x = x.ResolvedAclLookup
 
     let addError msg (x: Model) = {
         x with
@@ -373,15 +318,11 @@ let init appMode =
             let cmd2: Cmd<Msg> = Commands.getAclTypes token
             InFlight, Cmd.batch [ cmd1; cmd2 ]
 
-    let resolvedAclLookup = resolvedAclLookupAccess.TryGetValue()
-
     {
         AppMode = appMode
         NavRootState = if iState = InFlight then InFlight else NotRequested
         NavPathState = NotRequested
-        AclsSentForResolution = Map.empty
         NavIdsSentForResolution = Set.empty
-        AclSearchResponse = NotRequested
         AclTypeState = if iState = InFlight then InFlight else NotRequested
         FocusedItem = None
         LastFocusedItemId =
@@ -404,11 +345,6 @@ let init appMode =
                 Some cs.RootTab
             | None -> None
             |> Option.defaultValue RootTabs.Main
-
-        ResolvedAclLookup =
-            resolvedAclLookup
-            |> Option.map (Map.map (fun _ v -> v |> Map.map (fun _ v -> AclRefState.Response(Ok v))))
-            |> Option.defaultValue Map.empty
     },
     cmd
 
@@ -550,6 +486,8 @@ module Updates =
                 { model with AclTypeState = InFlight }, Commands.getAclTypes accessToken
 
     let fetchResolve msg (model: Model) : Model * Cmd<Msg> =
+        printfn "Running fetchResolve: %A" msg
+
         match msg with
         | AclState data ->
             justModel {
@@ -572,34 +510,24 @@ module Updates =
             }
 
         | AclSearchResolve aclSearchResult ->
-            justModel {
-                model with
-                    AclSearchResponse = RemoteData.Responded(Ok aclSearchResult)
-            }
+            aclSearchResult.Data.Results
+            |> Seq.map (fun ad -> ad.Reference, ad)
+            |> App.Global.ResolvedAclLookup.addValues aclSearchResult.AclName
+
+            aclSearchResult.Data
+            |> fun x -> (x.Search, x.Results |> List.ofArray)
+            |> App.Global.AclSearchResponse.addValue aclSearchResult.AclName
+
+            justModel model
+
         | NavItemCreate data -> justModel { model with FocusedItem = Some data }
 
         | AclResolve(aclName, data) ->
-            let nextMap =
-                (model.ResolvedAclLookup, data.Resolved)
-                ||> Seq.fold (fun m newItem -> m |> Map.addNest aclName newItem.Reference (Response(Ok newItem))
-                //  m |> Map.add newItem.Reference newItem)
-                )
-            // not accounting for a case that should not occur, a refId is in resolved and errors, let errors win
-            let nextMap =
-                (nextMap, data.Errors)
-                ||> Seq.fold (fun m error ->
-                    m |> Map.addNest aclName (AclRefId error.Reference) (Response(Error error)))
+            data.Resolved
+            |> Seq.map (fun ad -> ad.Reference, ad)
+            |> App.Global.ResolvedAclLookup.addValues aclName
 
-            match AclLookup.updateCacheFromState nextMap with
-            | Ok() -> ()
-            | Error e ->
-                eprintfn "Failed to save map: '%A'" e
-                log e
-
-            justModel {
-                model with
-                    ResolvedAclLookup = nextMap
-            }
+            model, Cmd.none
 
         | FetchRes.NavPath data ->
             justModel {
@@ -656,8 +584,6 @@ module Updates =
             block "No AclType for eager loading"
         | NavShared.AclSearchRequest { SearchText = NonValueString }, _ -> block "Empty search found"
 
-        | NavShared.AclSearchRequest _, { AclSearchResponse = InFlight } -> block "InFlight AclSearchRequest"
-
         // outsourcing
 
         // resolve an acl type's parameters if it has any existing
@@ -670,17 +596,12 @@ module Updates =
 
         // resolve a user's search request for parameter ids by search text for display name
         | NavShared.AclSearchRequest req, _ ->
-            match model.AppMode, model.FocusedItem with
-            | ConfigType.Auth accessToken, Some _ ->
+            match model.AppMode with
+            | ConfigType.Auth accessToken ->
                 let cmd = Commands.getNavAclParamSearch accessToken req
 
-                {
-                    model with
-                        AclSearchResponse = InFlight
-                },
-                cmd
-            | ConfigType.Demo, _ -> block "Demo search not implemented"
-            | _, None -> block "AclSearch without Focused Item"
+                model, cmd
+            | ConfigType.Demo -> block "Demo search not implemented"
 
     let updateEditorMsg (msg: NavEditor.StandaloneParentMsg) model block : Model * Cmd<Msg> =
         match msg, model with
@@ -909,24 +830,21 @@ let view appMode =
                  | _ -> None))
             |> Some)
 
-    let obsSlip =
-        // new ObsSlip<_>(store.Value.ResolvedAcls, store |> Store.map MLens.getResolvedAcls)
-        new ObsSlip<_>(
-            store.Value.ResolvedAclLookup |> aclMap,
-            store |> Store.map MLens.getResolvedAclLookup |> Observable.map aclMap
-        )
 
     toGlobalWindow "root_model" store.Value
+
     // let selected : IStore<NavItem option> = Store.make( None )
     Html.div [
         // Get used to doing this for components, even though this is a top-level app.
-        disposeOnUnmount [ store; obsSlip ]
+        disposeOnUnmount [ store ]
         data_ "file" "Root"
 
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
         Bind.el (
             store |> Store.map MLens.getRootTab,
             fun rt ->
+                printfn "Rendering Root Tabs: %A" rt
+
                 let rootTab = {
                     Name = "Root"
                     TabType = Enabled <| Msg.TabChange RootTabs.Main
@@ -936,6 +854,8 @@ let view appMode =
                             Renderers.renderRootView "" data dispatch
 
                         fun () ->
+                            printfn "Rendering root tab"
+
                             Bind.el (
                                 store |> Store.map MLens.getNavRootState,
                                 fun nrs ->
@@ -949,6 +869,8 @@ let view appMode =
                     IsActive = rt = RootTabs.Sub
                     Render =
                         fun () ->
+                            printfn "Rendering path tab"
+
                             Html.div [
                                 // display the path input properly based on current state
                                 Bind.el (
@@ -993,19 +915,18 @@ let view appMode =
                                     | _, None
                                     | None, _ -> Html.div []
                                     | Some item, Some aclTypes ->
+                                        printfn "Render Root Path Tab"
+
                                         let r =
                                             NavEditor.renderEditor {
                                                 Core = {
                                                     AppMode = appMode
                                                     AclTypes = aclTypes
                                                     NavItem = item
-                                                    AclSearchResponse =
-                                                        store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
                                                     IsFocus = false
                                                     EditorMode =
                                                         NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
                                                 }
-                                                ResolvedAclParams = obsSlip
                                                 NavItemIconObservable =
                                                     store
                                                     |> Store.map MLens.getFocusedItem
@@ -1026,18 +947,19 @@ let view appMode =
                                 let gAcl = store |> Store.map MLens.getAclTypes
 
                                 fun () ->
+                                    printfn "Render Create Tab"
+
                                     Bind.el (
                                         gAcl,
                                         function
                                         | Some aclTypes ->
+                                            printfn "Rendering Acl Creator"
+
                                             App.Components.NavCreator.renderAclCreator {
                                                 DispatchParent = (Msg.CreatorMsg >> dispatch)
                                                 AppMode = appMode
                                                 AclTypes = aclTypes
-                                                ResolvedAcls = obsSlip
                                                 Path = store.Value.Path
-                                                AclSearchResponse =
-                                                    store.Value |> MLens.getAclSearchResponse |> RemoteData.TryGet
                                             }
                                         | None -> Html.div []
                                     )

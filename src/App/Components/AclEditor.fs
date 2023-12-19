@@ -166,9 +166,22 @@ let update (aclTypes: AclType seq) (itemAcls: AclData seq) (msg: Msg) (model: Mo
         model
         |> MLens.updateAclRef fa (fun (aclType, ar) -> aclType, ar |> Set.add value)
         |> justModel
-    | TypeSelectChange aclName, { FocusedAcl = Some x } ->
+    | TypeSelectChange aclName, { FocusedAcl = Some fa } ->
         printfn "TypeSelected change"
-        findAclTypeOr aclName (fun aclType -> model |> MLens.updateAclRef x (fun _ -> aclType, Set.empty) |> justModel)
+
+        // lens doesn't like there not being an AclValue
+        findAclTypeOr aclName (fun aclType ->
+            match fa.AclValue with
+            | None ->
+                justModel {
+                    model with
+                        FocusedAcl =
+                            Some {
+                                fa with
+                                    AclValue = Some(aclType, Set.empty)
+                            }
+                }
+            | Some _ -> model |> MLens.updateAclRef fa (fun _ -> aclType, Set.empty) |> justModel)
 
     | AclSelect(Some aclData), _ ->
         printfn "AclSelected"
@@ -197,6 +210,7 @@ let update (aclTypes: AclType seq) (itemAcls: AclData seq) (msg: Msg) (model: Mo
             | Ok() -> next
             | Error e -> MLens.addError e model
 
+        printfn "Focused will be: %A" next.FocusedAcl
         next, cmd
 
 module Renderers =
@@ -447,8 +461,6 @@ let css = [
 type AclEditorProps = {
     ItemAcls: AclData seq
     AclTypes: AclType seq
-    ResolvedParams: ObsSlip<ResolvedAclLookup>
-    AclSearchResponse: AclSearchResult option
     DispatchParent: Dispatch<AclParentMsg>
 }
 
@@ -471,7 +483,10 @@ let renderAclsEditor (props: AclEditorProps) =
 
         m |> Store.makeElmish init (update props.AclTypes props.ItemAcls) ignore
 
-    toGlobalWindow "aclEditor_model" store.Value |> ignore
+    let updateModel () =
+        toGlobalWindow "aclEditor_model" store.Value |> ignore
+
+    updateModel ()
     // TODO: check store for unresolved params, and fire off acl type change to parent or other msg to get them looked up
 
     // let m =
@@ -492,48 +507,52 @@ let renderAclsEditor (props: AclEditorProps) =
             // let renderAclParams (idMap:Map<string,AclRefState>) (aclType: Acl) (item: AclRef) =
             match focusedAcl.AclValue with
             | Some(selectedAclType, _) ->
-                let aclParams =
-                    match selectedAclType.AclParamType with
-                    | AclParameterType.Reference true ->
-                        props.AclSearchResponse
-                        |> Option.filter (fun aclR -> aclR.AclName = selectedAclType.Name)
-                        |> Option.map (fun aclR ->
-                            aclR.Data.Results
-                            |> Seq.map
-                                (fun
-                                    {
-                                        Reference = AclRefId r
-                                        DisplayName = display
-                                    } -> r, display))
-                    | AclParameterType.Selectable(selectableParameters) ->
-                        selectableParameters |> Seq.map Tuple2.replicate |> Some
-                    | _ -> None
-                    |> Option.map List.ofSeq
-                    |> Option.defaultValue List.empty
 
-                Bind.el (
-                    props.ResolvedParams,
-                    (fun m ->
-                        printfn
-                            "Rendering Acl Params with %i aclNames and %i items"
-                            m.Count
-                            (m |> Map.toSeq |> Seq.collect (snd >> Map.toSeq) |> Seq.length)
+                Bind.el2 App.Global.resolvedAclLookup App.Global.aclSearchResponse (fun (m, aSR) ->
+                    // are we in a selectable or searchable?
+                    let aclParams =
+                        match selectedAclType.AclParamType with
+                        | AclParameterType.Reference true ->
+                            aSR
+                            |> Map.tryFind selectedAclType.Name
+                            |> Option.map (fun (_searchText, aclDisplays) ->
+                                aclDisplays
+                                |> Seq.map
+                                    (fun
+                                        {
+                                            Reference = AclRefId r
+                                            DisplayName = display
+                                        } -> r, display))
 
-                        Renderers.renderAclParams
-                            {
-                                SearchText = store.Value.SearchText
-                                SearchState = store.Value.SearchState
-                                Item = focusedAcl
-                                SelectableAclParams = aclParams
-                                ResolvedAclLookup = m
-                                AclType = selectedAclType
-                            }
-                            dispatch
-                            props.DispatchParent)
-                )
+                        | AclParameterType.Selectable selectableParameters ->
+                            selectableParameters |> Seq.map Tuple2.replicate |> Some
+                        | _ -> None
+                        |> Option.map List.ofSeq
+                        |> Option.defaultValue List.empty
+
+                    printfn
+                        "Rendering Acl Params with %i aclNames and %i items"
+                        m.Count
+                        (m |> Map.toSeq |> Seq.collect (snd >> Map.toSeq) |> Seq.length)
+
+                    updateModel ()
+
+                    Renderers.renderAclParams
+                        {
+                            SearchText = store.Value.SearchText
+                            SearchState = store.Value.SearchState
+                            Item = focusedAcl
+                            SelectableAclParams = aclParams
+                            ResolvedAclLookup = m
+                            AclType = selectedAclType
+                        }
+                        dispatch
+                        props.DispatchParent)
             | None -> ()
         ]
     ]
+
+    printfn "Render AclEditor"
 
     Html.divc "fill" [
         disposeOnUnmount [ store ]
@@ -544,6 +563,7 @@ let renderAclsEditor (props: AclEditorProps) =
         Bind.el (
             store |> Store.map MLens.getFocusedAcl,
             fun focusAclOpt ->
+                updateModel ()
 
                 let selectedAclName =
                     focusAclOpt
@@ -607,9 +627,6 @@ let renderAclsEditor (props: AclEditorProps) =
                                             |> Option.bind (fun focus -> focus.AclValue)
                                             |> Option.map fst
                                             |> Option.map (fun selectedAclType -> selectedAclType.Name = aclType.Name)
-                                            // props.AclTypes
-                                            // |> Seq.tryFind (fun v -> v.Name = selectedAclType.Name)
-                                            // |> Option.map (fun aclType -> aclRef.Name = aclType.Name))
                                             |> Option.defaultValue false
 
                                     }

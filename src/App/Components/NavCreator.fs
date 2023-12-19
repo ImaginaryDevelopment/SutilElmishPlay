@@ -96,14 +96,13 @@ type ModelState =
 type AclCreatorProps = {
     DispatchParent: Dispatch<ParentMsg>
     AppMode: ConfigType<string>
-    ResolvedAcls: ObsSlip<ResolvedAclLookup>
     Path: string
     AclTypes: AclType seq
-    AclSearchResponse: AclSearchResult option
 }
 
 let renderAclCreator (props: AclCreatorProps) =
     toGlobalWindow "navCreator_props" props
+    printfn "Render NavCreator"
 
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
@@ -211,7 +210,6 @@ let renderAclCreator (props: AclCreatorProps) =
                                         AclTypes = props.AclTypes
                                         NavItem = eItem
                                         IsFocus = focus = FocusType.Editor
-                                        AclSearchResponse = props.AclSearchResponse
                                         EditorMode =
                                             NavEditor.EditorMode.Child(
                                                 "NavCreator",
@@ -219,7 +217,6 @@ let renderAclCreator (props: AclCreatorProps) =
                                                 Msg.EditorMsg >> dispatch
                                             )
                                     }
-                                    ResolvedAclParams = props.ResolvedAcls
                                     NavItemIconObservable = store |> Store.map MLens.getIcon
                                 }
                         )
