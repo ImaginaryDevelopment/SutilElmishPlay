@@ -67,6 +67,7 @@ type Msg =
     | AclSelect of AclData option
     | AclSearchChange of string
     | AclParamAdd of string
+    | AclParamRemove of string
 
 let stateStore: LocalStorage.IAccessor<CachedState> =
     LocalStorage.StorageAccess("AclEditor_CachedState")
@@ -151,6 +152,7 @@ let update (aclTypes: AclType seq) (itemAcls: AclData seq) (msg: Msg) (model: Mo
 
     | AclSearchChange _, { SearchState = Searching } -> justError "Server is busy"
     | AclParamAdd _, { FocusedAcl = None } -> justError "No Acl selected"
+    | AclParamRemove _, { FocusedAcl = None } -> justError "No Acl selected"
     // | AclSearchRequest, {SearchState = Searching, _} -> justError "A Search is already in flight"
 
     // questionable usefulness
@@ -165,6 +167,10 @@ let update (aclTypes: AclType seq) (itemAcls: AclData seq) (msg: Msg) (model: Mo
     | Msg.AclParamAdd value, { FocusedAcl = Some fa } ->
         model
         |> MLens.updateAclRef fa (fun (aclType, ar) -> aclType, ar |> Set.add value)
+        |> justModel
+    | Msg.AclParamRemove value, { FocusedAcl = Some fa } ->
+        model
+        |> MLens.updateAclRef fa (fun (aclType, ar) -> aclType, ar |> Set.remove value)
         |> justModel
     | TypeSelectChange aclName, { FocusedAcl = Some fa } ->
         printfn "TypeSelected change"
@@ -261,7 +267,7 @@ module Renderers =
         Html.divc "box" [
             for (value, name) in ps do
                 Html.divc "columns" [
-                    Html.divc "column" [
+                    Html.divc "column is-one-fifth" [
                         bButton "Add Acl Param" [
                             tryIcon (App.Init.IconSearchType.MuiIcon "Add")
 
@@ -300,7 +306,7 @@ module Renderers =
             data_ "file" "AclEditor"
             data_ "method" "renderAclParams"
             Html.divc "columns" [
-                Html.divc "column" [
+                Html.divc "column is-two-fifths" [
                     if isNotNone then
                         Html.divc "box" [
                             // needs border or underline or font weight work
@@ -308,20 +314,36 @@ module Renderers =
                             Html.ul [
                                 for p in selectedParams |> Option.defaultValue Set.empty do
                                     Html.li [
-                                        match
-                                            props.ResolvedAclLookup
-                                            |> Map.tryFind props.AclType.Name
-                                            |> Option.bind (Map.tryFind (AclRefId p))
-                                        with
-                                        | None ->
-                                            text p
-                                            Attr.title p
-                                        | Some {
-                                                   Reference = AclRefId r
-                                                   DisplayName = display
-                                               } ->
-                                            Attr.title r
-                                            text display
+                                        Html.divc "columns" [
+                                            Html.divc "column is-one-fifth" [
+                                                bButton "Remove Acl Param" [
+                                                    tryIcon (App.Init.IconSearchType.MuiIcon "Remove")
+                                                    onClick (fun _ -> Msg.AclParamRemove p |> dispatch) List.empty
+
+                                                ]
+                                            ]
+                                            Html.divc "column" [
+                                                Html.pre [
+                                                    match
+                                                        props.ResolvedAclLookup
+                                                        |> Map.tryFind props.AclType.Name
+                                                        |> Option.bind (Map.tryFind (AclRefId p))
+                                                    with
+                                                    | None ->
+                                                        text p
+                                                        Attr.title p
+                                                    | Some {
+                                                               Reference = AclRefId r
+                                                               DisplayName = display
+                                                           } ->
+                                                        Attr.title r
+                                                        text display
+
+                                                ]
+
+                                            ]
+
+                                        ]
                                     ]
                             ]
                         ]

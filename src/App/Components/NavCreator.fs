@@ -195,32 +195,30 @@ let renderAclCreator (props: AclCreatorProps) =
                     | None -> ""
                     | Some v -> v)
 
-            App.Components.NavShared.renderEditorFrame
-                eItem
-                [
-                    Html.divc "box" (renderCreationEditor getError allErrors item vItem)
-                    Html.divc "box" [
-                        // Bind.el2 props.Path
-                        Bind.el (
-                            store |> Store.map MLens.getItem,
-                            fun _ ->
-                                NavEditor.renderEditor {
-                                    Core = {
-                                        AppMode = props.AppMode
-                                        AclTypes = props.AclTypes
-                                        NavItem = eItem
-                                        IsFocus = focus = FocusType.Editor
-                                        EditorMode =
-                                            NavEditor.EditorMode.Child(
-                                                "NavCreator",
-                                                vResult,
-                                                Msg.EditorMsg >> dispatch
-                                            )
-                                    }
-                                    NavItemIconObservable = store |> Store.map MLens.getIcon
-                                }
-                        )
-                    ]
-                ]
-                List.empty)
+            let creationItems = renderCreationEditor getError allErrors item vItem
+
+            let editor =
+                Bind.el (
+                    store |> Store.map MLens.getItem,
+                    fun _ ->
+                        NavEditor.renderEditor {
+                            Core = {
+                                AppMode = props.AppMode
+                                AclTypes = props.AclTypes
+                                NavItem = eItem
+                                IsFocus = focus = FocusType.Editor
+                                EditorMode =
+                                    NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
+                            }
+                            NavItemIconObservable = store |> Store.map MLens.getIcon
+                        }
+                )
+
+            App.Components.NavShared.renderEditorFrame eItem [
+                Html.sectionc "hero" creationItems
+            // Html.sectionc "section" [ editor ]
+
+            // Bind.el2 props.Path
+            // ]
+            ] [ editor ])
     ]
