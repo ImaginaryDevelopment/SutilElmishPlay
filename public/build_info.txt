@@ -1,8 +1,8 @@
 // cspell: disable
-2023.12.20 10:11:53 -05:00
+2023.12.20 10:16:31 -05:00
 Git:
 master
-d29dc35 fix creator rendering, add remove acl param
+702c5a7 make publish fail on missing env var
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"6TJPcztodFjsj4kZYV9g0w=="
@@ -10,4 +10,4 @@ Hashes:
 	package-lock.json:"iFbR93TI1imngJzWBf2h/w=="
 	ReleaseHistory.md:"hwxBoShBgAzDaLmcyOGIXw=="
 	public\index.html:"EAnqf74ZiKHSrgyQ4aPcCg=="
-	publish.fsx:"As/izG8l1B7ICW/MphpS4g=="
+	publish.fsx:"v3+0kSFqWDayQ7ikXpqW3w=="
