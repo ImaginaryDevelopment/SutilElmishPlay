@@ -175,7 +175,7 @@ module Async =
     let ofValue x = async { return x }
 
 module Parse =
-    let tryBool x =
+    let tryBool (x: string) =
         System.Boolean.TryParse x
         |> function
             | true, v -> Some v

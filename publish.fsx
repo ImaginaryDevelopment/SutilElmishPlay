@@ -1,12 +1,24 @@
 open System
 open System.IO
 
+// TODO: would be nice if this could produce something for gh-pages
+
+#load "src\\App\\BReusable.fs"
+
+open BReusable
+
+
+
 let outputFolder = "public"
 
 //
-let publishRoot = "..\\oneview_web\\public" // cspell:disable-line
+let publishRoot =
+    Path.Combine("..", Environment.ExpandEnvironmentVariables(@"%sutil_target%"), "public") // cspell:disable-line
+
+printfn "PublishRoot: %s" publishRoot
 let publishTargetFolder = Path.Combine(publishRoot, "admin")
 let bundlePath = Path.GetFullPath(Path.Combine(outputFolder, "bundle.js"))
+let buildInfoPath = Path.Combine(outputFolder, "build_info.txt") |> Path.GetFullPath
 
 let endsWith (delimiter: char) (value: string) = value.EndsWith delimiter
 
@@ -75,15 +87,117 @@ module Directory =
 if File.Exists bundlePath then
     File.Delete "bundle.js"
 
-let runProcess cmd args =
-    let psi =
-        Diagnostics.ProcessStartInfo(cmd, arguments = args, UseShellExecute = true)
+if File.Exists buildInfoPath then
+    File.Delete buildInfoPath
 
-    use p = Diagnostics.Process.Start psi
-    p.WaitForExit()
-    if p.ExitCode <> 0 then Error p.ExitCode else Ok()
+module Process =
+    let runProcess cmd args =
+        let psi =
+            Diagnostics.ProcessStartInfo(cmd, arguments = args, UseShellExecute = true)
 
-runProcess "npm" "run build"
+        use p = Diagnostics.Process.Start psi
+        p.WaitForExit()
+        if p.ExitCode <> 0 then Error p.ExitCode else Ok()
+
+    let runCaptured cmd args =
+        let psi =
+            Diagnostics.ProcessStartInfo(
+                cmd,
+                arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            )
+
+        use p = Diagnostics.Process.Start psi
+        let data = ResizeArray()
+
+        use _ =
+            p.OutputDataReceived.Subscribe(fun d ->
+                d.Data |> Option.ofValueString |> Option.map Ok |> Option.iter data.Add)
+
+        use _ =
+            p.ErrorDataReceived.Subscribe(fun e ->
+                e.Data |> Option.ofValueString |> Option.map Error |> Option.iter data.Add)
+
+        p.Start() |> ignore
+        p.BeginErrorReadLine()
+        p.BeginOutputReadLine()
+        p.WaitForExit()
+        let data = data |> Seq.toList
+
+        if p.ExitCode <> 0 then
+            Error p.ExitCode, data
+        else
+            Ok(), data
+
+module BuildInfo =
+    let getSingleLineOutput =
+        function
+        | Ok(), Ok h :: [] -> h
+        | Ok(), data -> failwith $"Expected single line line output: %A{data}"
+        | Error ec, data -> failwith $"Exited: %i{ec} -> %A{data}"
+
+    type HashInputType =
+        | Bytes of byte[]
+        | ByStream of Stream
+        | FilePath of string
+
+    let hash hi =
+        use sha = System.Security.Cryptography.MD5.Create()
+
+        match hi with
+        | Bytes b -> sha.ComputeHash b
+        | ByStream stream -> sha.ComputeHash stream
+        | FilePath fp ->
+            use fs = new FileStream(fp, FileMode.Open, FileAccess.Read, FileShare.Read)
+            sha.ComputeHash fs
+        |> Convert.ToBase64String
+
+    let gatherBuildInfo () =
+        let sb = System.Text.StringBuilder()
+
+        let gitLogInfo =
+            Process.runCaptured "git" "log --oneline -n1" // cspell:ignore oneline
+            |> getSingleLineOutput
+
+        let gitBranchInfo =
+            Process.runCaptured "git" "branch --show-current" |> getSingleLineOutput
+
+        let hashes =
+            [
+                "CHANGELOG.md"
+                "README.md"
+                "package.json"
+                "package-lock.json"
+                "ReleaseHistory.md"
+                "public\\index.html"
+                "publish.fsx"
+            ]
+            |> List.map (fun n ->
+                let h = FilePath n |> hash
+                $"\t%s{n}:%A{h}")
+            |> String.concat Environment.NewLine
+
+        [
+            "// cspell: disable"
+            DateTime.Now.ToString("yyyy.MM.dd hh:mm:ss zzz")
+            "Git:"
+            gitBranchInfo
+            gitLogInfo
+            "Hashes:"
+            hashes
+        ]
+        |> Seq.iter (sb.AppendLine >> ignore)
+
+        string sb
+
+let buildInfo = BuildInfo.gatherBuildInfo ()
+printfn "BuildInfo?: %s" buildInfo
+File.WriteAllText(buildInfoPath, buildInfo)
+
+failwith "stop now"
+Process.runProcess "npm" "run build"
 
 match Directory.GetFiles(outputFolder, "*.LICENSE.txt") |> List.ofArray with
 | [] -> eprintfn "no license file found"
@@ -92,5 +206,6 @@ match Directory.GetFiles(outputFolder, "*.LICENSE.txt") |> List.ofArray with
 existsOrFail "PublishRoot" publishRoot
 
 Directory.makeExist publishTargetFolder
+
 
 Directory.copy outputFolder publishTargetFolder
