@@ -230,6 +230,7 @@ module LocalStorage =
 
     // assumes we never want to clear a key entirely
     // assumes the serializer/deserializer works well enough
+    // TODO: consider a wrap of all property access by requiring function passing and result types?
     type StorageAccess<'t when 't: equality>(name) =
         let get () = Internal.TryGet<'t> name
 

@@ -213,15 +213,13 @@ let view () =
             model |> Store.map MLens.getAuthInfo,
             fun ai ->
                 match ai, model.Value.AppMode with
-                | _, Demo -> App.Components.Root.view ConfigType.Demo
+                | _, Demo -> Html.div [] // App.Components.Root.view ConfigType.Demo
                 | None, _ ->
                     match msalMode with
                     | MsalMode.Popup -> Html.div [ text "Authorizing via popup..." ]
                     | MsalMode.Redirect -> Html.div [ text "Checking authorization..." ]
                 | Some(Ok(auth, token)), _ -> Html.div [ text $"Welcome {auth.account.name}" ]
-                | Some(Error exn), _ ->
-                    Html.div[text "Failed auth"
-                             App.Components.Root.view ConfigType.Demo]
+                | Some(Error exn), _ -> Html.div[text "Failed auth"]
         )
         mustAuthEl "tabStore" model (fun _ -> Html.div [ App.Components.Gen.Tabs.view (Choice2Of2 tabStore) ])
 

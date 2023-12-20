@@ -309,21 +309,21 @@ let init appMode =
                 RootTab = RootTabs.ReParse cs.RootTab |> Option.defaultValue RootTabs.Main
         })
 
-    let (iState, cmd: Cmd<Msg>) =
+    let (aclTypeState, navRootState, cmd: Cmd<Msg>) =
         match appMode with
-        | Demo -> NotRequested, Cmd.none
+        | Demo -> Responded(Ok App.Adapters.Demo.aclTypes), NotRequested, Cmd.none
         | Auth token ->
             // Consider fetching last path also
             let cmd1: Cmd<Msg> = Commands.getNavRoot token
             let cmd2: Cmd<Msg> = Commands.getAclTypes token
-            InFlight, Cmd.batch [ cmd1; cmd2 ]
+            InFlight, InFlight, Cmd.batch [ cmd1; cmd2 ]
 
     {
         AppMode = appMode
-        NavRootState = if iState = InFlight then InFlight else NotRequested
+        NavRootState = navRootState
         NavPathState = NotRequested
         NavIdsSentForResolution = Set.empty
-        AclTypeState = if iState = InFlight then InFlight else NotRequested
+        AclTypeState = aclTypeState
         FocusedItem = None
         LastFocusedItemId =
             cachedState
@@ -480,7 +480,18 @@ module Updates =
 
         | FetchReq.AclTypes ->
             match model.AppMode with
-            | ConfigType.Demo -> block "no dummy acl data" msg model
+            | ConfigType.Demo ->
+
+
+                justModel {
+                    model with
+                        AclTypeState =
+                            Responded(
+                                Ok App.Adapters.Demo.aclTypes
+
+                            )
+                }
+
             | ConfigType.Auth accessToken ->
                 printfn "Requesting Path '%s'" model.Path
                 { model with AclTypeState = InFlight }, Commands.getAclTypes accessToken
@@ -961,7 +972,9 @@ let view appMode =
                                                 AclTypes = aclTypes
                                                 Path = store.Value.Path
                                             }
-                                        | None -> Html.div []
+                                        | None ->
+                                            printfn "No AclTypes, not trying creation"
+                                            Html.div [ text "No Acl Types found" ]
                                     )
 
                         }

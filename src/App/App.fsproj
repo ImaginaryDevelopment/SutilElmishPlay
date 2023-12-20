@@ -17,6 +17,7 @@
     <Compile Include="Adapters/Api/Mapped.fs" />
     <Compile Include="Adapters/Msal.fs" />
     <Compile Include="Adapters/Mui.generated.fs" />
+    <Compile Include="Adapters/Demo.fs" />
 
     <Compile Include="Init.fs" />
     <Compile Include="Global.fs" />

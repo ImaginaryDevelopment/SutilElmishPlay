@@ -104,6 +104,9 @@ let renderAclCreator (props: AclCreatorProps) =
     toGlobalWindow "navCreator_props" props
     printfn "Render NavCreator"
 
+    if Seq.isEmpty props.AclTypes then
+        eprintfn "No AclTypes found"
+
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
 
