@@ -220,5 +220,5 @@ let renderAclCreator (props: AclCreatorProps) =
 
             // Bind.el2 props.Path
             // ]
-            ] [ editor ])
+            ] [ Html.sectionc "section" [ editor ] ])
     ]
