@@ -1,3 +1,6 @@
+// purpose: setup the environment from a local file `.env.local`
+// possibly not used anymore since finding `git update-index --assume-unchanged FILE_NAME`
+// https://stackoverflow.com/questions/9794931/keep-file-in-a-git-repo-but-dont-track-changes
 open System
 
 module Option =
