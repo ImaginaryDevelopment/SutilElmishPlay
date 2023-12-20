@@ -13,7 +13,12 @@ let outputFolder = "public"
 
 //
 let publishRoot =
-    Path.Combine("..", Environment.ExpandEnvironmentVariables(@"%sutil_target%"), "public") // cspell:disable-line
+    let target = Environment.ExpandEnvironmentVariables @"%sutil_target%"
+
+    if String.IsNullOrWhiteSpace target || target.Contains "%" then
+        failwith "Environment not setup for publish"
+
+    Path.Combine("..", target, "public") // cspell:disable-line
 
 printfn "PublishRoot: %s" publishRoot
 let publishTargetFolder = Path.Combine(publishRoot, "admin")
@@ -196,7 +201,7 @@ let buildInfo = BuildInfo.gatherBuildInfo ()
 printfn "BuildInfo?: %s" buildInfo
 File.WriteAllText(buildInfoPath, buildInfo)
 
-failwith "stop now"
+// failwith "stop now"
 Process.runProcess "npm" "run build"
 
 match Directory.GetFiles(outputFolder, "*.LICENSE.txt") |> List.ofArray with
