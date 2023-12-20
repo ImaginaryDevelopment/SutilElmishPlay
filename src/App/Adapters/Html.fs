@@ -7,6 +7,14 @@ open Sutil.CoreElements
 
 let data_ (name: string) value = prop.custom ($"data-{name}", value)
 
+let tryRender title f arg : Core.SutilElement =
+    try
+        f arg
+    with ex ->
+        eprintfn "Render failed: '%s' -> %A"
+        Core.log ex
+        Html.divc "is-danger" [ text <| string ex ]
+
 type ButtonType =
     | Submit
     | Reset
