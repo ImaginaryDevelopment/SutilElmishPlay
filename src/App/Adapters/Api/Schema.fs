@@ -110,8 +110,6 @@ type MyInfoResponse = {
     IsImperator: bool
 }
 
-
-
 type ApiAclSearchResponse = {
     Search: string
     Results: AclDisplay[]

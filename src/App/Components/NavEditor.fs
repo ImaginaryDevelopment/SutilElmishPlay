@@ -338,7 +338,7 @@ let update
     | Save SaveMsg.Requested ->
         match appMode with
         | Auth token -> model, Commands.saveItem token model.Item
-        | Demo -> MLens.addError "Save Not implemented in demo" model |> justModel
+        | Demo -> MLens.addError "Save not implemented in demo" model |> justModel
 
 ()
 

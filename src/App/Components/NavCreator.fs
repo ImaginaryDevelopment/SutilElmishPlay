@@ -19,9 +19,12 @@ open App.Adapters.Bulma
 
 open Core
 
+type CreatorFocusType =
+    | PathFocus
+    | NameFocus
 
 type FocusType =
-    | Creator
+    | Creator of CreatorFocusType
     | Editor
 
 type Model = {
@@ -36,6 +39,8 @@ module MLens =
     let getItem x = x.Item
     let getFocus x = x.Focus
     let setItemProp model f = { model with Item = f model.Item }
+    let setFocus focusType model = { model with Focus = focusType }
+    let setCreatorFocus creatorFocusType = setFocus <| Creator creatorFocusType
 
 type ParentMsg =
     | CreateNavItem of ValidNavItem
@@ -68,7 +73,7 @@ let init path : Model * Cmd<Msg> =
             Enabled = false
         }
         Acls = List.empty
-        Focus = FocusType.Creator
+        Focus = FocusType.Creator NameFocus
     },
     Cmd.none
 
@@ -77,10 +82,17 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
 
     match msg with
     | ItemTypeChange nit -> MLens.setItemProp model (fun item -> { item with Type = nit }), Cmd.none
-    | PathChange next -> MLens.setItemProp model (fun item -> { item with Path = next }), Cmd.none
+    | PathChange next ->
+        MLens.setItemProp model (fun item -> { item with Path = next })
+        |> MLens.setCreatorFocus PathFocus
+        |> justModel
+
     | NameChange next ->
         printfn "Setting name to %s" next
-        MLens.setItemProp model (fun item -> { item with Name = next }), Cmd.none
+
+        MLens.setItemProp model (fun item -> { item with Name = next })
+        |> MLens.setCreatorFocus NameFocus
+        |> justModel
 
     | EditorMsg NavEditor.ChildParentMsg.GotFocus -> { model with Focus = FocusType.Editor }, Cmd.none
     | EditorMsg(NavEditor.ChildParentMsg.ParentMsg pm) ->
@@ -110,13 +122,26 @@ let renderAclCreator (props: AclCreatorProps) =
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
 
+    let focusableFormField getError name value focusType msg =
+        formField [ text name ] [
+
+            textInput
+                name
+                value
+                [
+                    if store.Value.Focus = FocusType.Creator focusType then
+                        autofocus
+                ]
+                msg
+                dispatch
+        ]
+        <| getError (Some name)
 
     let renderCreationEditor getError allErrors (item: NavItem) vItem = [
 
         columns2 [
             if store.Value.Item.Type = Link then
-                formField [ text "Path" ] [ textInput "Path" item.Path [] Msg.PathChange dispatch ]
-                <| getError (Some "Path")
+                focusableFormField getError "Path" item.Path PathFocus Msg.PathChange
         ] [
             formField [ text "Type" ] [
 
@@ -141,19 +166,7 @@ let renderAclCreator (props: AclCreatorProps) =
             <| getError (Some "Type")
 
         ]
-
-        formField [ text "Name" ] [
-            textInput
-                "Name"
-                store.Value.Item.Name
-                [
-                    if store.Value.Focus = FocusType.Creator then
-                        autofocus
-                ]
-                Msg.NameChange
-                dispatch
-        ]
-        <| getError (Some "Name")
+        focusableFormField getError "Name" store.Value.Item.Name NameFocus Msg.NameChange
 
         formField [ text "Create" ] [
             bButton "Create" [
