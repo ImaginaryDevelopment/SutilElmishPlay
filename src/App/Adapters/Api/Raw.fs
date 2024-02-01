@@ -56,7 +56,12 @@ module ApiNavInternals =
         |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
 
     let save token (item: ApiNavItem) =
-        let url = Some item.Path |> genNavUrl |> String.replace "/root/Root" "/Root"
+        let url =
+            Some item.Path
+            |> genNavUrl
+            |> String.replace "/root/Root" "/Root"
+            |> String.replace "/root/root" "/Root"
+
         printfn $"Attempting save to %s{url} - {item.Path}"
 
         async {
