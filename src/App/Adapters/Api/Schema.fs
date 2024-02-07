@@ -120,9 +120,10 @@ type AclSearchResult = {
     Data: ApiAclSearchResponse
 }
 
+// based on CoreLib.Exceptions.CoreApiError
 type NavAclResolveSubError = {
     Message: string
-    StatusCode: int
+    StatusCode: int option
     StatusMessage: string
     ExceptionType: string
     ExceptionMessage: string

@@ -124,6 +124,20 @@ module NavItems =
         |> Async.map (Result.map (Array.map NavItemAdapters.ofApiNavItem))
 
     let getNavPath token path =
+        let path =
+            let starts = path |> startsWithI "/root"
+            printfn "Starts? %A" starts
+
+            if starts |> not then
+                if path.StartsWith "/" then
+                    $"/root{path}"
+                else
+                    $"/root/{path}"
+            else
+                path
+
+        printfn "Fetching NavPath: %s" path
+
         ApiNavInternals.getNavPath token path
         |> Async.map (Result.map NavItemAdapters.toNavPathResponse)
 

@@ -53,8 +53,6 @@ type CachedState = {
 let stateStore: LocalStorage.IAccessor<CachedState> =
     LocalStorage.StorageAccess.CreateStorage("Root_CachedState")
 
-
-
 // root is the only one that needs to know if a lookup is already in flight
 type AclRefState =
     | Requested
@@ -311,7 +309,9 @@ let init appMode =
 
     let (aclTypeState, navRootState, cmd: Cmd<Msg>) =
         match appMode with
-        | Demo -> Responded(Ok App.Adapters.Demo.aclTypes), NotRequested, Cmd.none
+        | Demo ->
+            Core.warn ("in demo mode")
+            Responded(Ok App.Adapters.Demo.aclTypes), NotRequested, Cmd.none
         | Auth token ->
             // Consider fetching last path also
             let cmd1: Cmd<Msg> = Commands.getNavRoot token
@@ -617,12 +617,18 @@ module Updates =
     let updateEditorMsg (msg: NavEditor.StandaloneParentMsg) model block : Model * Cmd<Msg> =
         match msg, model with
         // blocks
-        | NavEditor.StandaloneParentMsg.Cancel, { FocusedItem = None } -> block "No FocusedItem for edit"
+
         // outsourcing
         // this is redundant and for completeness
         | NavEditor.StandaloneParentMsg.ParentMsg msg, _ -> updateEditorSharedMsg msg model block
         // actions
-        | NavEditor.StandaloneParentMsg.Cancel, _ -> justModel { model with FocusedItem = None }
+        | NavEditor.StandaloneParentMsg.Cancel, _ ->
+
+            justModel {
+                model with
+                    FocusedItem = None
+                    RootTab = RootTabs.Main
+            }
 
         | NavEditor.StandaloneParentMsg.Saved _, _ ->
             // TODO: post updated value back to api
@@ -696,6 +702,15 @@ let update msg (model: Model) : Model * Cmd<Msg> =
 
     // responses:
 
+    | Msg.FetchFail("NavRoot", ex), _ ->
+        model
+        |> MLens.addChcError title ex
+        |> fun model ->
+            {
+                model with
+                    NavPathState = Responded(Error ex)
+            }
+            |> justModel
     | Msg.FetchFail(title, ex), _ -> model |> MLens.addChcError title ex |> justModel
 
     | Msg.FetchResolve msg, _ -> Updates.fetchResolve msg model

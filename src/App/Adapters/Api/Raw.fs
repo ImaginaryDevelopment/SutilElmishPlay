@@ -14,7 +14,7 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 let genNavUrl pathOpt =
-    let b = "/api/navigation/root"
+    let b = "/api/navigation"
 
     match pathOpt with
     | Some(ValueString path) -> if path.StartsWith "/" then b + path else $"%s{b}/{path}"
@@ -56,11 +56,10 @@ module ApiNavInternals =
         |> Async.map (Result.map (fun items -> { Path = path; Items = items }))
 
     let save token (item: ApiNavItem) =
-        let url =
-            Some item.Path
-            |> genNavUrl
-            |> String.replace "/root/Root" "/Root"
-            |> String.replace "/root/root" "/Root"
+        let url = Some item.Path |> genNavUrl
+        // |> String.replace "/root/Root" "/root"
+        // |> String.replace "/root/root" "/root"
+        // |> String.replace "/root/root" "/root"
 
         printfn $"Attempting save to %s{url} - {item.Path}"
 

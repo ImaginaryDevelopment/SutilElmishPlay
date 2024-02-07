@@ -143,6 +143,12 @@ let equalsIStr (item: 't) (x: string) =
     | EqualsI(string (box item)) -> Some item
     | _ -> None
 
+let startsWithI (delimiter: string) (value: string) =
+    Option.ofValueString value
+    |> function
+        | Some value -> value.StartsWith(delimiter, System.StringComparison.CurrentCultureIgnoreCase)
+        | None -> false
+
 let (|EqualsIStr|_|) (x: 't) = equalsIStr x
 
 let (|After|_|) delimiter x = String.tryAfter delimiter x
