@@ -702,7 +702,7 @@ let update msg (model: Model) : Model * Cmd<Msg> =
 
     // responses:
 
-    | Msg.FetchFail("NavRoot", ex), _ ->
+    | Msg.FetchFail("NavRoot" as title, ex), _ ->
         model
         |> MLens.addChcError title ex
         |> fun model ->

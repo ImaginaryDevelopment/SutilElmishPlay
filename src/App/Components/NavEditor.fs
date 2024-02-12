@@ -38,7 +38,6 @@ type Model = {
 type CachedState = { Tab: EditorTabs }
 
 
-
 [<RequireQualifiedAccess>]
 type StandaloneParentMsg =
     | ParentMsg of NavShared.ParentMsg
@@ -48,6 +47,7 @@ type StandaloneParentMsg =
 [<RequireQualifiedAccess>]
 type ChildParentMsg =
     | ParentMsg of NavShared.ParentMsg
+    | ItemUpdate of NavItem
     | GotFocus
 
 type EditorMode =
@@ -138,7 +138,6 @@ module Renderers =
                     ff (nameof value.Url) value.Url <| fError (Some "Url")
             ]
 
-
     let renderFramed lDispatch pDispatch =
         let siblings =
 
@@ -162,7 +161,6 @@ module Renderers =
             | _ -> List.empty
 
         siblings
-
 
 let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
@@ -262,10 +260,13 @@ let update
             model with
                 Item = { model.Item with Enabled = value }
         }
+
     | IconMsg(IconEditor.IconEditorParentMsg.NameChange(name, value))
     | EditProp(name, value) ->
         try
             let nextItem = cloneSet model.Item name value
+            Core.log ("EditProp", name, value, nextItem)
+            EditorParentDispatchType.DispatchChildOnly dispatchParent (ChildParentMsg.ItemUpdate nextItem)
             justModel { model with Item = nextItem }
         with ex ->
             Core.log ex

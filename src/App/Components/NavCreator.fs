@@ -94,15 +94,16 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
         |> MLens.setCreatorFocus NameFocus
         |> justModel
 
+    | EditorMsg(NavEditor.ChildParentMsg.ItemUpdate nextItem) -> { model with Item = nextItem }, Cmd.none
     | EditorMsg NavEditor.ChildParentMsg.GotFocus -> { model with Focus = FocusType.Editor }, Cmd.none
     | EditorMsg(NavEditor.ChildParentMsg.ParentMsg pm) ->
         dispatchParent (ParentMsg.EditorParentMsg pm)
         model, Cmd.none
 
-[<RequireQualifiedAccess>]
-type ModelState =
-    | Valid of ValidNavItem
-    | Invalid of NavItem * Map<FieldName option, string list>
+// [<RequireQualifiedAccess>]
+// type ModelState =
+//     | Valid of ValidNavItem
+//     | Invalid of NavItem * Map<FieldName option, string list>
 
 
 type AclCreatorProps = {
@@ -121,6 +122,8 @@ let renderAclCreator (props: AclCreatorProps) =
 
     let store, dispatch =
         props.Path |> Store.makeElmish init (update props.DispatchParent) ignore
+
+    toGlobalWindow "navCreator_model" store.Value
 
     let focusableFormField getError name value focusType msg =
         formField [ text name ] [
@@ -193,6 +196,7 @@ let renderAclCreator (props: AclCreatorProps) =
         Bind.el2 (store |> Store.map MLens.getItem) (store |> Store.map MLens.getFocus) (fun (item, focus) ->
             // this may not get recalculated when validation changes
             let eItem = store.Value.Item
+            // navItem validation, validates a NavItem, validateNavItem
             let vResult = ValidNavItem.ValidateNavItem eItem
             let vItem, vErrors = vResult |> Option.ofResult
 
@@ -205,6 +209,8 @@ let renderAclCreator (props: AclCreatorProps) =
                         let adds = NavShared.renderErrors fn fnErrs
                         errs @ adds))
                 |> Option.defaultValue List.empty
+
+            vErrors |> Option.defaultValue Map.empty |> toGlobalWindow "navCreator_Errors"
 
             let getError =
                 NavShared.renderErrorMapMaybe vErrors (function
