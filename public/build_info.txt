@@ -1,8 +1,8 @@
 // cspell: disable
-2024.02.13 11:58:23 -05:00
+2024.02.14 02:12:38 -05:00
 Git:
 master
-8f3a4d7 fix creator not updating item for validation
+819ba66 fix icon select, fix create url, overhaul navEditor for some rerender reduction
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
