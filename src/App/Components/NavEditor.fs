@@ -16,8 +16,6 @@ open App.Adapters.Api.Shared
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Mapped
 
-open App.Components.Gen
-open App.Components.Gen.Icons
 open App.Adapters.Config
 
 // [<Fable.Core.Erase>]
@@ -124,6 +122,7 @@ type EditorParentDispatchType =
 module private Renderers =
 
     let renderPropsEditor fError (store: IReadOnlyStore<NavItem>) dispatch =
+        printfn "Render PropsEditor"
         let value = store.Value
 
         let ff name value =
@@ -188,6 +187,7 @@ let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
 // let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
 let init (item: IReadOnlyStore<NavItem>) =
+    printfn "NavEditor init"
     // let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     justModel {
@@ -376,43 +376,44 @@ let private update
 
 ()
 
-type NavEditorCoreProps = {
+type NavEditorProps = {
     AppMode: ConfigType<string>
     AclTypes: IReadOnlyStore<AclType seq>
-    NavItem: IReadOnlyStore<NavItem>
+    NavItem: IStore<NavItem>
     EditorMode: EditorMode
-}
-
-type NavEditorProps = {
-    Core: NavEditorCoreProps
-    NavItemIconObservable: System.IObservable<string>
 }
 
 // renames will go a different route, no path editing
 let renderEditor (props: NavEditorProps) =
-    printfn "Render editor: %A" props.Core.NavItem.Value.Type
+    printfn "Render editor: %A" props.NavItem.Value.Type
     // let cState = getCacheStore props.Core.EditorMode
 
-    match props.Core.EditorMode with
+    match props.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow $"navEditor_props" props
     | EditorMode.Child(name, _, _) -> toGlobalWindow $"navEditor_{name}_props" props
 
     let dispatchParent =
-        match props.Core.EditorMode with
+        match props.EditorMode with
         | EditorMode.Standalone dp -> EditorParentDispatchType.Standalone dp
         | EditorMode.Child(_, _, dp) -> EditorParentDispatchType.Child dp
 
     let store, dispatch =
-        props.Core.NavItem
-        |> Store.makeElmish init (update (props.Core.AppMode, props.Core.AclTypes) dispatchParent) ignore
+        props.NavItem
+        |> Store.makeElmish init (update (props.AppMode, props.AclTypes) dispatchParent) ignore
 
-    match props.Core.EditorMode with
+    let obsTab = store |> Store.map MLens.getTab
+
+    let obsItem =
+        store
+        |> Store.mapStore "obsItem" (MLens.getItem, (fun nextItem -> { store.Value with Item = nextItem }))
+
+    match props.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
     | EditorMode.Child(name, _, _) -> toGlobalWindow $"navEditor_{name}_model" store.Value
 
     let vItem, vErrors =
-        match props.Core.EditorMode with
-        | EditorMode.Standalone _ -> ValidNavItem.ValidateNavItem props.Core.NavItem.Value
+        match props.EditorMode with
+        | EditorMode.Standalone _ -> ValidNavItem.ValidateNavItem props.NavItem.Value
         | EditorMode.Child(_, vItem, _) -> vItem
         |> Option.ofResult
 
@@ -421,67 +422,74 @@ let renderEditor (props: NavEditorProps) =
             | None -> ""
             | Some v -> v)
 
+    let propsTab = Renderers.renderPropsEditor getError obsItem dispatch ()
+
     let core =
-        let obsTab = store |> Store.map MLens.getTab
 
-        let obsItem =
-            store
-            |> Store.mapStore "obsItem" (MLens.getItem, (fun nextItem -> { store.Value with Item = nextItem }))
+        Bind.el (
+            obsTab,
+            (fun tab ->
+                printfn "Render NavEditor tabs"
 
-        Bind.el2 obsTab obsItem (fun (tab, value) ->
-            renderTabs
-                [ "fill" ]
-                [
-                    {
-                        Name = "Props"
-                        TabType = Enabled <| TabChange EditorTabs.MainTab
-                        IsActive = tab = EditorTabs.MainTab
-                        Render = Renderers.renderPropsEditor getError obsItem dispatch
-                    }
-                    {
-                        Name = "Icon"
-                        TabType = Enabled <| TabChange EditorTabs.IconTab
-                        IsActive = tab = EditorTabs.IconTab
-                        Render = fun () -> IconEditor.renderIconEditor { PropValue = value.Icon } (IconMsg >> dispatch)
-                    }
-                    {
-                        Name = "Acls"
-                        TabType = Enabled <| TabChange EditorTabs.AclTab
-                        IsActive = tab = EditorTabs.AclTab
-                        Render =
-                            fun () ->
-                                Bind.el (
-                                    props.Core.AclTypes,
-                                    fun aclTypes ->
-                                        AclEditor.renderAclsEditor {
-                                            ItemAcls =
-                                                value.AclRefs
-                                                |> Map.toSeq
-                                                |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
-                                            AclTypes = aclTypes
-                                            DispatchParent =
-                                                (fun msg ->
-                                                    printfn "AclEditor ParentMsg:%A" msg
-                                                    msg)
-                                                >> EditAcl
-                                                >> dispatch
-                                        }
-                                )
-                    }
-                ]
-                dispatch)
+                renderTabs
+                    [ "fill" ]
+                    [
+                        {
+                            Name = "Props"
+                            TabType = Enabled <| TabChange EditorTabs.MainTab
+                            IsActive = tab = EditorTabs.MainTab
+                            Render = fun () -> propsTab
+                        }
+                        {
+                            Name = "Icon"
+                            TabType = Enabled <| TabChange EditorTabs.IconTab
+                            IsActive = tab = EditorTabs.IconTab
+                            Render =
+                                fun () ->
+                                    IconEditor.renderIconEditor
+                                        { PropValue = store.Value.Item.Icon }
+                                        (IconMsg >> dispatch)
+                        }
+                        {
+                            Name = "Acls"
+                            TabType = Enabled <| TabChange EditorTabs.AclTab
+                            IsActive = tab = EditorTabs.AclTab
+                            Render =
+                                fun () ->
+                                    Bind.el (
+                                        props.AclTypes,
+                                        fun aclTypes ->
+                                            AclEditor.renderAclsEditor {
+                                                ItemAcls =
+                                                    store.Value.Item.AclRefs
+                                                    |> Map.toSeq
+                                                    |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                                                AclTypes = aclTypes
+                                                DispatchParent =
+                                                    (fun msg ->
+                                                        printfn "AclEditor ParentMsg:%A" msg
+                                                        msg)
+                                                    >> EditAcl
+                                                    >> dispatch
+                                            }
+                                    )
+                        }
+                    ]
+                    dispatch)
+        )
 
     Html.div [
         disposeOnUnmount [ store ]
         data_ "file" "NavEditor"
-        Bind.el (
-            store |> Store.map MLens.getItem,
-            fun value ->
-                match props.Core.EditorMode with
-                | Standalone _ ->
-                    let siblings = Renderers.renderFramed dispatch dispatchParent
+        printfn "RenderNavEditor part"
 
-                    App.Components.NavShared.renderEditorFrame value [ core ] siblings
-                | Child _ -> core
-        )
+        match props.EditorMode with
+        | Standalone _ ->
+            let siblings = Renderers.renderFramed dispatch dispatchParent
+
+            Bind.el (
+                store |> Store.map MLens.getItem,
+                fun item -> App.Components.NavShared.renderEditorFrame item [ core ] siblings
+            )
+        | Child _ -> core
     ]

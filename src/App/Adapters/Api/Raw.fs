@@ -17,7 +17,19 @@ let genNavUrl pathOpt =
     let b = "/api/navigation"
 
     match pathOpt with
-    | Some(ValueString path) -> if path.StartsWith "/" then b + path else $"%s{b}/{path}"
+    | Some(ValueString path) ->
+        // ensure path fits format $"{b}/root/{path}"
+        if path |> startsWithI "root/" then
+            $"/%s{b}/{path}"
+        elif path |> startsWithI "/root/" then
+            b + path
+        elif path |> startsWithI "root/" then
+            $"%s{b}/{path}"
+        elif path |> startsWithI "/" then
+            $"%s{b}{path}"
+        else
+            Core.warn $"Unexpected path: %s{path}"
+            $"%s{b}/root/{path}"
     | Some _ ->
         let txt = "Bad PathOpt"
         eprintfn "%s" txt

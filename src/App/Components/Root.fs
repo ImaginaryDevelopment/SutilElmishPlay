@@ -941,7 +941,17 @@ let view appMode =
                                     | None, _ -> Html.div []
                                     | Some item, Some aclTypes ->
                                         printfn "Render Root Path Tab"
-                                        let itemStore = store |> Store.chooseRStore MLens.getFocusedItem item
+
+                                        let itemStore =
+                                            store
+                                            |> Store.chooseStore
+                                                "RootPathTabItem"
+                                                (MLens.getFocusedItem,
+                                                 fun nextItem -> {
+                                                     store.Value with
+                                                         FocusedItem = nextItem
+                                                 })
+                                                item
 
                                         let aclStore =
                                             store
@@ -949,18 +959,10 @@ let view appMode =
 
                                         let r =
                                             NavEditor.renderEditor {
-                                                Core = {
-                                                    AppMode = appMode
-                                                    AclTypes = aclStore
-                                                    NavItem = itemStore
-                                                    EditorMode =
-                                                        NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
-                                                }
-                                                NavItemIconObservable =
-                                                    store
-                                                    |> Store.map MLens.getFocusedItem
-                                                    |> Observable.choose id
-                                                    |> Observable.map (fun v -> v.Icon)
+                                                AppMode = appMode
+                                                AclTypes = aclStore
+                                                NavItem = itemStore
+                                                EditorMode = NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
                                             }
 
                                         r

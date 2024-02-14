@@ -34,7 +34,7 @@ type Msg =
     | SearchChange of string
     | NameChange of string
     | SearchIcons
-    | SelectUsed
+    | SelectUsed of string
 
 let update (msg: Msg) model =
     printfn "IconEditor update: %A" msg
@@ -51,7 +51,15 @@ let update (msg: Msg) model =
             }
         else
             model
-    | SelectUsed -> { model with LastIsSelect = true }
+    | SelectUsed selectedName -> {
+        model with
+            LastIsSelect = true
+            NameValue =
+                if String.isValueString selectedName then
+                    selectedName
+                else
+                    model.NameValue
+      }
 
 type IconEditorParentMsg = Accepted of value: string
 
@@ -78,7 +86,7 @@ let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
             Html.select [
                 Attr.className "select"
                 Handlers.onValueChangeIf dispatch (function
-                    | ValueString v -> Some SelectUsed
+                    | ValueString v -> Some(SelectUsed v)
                     | _ -> None)
                 Html.option [ text "" ]
                 for o in options do

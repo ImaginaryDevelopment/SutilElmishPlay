@@ -145,5 +145,8 @@ module Store =
         // Update=(fun oldValue -> setter oldValue)
         }
 
+    let chooseStore title (getter, setter) init store =
+        store |> mapStore title (getter >> Option.defaultValue init, Some >> setter)
+
     let chooseRStore getter init store =
         store |> mapRStore (fun parent -> getter parent |> Option.defaultValue init)

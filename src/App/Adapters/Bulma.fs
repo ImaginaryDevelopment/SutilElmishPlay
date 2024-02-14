@@ -37,7 +37,12 @@ let renderTabs containerClasses items dispatch =
                     Html.li [
                         match item.TabType with
                         | Disabled cn ->
-                            Html.button [ Attr.title "No Item selected"; Attr.disabled true; text item.Name ]
+                            Html.button [
+                                Attr.title "No Item selected"
+                                Attr.disabled true
+                                text item.Name
+                                Attr.className cn
+                            ]
                         | Enabled msg ->
                             Html.a [
                                 match item.IsActive with

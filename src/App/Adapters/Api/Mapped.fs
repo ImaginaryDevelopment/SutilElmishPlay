@@ -58,7 +58,13 @@ let getAclTypes token () =
 
 module NavItemAdapters =
 
-    // unsafe
+    // make sure that the path starts with "/root/"
+    let ensureStartsWithRoot path =
+        if path |> startsWithI "root/" then $"/{path}"
+        elif path |> startsWithI "/root/" then path
+        elif path |> startsWithI "/" then $"/root{path}"
+        else $"/root/{path}"
+
     let ofApiNavItem (x: ApiNavItem) : NavItem =
 
         let mapped: NavItem = {
@@ -98,7 +104,7 @@ module NavItemAdapters =
             Acls = acls
             Description = item.Description
             Id = navId
-            Path = item.Path
+            Path = item.Path |> ensureStartsWithRoot
             Parent = item.Parent
             Type = string item.Type
             Name = item.Name

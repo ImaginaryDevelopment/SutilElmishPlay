@@ -171,13 +171,13 @@ let renderAclCreator (props: AclCreatorProps) =
 
                 // let cni = MLens.modelToCreatingItem store.Value
 
+                Bind.attr ("disabled", store |> Store.map (fun x -> x.Item.Name |> String.isValueString |> not))
                 // should we check for dupes here and disable if so?
-                if String.isValueString itemStore.Value.Name |> not then
-                    Attr.disabled true
-                else
-                    match vItem with
-                    | None -> ()
-                    | Some vItem -> onClick (fun _ -> ParentMsg.CreateNavItem vItem |> props.DispatchParent) []
+                // do we need to check if vItem is out of sync with some in-memory edited but not saved copy?
+                // for example, icon change not accepted
+                match vItem with
+                | None -> ()
+                | Some vItem -> onClick (fun _ -> ParentMsg.CreateNavItem vItem |> props.DispatchParent) []
             ]
         ]
         <| getError None
@@ -216,7 +216,12 @@ let renderAclCreator (props: AclCreatorProps) =
                         | None -> ""
                         | Some v -> v)
 
-                let itemStore = store |> Store.mapRStore (fun model -> model.Item)
+                let itemStore =
+                    store
+                    |> Store.mapStore
+                        "NavEditorNavItem"
+                        ((fun model -> model.Item), (fun nextItem -> { store.Value with Item = nextItem }))
+
                 let creationItems = renderCreationEditor getError allErrors itemStore vItem
 
                 let editor =
@@ -224,14 +229,11 @@ let renderAclCreator (props: AclCreatorProps) =
                         store |> Store.map MLens.getItem,
                         fun _ ->
                             NavEditor.renderEditor {
-                                Core = {
-                                    AppMode = props.AppMode
-                                    AclTypes = props.AclTypes
-                                    NavItem = itemStore
-                                    EditorMode =
-                                        NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
-                                }
-                                NavItemIconObservable = store |> Store.map MLens.getIcon
+                                AppMode = props.AppMode
+                                AclTypes = props.AclTypes
+                                NavItem = itemStore
+                                EditorMode =
+                                    NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
                             }
                     )
 
