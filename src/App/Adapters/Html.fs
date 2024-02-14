@@ -11,7 +11,7 @@ let tryRender title f arg : Core.SutilElement =
     try
         f arg
     with ex ->
-        eprintfn "Render failed: '%s' -> %A"
+        eprintfn "Render failed: '%s' -> %A" title ex.Message
         Core.log ex
         Html.divc "is-danger" [ text <| string ex ]
 
@@ -34,7 +34,7 @@ let columns3 col1 col2 col3 =
 
 
 module Handlers =
-    let debounceDefault = 300
+    let debounceDefault = 400
     // change only fires like on focus lost for text input
     let onValueChange<'t> (dispatch: 't -> unit) f =
         Sutil.CoreElements.on "change" (Core.Handlers.getValue >> f >> dispatch) List.empty
@@ -45,20 +45,43 @@ module Handlers =
     let onValueChangeIfD<'t> timeoutMs (dispatch: 't -> unit) f =
         onValueChangeIf<'t> (Core.debounce dispatch timeoutMs) f
 
-    let onValueInput<'t> (dispatch: 't -> unit) f =
-        Sutil.CoreElements.on "input" (Core.Handlers.getValue >> f >> dispatch) List.empty
+    let onValueInput<'t> f =
+        Sutil.CoreElements.on "input" (Core.Handlers.getValue >> f) List.empty
 
-    let onValueInputD<'t> timeoutMs (dispatch: 't -> unit) f =
-        onValueInput<'t> (Core.debounce dispatch timeoutMs) f
+    let onValueInputD<'t> timeoutMs f =
+        onValueInput<'t> (Core.debounce f timeoutMs)
 
-let textInput titling (value: string) children onChange dispatch =
+// let onFocus f = on "focus" (fun _ -> f ())
+
+// let onFocusable title isFocus fOnFocus =
+//     if isFocus then
+//         if focusTracing then
+//             printfn "%s is focused" title
+
+//         autofocus
+//     else
+//         onFocus fOnFocus []
+
+type TextInputArgs = {
+    Titling: string
+    Value: System.IObservable<string>
+    OnChange: string -> unit
+    // unit allows for side effects
+    // OnFocus: unit -> unit
+    // IsFocus: bool
+    DebounceOverride: int option
+}
+
+// assumes we won't use Attr.name for form field submission
+let textInput (tia: TextInputArgs) children =
     Html.inputc "input" [
         type' "text"
-        Attr.value value
-        Attr.title titling
-        Attr.placeholder titling
+        Bind.attr ("value", tia.Value)
+        Attr.title tia.Titling
+        Attr.placeholder tia.Titling
+        // Handlers.onFocusable tia.Titling tia.IsFocus tia.OnFocus
         yield! children
-        Handlers.onValueInputD Handlers.debounceDefault dispatch onChange
+        Handlers.onValueInputD (tia.DebounceOverride |> Option.defaultValue Handlers.debounceDefault) tia.OnChange
     ]
 
 let checkbox titling (value: bool) children (onChange: bool -> 't) (dispatch: Dispatch<'t>) =
@@ -90,3 +113,37 @@ module Observable =
 
                 Helpers.disposable (fun _ -> disposeA.Dispose())
         }
+
+module Store =
+    let mapRStore (getter: 't -> 't2) (store: IReadOnlyStore<'t>) =
+        { new IReadOnlyStore<'t2> with
+            member _.Value = getter store.Value
+            member _.Dispose() = store.Dispose()
+
+            member _.Subscribe x =
+                store.Subscribe(fun value -> getter value |> x.OnNext)
+
+        }
+
+    let mapStore title (getter: 't -> 't2, setter: 't2 -> 't) (store: IStore<'t>) =
+        let mutable name = store.Name + "." + title
+
+        { new IStore<'t2> with
+            member _.Debugger = store.Debugger
+
+            member _.Subscribe x =
+                store.Subscribe(fun value -> getter value |> x.OnNext)
+
+            member _.Name
+                with get () = name
+                and set v = name <- v
+
+            member _.Update f = store.Update(getter >> f >> setter)
+            member _.Value = getter store.Value
+            member _.Dispose() = store.Dispose()
+
+        // Update=(fun oldValue -> setter oldValue)
+        }
+
+    let chooseRStore getter init store =
+        store |> mapRStore (fun parent -> getter parent |> Option.defaultValue init)

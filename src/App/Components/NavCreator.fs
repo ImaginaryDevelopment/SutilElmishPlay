@@ -19,28 +19,16 @@ open App.Adapters.Bulma
 
 open Core
 
-type CreatorFocusType =
-    | PathFocus
-    | NameFocus
-
-type FocusType =
-    | Creator of CreatorFocusType
-    | Editor
-
 type Model = {
     // NavItem: NavItem
     Item: NavItem
     Acls: (AclData * AclType) list
-    Focus: FocusType
 }
 
 module MLens =
     let getIcon (x: Model) = x.Item.Icon
     let getItem x = x.Item
-    let getFocus x = x.Focus
     let setItemProp model f = { model with Item = f model.Item }
-    let setFocus focusType model = { model with Focus = focusType }
-    let setCreatorFocus creatorFocusType = setFocus <| Creator creatorFocusType
 
 type ParentMsg =
     | CreateNavItem of ValidNavItem
@@ -50,7 +38,6 @@ type Msg =
     | ItemTypeChange of NavItemType
     | NameChange of string
     | PathChange of string
-    // | LinkChange of string
     | EditorMsg of NavEditor.ChildParentMsg
 
 
@@ -73,7 +60,7 @@ let init path : Model * Cmd<Msg> =
             Enabled = false
         }
         Acls = List.empty
-        Focus = FocusType.Creator NameFocus
+    // Focus = FocusType.Creator NameFocus
     },
     Cmd.none
 
@@ -82,20 +69,14 @@ let update (dispatchParent: Dispatch<ParentMsg>) (msg: Msg) (model: Model) : Mod
 
     match msg with
     | ItemTypeChange nit -> MLens.setItemProp model (fun item -> { item with Type = nit }), Cmd.none
-    | PathChange next ->
-        MLens.setItemProp model (fun item -> { item with Path = next })
-        |> MLens.setCreatorFocus PathFocus
-        |> justModel
+    | PathChange next -> MLens.setItemProp model (fun item -> { item with Path = next }) |> justModel
 
     | NameChange next ->
         printfn "Setting name to %s" next
 
-        MLens.setItemProp model (fun item -> { item with Name = next })
-        |> MLens.setCreatorFocus NameFocus
-        |> justModel
+        MLens.setItemProp model (fun item -> { item with Name = next }) |> justModel
 
     | EditorMsg(NavEditor.ChildParentMsg.ItemUpdate nextItem) -> { model with Item = nextItem }, Cmd.none
-    | EditorMsg NavEditor.ChildParentMsg.GotFocus -> { model with Focus = FocusType.Editor }, Cmd.none
     | EditorMsg(NavEditor.ChildParentMsg.ParentMsg pm) ->
         dispatchParent (ParentMsg.EditorParentMsg pm)
         model, Cmd.none
@@ -110,14 +91,20 @@ type AclCreatorProps = {
     DispatchParent: Dispatch<ParentMsg>
     AppMode: ConfigType<string>
     Path: string
-    AclTypes: AclType seq
+    AclTypes: IReadOnlyStore<AclType seq>
+}
+
+type FocusableFormFieldArgs = {
+    Name: string
+    Value: System.IObservable<string>
+    OnChange: string -> unit
 }
 
 let renderAclCreator (props: AclCreatorProps) =
     toGlobalWindow "navCreator_props" props
     printfn "Render NavCreator"
 
-    if Seq.isEmpty props.AclTypes then
+    if Seq.isEmpty props.AclTypes.Value then
         eprintfn "No AclTypes found"
 
     let store, dispatch =
@@ -125,26 +112,29 @@ let renderAclCreator (props: AclCreatorProps) =
 
     toGlobalWindow "navCreator_model" store.Value
 
-    let focusableFormField getError name value focusType msg =
-        formField [ text name ] [
+    let focusableFormField getError (fffArgs: FocusableFormFieldArgs) =
+        formField [ text fffArgs.Name ] [
 
             textInput
-                name
-                value
-                [
-                    if store.Value.Focus = FocusType.Creator focusType then
-                        autofocus
-                ]
-                msg
-                dispatch
+                {
+                    Titling = "NavCreator." + fffArgs.Name
+                    Value = fffArgs.Value
+                    OnChange = fffArgs.OnChange
+                    DebounceOverride = None
+                }
+                []
         ]
-        <| getError (Some name)
+        <| getError (Some fffArgs.Name)
 
-    let renderCreationEditor getError allErrors (item: NavItem) vItem = [
+    let renderCreationEditor getError allErrors (itemStore: IReadOnlyStore<NavItem>) vItem = [
 
         columns2 [
             if store.Value.Item.Type = Link then
-                focusableFormField getError "Path" item.Path PathFocus Msg.PathChange
+                focusableFormField getError {
+                    Name = "Path"
+                    Value = itemStore |> Store.map (fun item -> item.Path)
+                    OnChange = Msg.PathChange >> dispatch
+                }
         ] [
             formField [ text "Type" ] [
 
@@ -160,7 +150,7 @@ let renderAclCreator (props: AclCreatorProps) =
                             Html.option [
                                 Attr.value (string o)
                                 text (string o)
-                                if item.Type = o then
+                                if itemStore.Value.Type = o then
                                     Attr.selected true
                             ]
                     ]
@@ -169,7 +159,11 @@ let renderAclCreator (props: AclCreatorProps) =
             <| getError (Some "Type")
 
         ]
-        focusableFormField getError "Name" store.Value.Item.Name NameFocus Msg.NameChange
+        focusableFormField getError {
+            Name = "Name"
+            Value = store |> Store.map (fun model -> model.Item.Name)
+            OnChange = Msg.NameChange >> dispatch
+        }
 
         formField [ text "Create" ] [
             bButton "Create" [
@@ -178,7 +172,7 @@ let renderAclCreator (props: AclCreatorProps) =
                 // let cni = MLens.modelToCreatingItem store.Value
 
                 // should we check for dupes here and disable if so?
-                if String.isValueString item.Name |> not then
+                if String.isValueString itemStore.Value.Name |> not then
                     Attr.disabled true
                 else
                     match vItem with
@@ -193,54 +187,56 @@ let renderAclCreator (props: AclCreatorProps) =
     Html.div [
 
         disposeOnUnmount [ store ]
-        Bind.el2 (store |> Store.map MLens.getItem) (store |> Store.map MLens.getFocus) (fun (item, focus) ->
-            // this may not get recalculated when validation changes
-            let eItem = store.Value.Item
-            // navItem validation, validates a NavItem, validateNavItem
-            let vResult = ValidNavItem.ValidateNavItem eItem
-            let vItem, vErrors = vResult |> Option.ofResult
+        // Bind.el2 (store |> Store.map MLens.getItem) (store |> Store.map MLens.getFocus) (fun (item, focus) ->
+        let itemStore = store |> Store.map MLens.getItem
 
-            let allErrors: SutilElement list =
-                vErrors
-                |> Option.map (fun vm ->
-                    (List.empty, vm)
-                    ||> Map.fold (fun errs fnOpt fnErrs ->
-                        let fn = fnOpt |> Option.defaultValue ""
-                        let adds = NavShared.renderErrors fn fnErrs
-                        errs @ adds))
-                |> Option.defaultValue List.empty
+        Bind.el (
+            itemStore,
+            (fun item ->
+                // this may not get recalculated when validation changes
+                let eItem = store.Value.Item
+                // navItem validation, validates a NavItem, validateNavItem
+                let vResult = ValidNavItem.ValidateNavItem eItem
+                let vItem, vErrors = vResult |> Option.ofResult
 
-            vErrors |> Option.defaultValue Map.empty |> toGlobalWindow "navCreator_Errors"
+                let allErrors: SutilElement list =
+                    vErrors
+                    |> Option.map (fun vm ->
+                        (List.empty, vm)
+                        ||> Map.fold (fun errs fnOpt fnErrs ->
+                            let fn = fnOpt |> Option.defaultValue ""
+                            let adds = NavShared.renderErrors fn fnErrs
+                            errs @ adds))
+                    |> Option.defaultValue List.empty
 
-            let getError =
-                NavShared.renderErrorMapMaybe vErrors (function
-                    | None -> ""
-                    | Some v -> v)
+                vErrors |> Option.defaultValue Map.empty |> toGlobalWindow "navCreator_Errors"
 
-            let creationItems = renderCreationEditor getError allErrors item vItem
+                let getError =
+                    NavShared.renderErrorMapMaybe vErrors (function
+                        | None -> ""
+                        | Some v -> v)
 
-            let editor =
-                Bind.el (
-                    store |> Store.map MLens.getItem,
-                    fun _ ->
-                        NavEditor.renderEditor {
-                            Core = {
-                                AppMode = props.AppMode
-                                AclTypes = props.AclTypes
-                                NavItem = eItem
-                                IsFocus = focus = FocusType.Editor
-                                EditorMode =
-                                    NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
+                let itemStore = store |> Store.mapRStore (fun model -> model.Item)
+                let creationItems = renderCreationEditor getError allErrors itemStore vItem
+
+                let editor =
+                    Bind.el (
+                        store |> Store.map MLens.getItem,
+                        fun _ ->
+                            NavEditor.renderEditor {
+                                Core = {
+                                    AppMode = props.AppMode
+                                    AclTypes = props.AclTypes
+                                    NavItem = itemStore
+                                    EditorMode =
+                                        NavEditor.EditorMode.Child("NavCreator", vResult, Msg.EditorMsg >> dispatch)
+                                }
+                                NavItemIconObservable = store |> Store.map MLens.getIcon
                             }
-                            NavItemIconObservable = store |> Store.map MLens.getIcon
-                        }
-                )
+                    )
 
-            App.Components.NavShared.renderEditorFrame eItem [
-                Html.sectionc "hero" creationItems
-            // Html.sectionc "section" [ editor ]
-
-            // Bind.el2 props.Path
-            // ]
-            ] [ Html.sectionc "section" [ editor ] ])
+                App.Components.NavShared.renderEditorFrame eItem [ Html.sectionc "hero" creationItems ] [
+                    Html.sectionc "section" [ editor ]
+                ])
+        )
     ]

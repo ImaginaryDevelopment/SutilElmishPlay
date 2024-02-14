@@ -17,19 +17,22 @@ open App.Components.Gen.Icons
 open Core
 
 type Model = {
+    NameValue: string
     SearchValue: string
     LastIsSelect: bool
     SearchClick: System.DateTime option
 }
 
-let init () = {
+let init propValue = {
     SearchValue = ""
+    NameValue = propValue |> Option.ofObj |> Option.defaultValue ""
     LastIsSelect = true
     SearchClick = None
 }
 
 type Msg =
     | SearchChange of string
+    | NameChange of string
     | SearchIcons
     | SelectUsed
 
@@ -38,6 +41,7 @@ let update (msg: Msg) model =
 
     match msg with
     | SearchChange value -> { model with SearchValue = value }
+    | NameChange value -> { model with NameValue = value }
     | SearchIcons ->
         if model.SearchValue |> String.length > 1 then
             {
@@ -49,16 +53,48 @@ let update (msg: Msg) model =
             model
     | SelectUsed -> { model with LastIsSelect = true }
 
-type IconEditorParentMsg =
-    | NameChange of propName: string * value: string
-    | GotFocus
+type IconEditorParentMsg = Accepted of value: string
 
-type IconEditorProps = {
-    PropName: string
-    PropObserver: System.IObservable<string>
-    PropValue: string
-    IsFocus: bool
-}
+let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
+    match store.Value.SearchValue with
+    | ValueString searchPath ->
+        Html.divc "select" [
+            printfn "Rerender select : %s" searchPath
+
+            let options =
+                if store.Value.LastIsSelect then
+                    let toLower = System.Char.ToLowerInvariant
+
+                    // not sure why this doesn't work with iconPath
+                    let first = toLower searchPath[0]
+                    Mui.all.Keys |> Seq.filter (fun k -> toLower k.[0] = first)
+                else
+                    let sv = store.Value.SearchValue.ToLowerInvariant()
+
+                    Mui.all.Keys
+                    |> Seq.filter (fun k -> not <| isNull k && k.ToLowerInvariant().Contains(sv))
+                |> List.ofSeq
+
+            Html.select [
+                Attr.className "select"
+                Handlers.onValueChangeIf dispatch (function
+                    | ValueString v -> Some SelectUsed
+                    | _ -> None)
+                Html.option [ text "" ]
+                for o in options do
+                    Html.option [
+                        Attr.value o
+                        if store.Value.NameValue = o then
+                            Attr.selected true
+                        text o
+                    ]
+            ]
+        ]
+    | _ -> Html.div []
+
+
+// HACK: this is using 2 different properties because observer doesn't need to update or fire on empty string
+type IconEditorProps = { PropValue: string }
 
 let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorParentMsg>) =
     let pDispatch msg =
@@ -66,73 +102,37 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
         pDispatch msg
 
     toGlobalWindow "iconEditor_props" props
-    let store, dispatch = () |> Store.makeElmishSimple init update ignore
+    let store, dispatch = props.PropValue |> Store.makeElmishSimple init update ignore
     toGlobalWindow "iconEditor_model" store.Value
 
     let nameInput: SutilElement =
-        Html.inputc "input" [
-            type' "text"
-            if props.IsFocus then
-                autofocus
-            else
-                on "focus" (fun _ -> GotFocus |> pDispatch) []
-            Attr.value props.PropValue
-            Handlers.onValueInputD 300 pDispatch (fun v ->
-                dispatch SelectUsed
-                NameChange(props.PropName, v))
-        ]
+
+        textInput
+            {
+                Titling = "Name Input"
+                Value = store |> Store.map (fun model -> model.NameValue)
+                OnChange = (NameChange >> dispatch)
+                DebounceOverride = None
+            }
+            []
 
     // TODO: name select search
-    let nameSelect model : SutilElement =
-        Bind.el (
-            props.PropObserver,
-            function
-            | ValueString iconPath when
-                props.PropValue.Length > 0
-                || (not model.LastIsSelect && model.SearchValue.Length > 0)
-                ->
-                Html.divc "select" [
-                    printfn "Rerender select : %s" iconPath
-
-                    let options =
-                        if model.LastIsSelect then
-                            let toLower = System.Char.ToLowerInvariant
-
-                            // not sure why this doesn't work with iconPath
-                            let first = toLower props.PropValue[0]
-                            Mui.all.Keys |> Seq.filter (fun k -> toLower k.[0] = first)
-                        else
-                            let sv = model.SearchValue.ToLowerInvariant()
-
-                            Mui.all.Keys
-                            |> Seq.filter (fun k -> not <| isNull k && k.ToLowerInvariant().Contains(sv))
-                        |> List.ofSeq
-
-                    Html.select [
-                        Attr.className "select"
-                        Handlers.onValueChangeIf pDispatch (function
-                            | ValueString v ->
-                                dispatch SelectUsed
-                                NameChange(props.PropName, v) |> Some
-                            | _ -> None)
-                        Html.option [ text "" ]
-                        for o in options do
-                            Html.option [
-                                Attr.value o
-                                if iconPath = o then
-                                    Attr.selected true
-                                text o
-                            ]
-                    ]
-                ]
-            | _ -> Html.div []
-        )
+    printfn "Render IconEditor"
 
     Html.div [
-        tryIcon (App.Init.IconSearchType.MuiIcon props.PropValue)
+        Bind.el (store |> Store.map (fun v -> v.NameValue), (fun nv -> tryIcon (App.Init.IconSearchType.MuiIcon nv)))
 
         formField [ text "Search" ] [
-            textInput "Icon Search" store.Value.SearchValue [] (fun v -> Msg.SearchChange v) dispatch
+
+            textInput
+                {
+                    Titling = "Icon Search"
+                    Value = store |> Store.map (fun v -> v.SearchValue)
+                    OnChange = Msg.SearchChange >> dispatch
+                    DebounceOverride = None
+                }
+                []
+
             bButton "Search" [
                 text "Search Icons"
                 onClick (fun _ -> Msg.SearchIcons |> dispatch) List.empty
@@ -140,11 +140,17 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
         ] []
         formField [ text "Icon Name" ] [
             columns2 [ nameInput ] [
-                Bind.el2
-                    (store |> Store.map (fun model -> model.LastIsSelect))
-                    (store |> Store.map (fun model -> model.SearchClick))
-                    (fun _ -> nameSelect store.Value)
+                Bind.el (store |> Store.map (fun v -> v.SearchValue), (fun _ -> nameSelect store dispatch))
             ]
         ] []
+        bButton "Accept" [
+            Bind.attr (
+                "disabled",
+                store
+                |> Store.map (fun v -> not (String.isValueString v.NameValue && v.NameValue <> props.PropValue))
+            )
+            text "Accept Icon"
+            onClick (fun _ -> IconEditorParentMsg.Accepted store.Value.NameValue |> pDispatch) []
+        ]
 
     ]

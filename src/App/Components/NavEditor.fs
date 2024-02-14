@@ -37,18 +37,19 @@ type Model = {
 
 type CachedState = { Tab: EditorTabs }
 
-
+// Messages we can send to our parent when we aren't a NavCreator child
 [<RequireQualifiedAccess>]
 type StandaloneParentMsg =
     | ParentMsg of NavShared.ParentMsg
     | Cancel
     | Saved of NavItem
 
+// Messages we can send to NavCreator when we are a child
 [<RequireQualifiedAccess>]
 type ChildParentMsg =
     | ParentMsg of NavShared.ParentMsg
     | ItemUpdate of NavItem
-    | GotFocus
+// | GotFocus
 
 type EditorMode =
     | Standalone of Dispatch<StandaloneParentMsg>
@@ -70,12 +71,12 @@ module private MLens =
             Errors = (msg, System.DateTime.Now) :: x.Errors
     }
 
-
 type SaveMsg =
     | Requested
     | Responded of Result<NavItem, NavEditorErrorType>
 
-type EditorMsgType =
+
+type private Msg =
     | EditProp of prop: string * nextValue: string
     | EnabledChange of bool
     | EditAcl of AclEditor.AclParentMsg
@@ -83,9 +84,9 @@ type EditorMsgType =
     | IconMsg of IconEditor.IconEditorParentMsg
     | Save of SaveMsg
 
-module Commands =
+module private Commands =
 
-    let saveItem token item : Cmd<EditorMsgType> =
+    let saveItem token item : Cmd<Msg> =
         let mapError (ex: exn) = $"Save Error: {ex.Message}"
 
         let f item =
@@ -120,22 +121,46 @@ type EditorParentDispatchType =
         | Standalone pDispatch -> pDispatch msg
         | _ -> ()
 
-module Renderers =
+module private Renderers =
 
-    let renderPropsEditor fError value dispatch =
+    let renderPropsEditor fError (store: IReadOnlyStore<NavItem>) dispatch =
+        let value = store.Value
+
         let ff name value =
-            formField [ text name ] [ textInput name value [] (fun v -> EditProp(name, v)) dispatch ]
+            formField [ text name ] [
+                textInput
+                    {
+                        Titling = name
+                        Value = value
+                        OnChange = fun v -> EditProp(name, v) |> dispatch
+                        DebounceOverride = None
+                    }
+                    []
+            ]
+
 
         fun () ->
+            // printfn "Focus is %A" propsFocusOpt
+
             Html.div [
+                let enabledField =
+                    formField [ text (nameof value.Enabled) ] [
+                        checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
+                    ]
+
+                let weightField =
+                    let w = store |> Store.map (fun v -> string v.Weight)
+                    ff (nameof value.Weight) w
+
                 data_ "method" "renderPropsEditor"
-                formField [ text (nameof value.Enabled) ] [
-                    checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
-                ]
-                <| fError (Some "Enabled")
-                ff (nameof value.Weight) (string value.Weight) <| fError (Some "Weight")
+                enabledField <| fError (Some "Enabled")
+
+                weightField <| fError (Some "Weight")
+
                 if value.Type = NavItemType.Link then
-                    ff (nameof value.Url) value.Url <| fError (Some "Url")
+                    let u = store |> Store.map (fun v -> v.Url)
+                    let urlField = ff (nameof value.Url) u
+                    urlField <| fError (Some "Url")
             ]
 
     let renderFramed lDispatch pDispatch =
@@ -147,10 +172,7 @@ module Renderers =
                     data_ "method" "renderFramed"
 
                     Html.divc "left-left" [
-                        bButton "Save" [
-                            text "Save"
-                            onClick (fun _ -> EditorMsgType.Save SaveMsg.Requested |> lDispatch) []
-                        ]
+                        bButton "Save" [ text "Save"; onClick (fun _ -> Msg.Save SaveMsg.Requested |> lDispatch) [] ]
                         rButton "Cancel" [
                             text "Cancel"
                             onClick (fun _ -> StandaloneParentMsg.Cancel |> pDispatch) []
@@ -164,12 +186,13 @@ module Renderers =
 
 let justModel<'tMsg> m : Model * Cmd<'tMsg> = m, Cmd.none
 
-let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
-    let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
+// let init (stateStore: LocalStorage.IAccessor<CachedState>) item =
+let init (item: IReadOnlyStore<NavItem>) =
+    // let initialTab = stateStore.TryGetValue() |> Option.map (fun cs -> cs.Tab) // |> Option.bind (fun cs -> cs.Tab |> EditorTabs.ReParse)
 
     justModel {
-        Tab = initialTab |> Option.defaultValue EditorTabs.IconTab
-        Item = item
+        Tab = EditorTabs.IconTab
+        Item = item.Value
         Errors = List.empty
     }
 
@@ -192,11 +215,6 @@ module SideEffects =
 
         if not <| Map.isEmpty unresolvedAcls then
             let aclParamResolveRequests =
-                let f k (acl, v) : NavAclInquiry = {
-                    AclName = k
-                    NavId = NavId v
-                    AclType = acl
-                }
 
                 unresolvedAcls
                 |> Map.toSeq
@@ -223,16 +241,16 @@ module SideEffects =
                 |> List.map StandaloneParentMsg.ParentMsg
                 |> List.iter dispatchParent
 
-let update
-    (cState, appMode, aclTypes)
+let private update
+    (appMode, aclTypes: IReadOnlyStore<_>)
     (dispatchParent: EditorParentDispatchType)
     msg
     (model: Model)
-    : Model * Cmd<EditorMsgType> =
+    : Model * Cmd<Msg> =
     printfn "NavEditor update: %A" msg
 
-    let block msg : Model * Cmd<EditorMsgType> =
-        model |> MLens.addError msg |> justModel<EditorMsgType>
+    let block msg : Model * Cmd<Msg> =
+        model |> MLens.addError msg |> justModel<Msg>
 
     match msg with
     // blocks
@@ -250,10 +268,11 @@ let update
     | TabChange t ->
         let next = { model with Tab = t }
 
-        justModel
-        <| match SideEffects.saveStateCache cState next with
-           | Ok() -> next
-           | Error e -> MLens.addError e model
+        // justModel
+        // <| match SideEffects.saveStateCache cState next with
+        //    | Ok() -> next
+        //    | Error e -> MLens.addError e model
+        next, Cmd.none
 
     | EnabledChange value ->
         justModel {
@@ -261,13 +280,16 @@ let update
                 Item = { model.Item with Enabled = value }
         }
 
-    | IconMsg(IconEditor.IconEditorParentMsg.NameChange(name, value))
-    | EditProp(name, value) ->
+    | IconMsg(IconEditor.IconEditorParentMsg.Accepted value) ->
+        let name = "Icon"
+
         try
             let nextItem = cloneSet model.Item name value
             Core.log ("EditProp", name, value, nextItem)
             EditorParentDispatchType.DispatchChildOnly dispatchParent (ChildParentMsg.ItemUpdate nextItem)
-            justModel { model with Item = nextItem }
+            let nextModel = { model with Item = nextItem }
+
+            nextModel |> justModel
         with ex ->
             Core.log ex
             eprintfn $"%s{ex.Message}"
@@ -275,9 +297,20 @@ let update
             MLens.addError $"Failed to set property: %s{name} on %s{serialize model.Item}" model
             |> justModel
 
-    | IconMsg(IconEditor.IconEditorParentMsg.GotFocus) ->
-        EditorParentDispatchType.DispatchChildOnly dispatchParent ChildParentMsg.GotFocus
-        justModel model
+    | EditProp(name, value) ->
+        try
+            let nextItem = cloneSet model.Item name value
+            Core.log ("EditProp", name, value, nextItem)
+            EditorParentDispatchType.DispatchChildOnly dispatchParent (ChildParentMsg.ItemUpdate nextItem)
+            let nextModel = { model with Item = nextItem }
+
+            nextModel |> justModel
+        with ex ->
+            Core.log ex
+            eprintfn $"%s{ex.Message}"
+
+            MLens.addError $"Failed to set property: %s{name} on %s{serialize model.Item}" model
+            |> justModel
 
     | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
         EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclTypeChange v)
@@ -299,7 +332,7 @@ let update
             // is the map AclName -> AclDisplay or AclDisplay guid to AclDisplay?
             let resolvedAcls = App.Global.resolvedAclLookup.Value
 
-            SideEffects.getUnresolved aclTypes resolvedAcls nextItem dispatchParent
+            SideEffects.getUnresolved aclTypes.Value resolvedAcls nextItem dispatchParent
 
             let nextModel = { model with Item = nextItem }
 
@@ -345,10 +378,9 @@ let update
 
 type NavEditorCoreProps = {
     AppMode: ConfigType<string>
-    AclTypes: AclType seq
-    NavItem: NavItem
+    AclTypes: IReadOnlyStore<AclType seq>
+    NavItem: IReadOnlyStore<NavItem>
     EditorMode: EditorMode
-    IsFocus: bool
 }
 
 type NavEditorProps = {
@@ -358,8 +390,8 @@ type NavEditorProps = {
 
 // renames will go a different route, no path editing
 let renderEditor (props: NavEditorProps) =
-    printfn "Render editor: %A" props.Core.NavItem.Type
-    let cState = getCacheStore props.Core.EditorMode
+    printfn "Render editor: %A" props.Core.NavItem.Value.Type
+    // let cState = getCacheStore props.Core.EditorMode
 
     match props.Core.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow $"navEditor_props" props
@@ -372,10 +404,7 @@ let renderEditor (props: NavEditorProps) =
 
     let store, dispatch =
         props.Core.NavItem
-        |> Store.makeElmish
-            (init cState)
-            (update (cState, props.Core.AppMode, props.Core.AclTypes) dispatchParent)
-            ignore
+        |> Store.makeElmish init (update (props.Core.AppMode, props.Core.AclTypes) dispatchParent) ignore
 
     match props.Core.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
@@ -383,7 +412,7 @@ let renderEditor (props: NavEditorProps) =
 
     let vItem, vErrors =
         match props.Core.EditorMode with
-        | EditorMode.Standalone _ -> ValidNavItem.ValidateNavItem props.Core.NavItem
+        | EditorMode.Standalone _ -> ValidNavItem.ValidateNavItem props.Core.NavItem.Value
         | EditorMode.Child(_, vItem, _) -> vItem
         |> Option.ofResult
 
@@ -394,7 +423,10 @@ let renderEditor (props: NavEditorProps) =
 
     let core =
         let obsTab = store |> Store.map MLens.getTab
-        let obsItem = store |> Store.map MLens.getItem
+
+        let obsItem =
+            store
+            |> Store.mapStore "obsItem" (MLens.getItem, (fun nextItem -> { store.Value with Item = nextItem }))
 
         Bind.el2 obsTab obsItem (fun (tab, value) ->
             renderTabs
@@ -404,24 +436,13 @@ let renderEditor (props: NavEditorProps) =
                         Name = "Props"
                         TabType = Enabled <| TabChange EditorTabs.MainTab
                         IsActive = tab = EditorTabs.MainTab
-                        Render = Renderers.renderPropsEditor getError value dispatch
-
+                        Render = Renderers.renderPropsEditor getError obsItem dispatch
                     }
                     {
                         Name = "Icon"
                         TabType = Enabled <| TabChange EditorTabs.IconTab
                         IsActive = tab = EditorTabs.IconTab
-                        Render =
-                            fun () ->
-                                IconEditor.renderIconEditor
-                                    {
-                                        PropName = "Icon"
-                                        PropObserver =
-                                            props.NavItemIconObservable |> Observable.filter (String.isValueString)
-                                        PropValue = value.Icon
-                                        IsFocus = props.Core.IsFocus
-                                    }
-                                    (IconMsg >> dispatch)
+                        Render = fun () -> IconEditor.renderIconEditor { PropValue = value.Icon } (IconMsg >> dispatch)
                     }
                     {
                         Name = "Acls"
@@ -429,19 +450,23 @@ let renderEditor (props: NavEditorProps) =
                         IsActive = tab = EditorTabs.AclTab
                         Render =
                             fun () ->
-                                AclEditor.renderAclsEditor {
-                                    ItemAcls =
-                                        value.AclRefs
-                                        |> Map.toSeq
-                                        |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
-                                    AclTypes = props.Core.AclTypes
-                                    DispatchParent =
-                                        (fun msg ->
-                                            printfn "AclEditor ParentMsg:%A" msg
-                                            msg)
-                                        >> EditAcl
-                                        >> dispatch
-                                }
+                                Bind.el (
+                                    props.Core.AclTypes,
+                                    fun aclTypes ->
+                                        AclEditor.renderAclsEditor {
+                                            ItemAcls =
+                                                value.AclRefs
+                                                |> Map.toSeq
+                                                |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                                            AclTypes = aclTypes
+                                            DispatchParent =
+                                                (fun msg ->
+                                                    printfn "AclEditor ParentMsg:%A" msg
+                                                    msg)
+                                                >> EditAcl
+                                                >> dispatch
+                                        }
+                                )
                     }
                 ]
                 dispatch)

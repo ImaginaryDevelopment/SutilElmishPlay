@@ -331,3 +331,9 @@ module ObsSlip =
 
 //     interface System.IDisposable with
 //         member _.Dispose() = d.Dispose()
+
+let (|ValueSeqOption|_|) (x: #seq<_> option) =
+    match x with
+    | None -> None
+    | Some x when Seq.isEmpty x -> None
+    | Some x -> Some x

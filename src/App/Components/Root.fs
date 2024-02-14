@@ -758,7 +758,6 @@ module Renderers =
             Html.div [
                 Html.input [
                     type' "text"
-                    autofocus
                     Bind.attr ("value", model |> Store.map MLens.getPath)
                     Handlers.onValueChange dispatch Msg.PathChange
                 ]
@@ -934,7 +933,7 @@ let view appMode =
                             IsActive = rt = RootTabs.Editor
                             Render =
                                 let gfi = store |> Store.map MLens.getFocusedItem
-                                let gAcl = store |> Store.map MLens.getAclTypes
+                                let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
 
                                 let r: _ -> SutilElement =
                                     function
@@ -942,14 +941,18 @@ let view appMode =
                                     | None, _ -> Html.div []
                                     | Some item, Some aclTypes ->
                                         printfn "Render Root Path Tab"
+                                        let itemStore = store |> Store.chooseRStore MLens.getFocusedItem item
+
+                                        let aclStore =
+                                            store
+                                            |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
 
                                         let r =
                                             NavEditor.renderEditor {
                                                 Core = {
                                                     AppMode = appMode
-                                                    AclTypes = aclTypes
-                                                    NavItem = item
-                                                    IsFocus = false
+                                                    AclTypes = aclStore
+                                                    NavItem = itemStore
                                                     EditorMode =
                                                         NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
                                                 }
@@ -978,18 +981,25 @@ let view appMode =
                                     Bind.el (
                                         gAcl,
                                         function
-                                        | Some aclTypes ->
+                                        | ValueSeqOption aclTypes ->
+                                            let aclTypeStore =
+                                                store
+                                                |> Store.chooseRStore
+                                                    (MLens.getAclTypes >> Option.map Seq.ofArray)
+                                                    aclTypes
+
                                             printfn "Rendering Acl Creator"
 
                                             App.Components.NavCreator.renderAclCreator {
                                                 DispatchParent = (Msg.CreatorMsg >> dispatch)
                                                 AppMode = appMode
-                                                AclTypes = aclTypes
+                                                AclTypes = aclTypeStore
                                                 Path = store.Value.Path
                                             }
-                                        | None ->
+                                        | _ ->
                                             printfn "No AclTypes, not trying creation"
                                             Html.div [ text "No Acl Types found" ]
+
                                     )
 
                         }
