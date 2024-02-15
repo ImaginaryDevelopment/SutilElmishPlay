@@ -84,13 +84,14 @@ let textInput (tia: TextInputArgs) children =
         Handlers.onValueInputD (tia.DebounceOverride |> Option.defaultValue Handlers.debounceDefault) tia.OnChange
     ]
 
-let checkbox titling (value: bool) children (onChange: bool -> 't) (dispatch: Dispatch<'t>) =
+let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> 't) (dispatch: Dispatch<'t>) =
     Html.inputc "checkbox" [
         type' "checkbox"
-        Attr.isChecked value
+        // Attr.isChecked store.Value
+        Bind.attr ("checked", value = store)
         Attr.title titling
         yield! children
-        Handlers.onValueChange dispatch (fun _ -> not value |> onChange)
+        Handlers.onValueChange dispatch (fun _ -> not store.Value |> onChange)
     ]
 
 module Observable =

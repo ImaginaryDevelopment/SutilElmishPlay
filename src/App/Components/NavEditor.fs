@@ -122,6 +122,9 @@ type EditorParentDispatchType =
 module private Renderers =
 
     let renderPropsEditor fError (store: IReadOnlyStore<NavItem>) dispatch =
+        let enabledStore = store |> Store.mapRStore (fun navItem -> navItem.Enabled)
+        let weightStore = store |> Store.map (fun v -> string v.Weight)
+        let urlStore = store |> Store.map (fun v -> v.Url)
         printfn "Render PropsEditor"
         let value = store.Value
 
@@ -140,16 +143,13 @@ module private Renderers =
 
         fun () ->
             // printfn "Focus is %A" propsFocusOpt
-
             Html.div [
                 let enabledField =
                     formField [ text (nameof value.Enabled) ] [
-                        checkbox (nameof value.Enabled) value.Enabled [] EnabledChange dispatch
+                        checkbox (nameof value.Enabled) enabledStore [] EnabledChange dispatch
                     ]
 
-                let weightField =
-                    let w = store |> Store.map (fun v -> string v.Weight)
-                    ff (nameof value.Weight) w
+                let weightField = ff (nameof value.Weight) weightStore
 
                 data_ "method" "renderPropsEditor"
                 enabledField <| fError (Some "Enabled")
@@ -157,8 +157,7 @@ module private Renderers =
                 weightField <| fError (Some "Weight")
 
                 if value.Type = NavItemType.Link then
-                    let u = store |> Store.map (fun v -> v.Url)
-                    let urlField = ff (nameof value.Url) u
+                    let urlField = ff (nameof value.Url) urlStore
                     urlField <| fError (Some "Url")
             ]
 
@@ -360,7 +359,9 @@ let private update
         EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclSearchRequest v)
         justModel model
 
-    | Save(Responded(Error e)) -> MLens.addError e model |> justModel
+    | Save(Responded(Error e)) ->
+        eprintfn "NavEditor Api Error: %A" e
+        MLens.addError e model |> justModel
 
     | Save(Responded(Ok item)) ->
         EditorParentDispatchType.DispatchSOOnly dispatchParent

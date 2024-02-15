@@ -703,6 +703,8 @@ let update msg (model: Model) : Model * Cmd<Msg> =
     // responses:
 
     | Msg.FetchFail("NavRoot" as title, ex), _ ->
+        eprintfn "Failed NavRoot fetch: %s" title
+
         model
         |> MLens.addChcError title ex
         |> fun model ->
@@ -711,7 +713,10 @@ let update msg (model: Model) : Model * Cmd<Msg> =
                     NavPathState = Responded(Error ex)
             }
             |> justModel
-    | Msg.FetchFail(title, ex), _ -> model |> MLens.addChcError title ex |> justModel
+
+    | Msg.FetchFail(title, ex), _ ->
+        eprintfn "Failed fetch: %s" title
+        model |> MLens.addChcError title ex |> justModel
 
     | Msg.FetchResolve msg, _ -> Updates.fetchResolve msg model
 

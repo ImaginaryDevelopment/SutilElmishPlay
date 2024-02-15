@@ -40,7 +40,6 @@ type Msg =
     | PathChange of string
     | EditorMsg of NavEditor.ChildParentMsg
 
-
 let inline justModel m = m, Cmd.none
 
 let init path : Model * Cmd<Msg> =
