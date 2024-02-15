@@ -122,7 +122,15 @@ type EditorParentDispatchType =
 module private Renderers =
 
     let renderPropsEditor fError (store: IReadOnlyStore<NavItem>) dispatch =
-        let enabledStore = store |> Store.mapRStore (fun navItem -> navItem.Enabled)
+        let enabledStore =
+            store
+            |> Store.mapRStore
+                {
+                    UseEquality = true
+                    DebugTitle = None
+                }
+                (fun navItem -> navItem.Enabled)
+
         let weightStore = store |> Store.map (fun v -> string v.Weight)
         let urlStore = store |> Store.map (fun v -> v.Url)
         printfn "Render PropsEditor"
@@ -402,7 +410,14 @@ let renderEditor (props: NavEditorProps) =
         props.NavItem
         |> Store.makeElmish init (update (props.AppMode, props.AclTypes) dispatchParent) ignore
 
-    let obsTab = store |> Store.mapRStore MLens.getTab
+    let obsTab =
+        store
+        |> Store.mapRStore
+            {
+                UseEquality = true
+                DebugTitle = None
+            }
+            MLens.getTab
 
     let obsItem =
         store
@@ -436,20 +451,42 @@ let renderEditor (props: NavEditorProps) =
                     Name = "Props"
                     TabType = Enabled <| TabChange EditorTabs.MainTab
                     IsActive =
-                        let x = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.MainTab)
+                        let x =
+                            obsTab
+                            |> Store.mapRStore
+                                {
+                                    UseEquality = true
+                                    DebugTitle = None
+                                }
+                                (fun tab -> tab = EditorTabs.MainTab)
+
                         x
                     Value = propsTab
                 }
                 {
                     Name = "Icon"
                     TabType = Enabled <| TabChange EditorTabs.IconTab
-                    IsActive = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.IconTab)
+                    IsActive =
+                        obsTab
+                        |> Store.mapRStore
+                            {
+                                UseEquality = true
+                                DebugTitle = None
+                            }
+                            (fun tab -> tab = EditorTabs.IconTab)
                     Value = IconEditor.renderIconEditor { PropValue = store.Value.Item.Icon } (IconMsg >> dispatch)
                 }
                 {
                     Name = "Acls"
                     TabType = Enabled <| TabChange EditorTabs.AclTab
-                    IsActive = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.AclTab)
+                    IsActive =
+                        obsTab
+                        |> Store.mapRStore
+                            {
+                                UseEquality = true
+                                DebugTitle = None
+                            }
+                            (fun tab -> tab = EditorTabs.AclTab)
                     Value =
                         Bind.el (
                             props.AclTypes,

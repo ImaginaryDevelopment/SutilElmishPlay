@@ -115,14 +115,37 @@ module Observable =
                 Helpers.disposable (fun _ -> disposeA.Dispose())
         }
 
+type StoreOptions = {
+    UseEquality: bool
+    DebugTitle: string option
+}
+
 module Store =
-    let mapRStore (getter: 't -> 't2) (store: IReadOnlyStore<'t>) =
+    let mapRStore storeOptions (getter: 't -> 't2) (store: IReadOnlyStore<'t>) =
+        // let mutable value = getter store.Value
+
+        // debugTitleOpt
+        // |> Option.iter (fun title -> printfn "%s: Initialized - %A" title value)
+
         { new IReadOnlyStore<'t2> with
             member _.Value = getter store.Value
             member _.Dispose() = store.Dispose()
 
             member _.Subscribe x =
-                store.Subscribe(fun value -> getter value |> x.OnNext)
+                let f nextParentValue =
+                    let nextValue = getter nextParentValue
+
+                    match storeOptions.DebugTitle with
+                    | None -> ()
+                    | Some title -> printfn "RStore: %s - %A" title nextValue
+
+                    nextValue |> x.OnNext
+
+                if storeOptions.UseEquality then
+                    store |> Observable.distinctUntilChanged |> Observable.subscribe f
+                else
+                    store.Subscribe f
+
 
         }
 
@@ -149,5 +172,6 @@ module Store =
     let chooseStore title (getter, setter) init store =
         store |> mapStore title (getter >> Option.defaultValue init, Some >> setter)
 
-    let chooseRStore getter init store =
-        store |> mapRStore (fun parent -> getter parent |> Option.defaultValue init)
+    let chooseRStore storeOptions getter init store =
+        store
+        |> mapRStore storeOptions (fun parent -> getter parent |> Option.defaultValue init)

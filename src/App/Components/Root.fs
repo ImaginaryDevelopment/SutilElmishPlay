@@ -497,7 +497,7 @@ module Updates =
                 { model with AclTypeState = InFlight }, Commands.getAclTypes accessToken
 
     let fetchResolve msg (model: Model) : Model * Cmd<Msg> =
-        printfn "Running fetchResolve: %A" msg
+        printfn "Running fetchResolve: %A" (string msg |> String.truncateDisplay debug 20)
 
         match msg with
         | AclState data ->
@@ -648,7 +648,6 @@ let update msg (model: Model) : Model * Cmd<Msg> =
         match model.AppMode with
         | ConfigType.Demo -> None
         | ConfigType.Auth accessToken -> Some accessToken
-
 
     match msg, model with
     // block actions
@@ -870,13 +869,30 @@ let view appMode =
         data_ "file" "Root"
 
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
-        let rt = store |> Store.mapRStore MLens.getRootTab
+        let rt =
+            store
+            |> Store.mapRStore
+                {
+                    UseEquality = true
+                    DebugTitle = Some "getRootTab"
+                }
+                MLens.getRootTab
+
+        let mapTabStore tab =
+            rt
+            |> Store.mapRStore
+                {
+                    UseEquality = true
+                    DebugTitle = Some $"RootTabs.%A{tab}Store"
+                }
+                (fun rt -> rt = tab)
+
         printfn "Rendering Root Tabs: %A" rt
 
         let rootTab = {
             Name = "Root"
             TabType = Enabled <| Msg.TabChange RootTabs.Main
-            IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Main)
+            IsActive = mapTabStore RootTabs.Main
             Value =
                 let r data =
                     Renderers.renderRootView "" data dispatch
@@ -892,7 +908,7 @@ let view appMode =
         let pathTab = {
             Name = "Path"
             TabType = Enabled <| Msg.TabChange RootTabs.Sub
-            IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Sub)
+            IsActive = mapTabStore RootTabs.Sub
             Value =
                 printfn "Rendering path tab"
 
@@ -927,7 +943,7 @@ let view appMode =
                         store.Value.FocusedItem
                         |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
                         |> Option.defaultValue (TabType.Disabled "is-disabled")
-                    IsActive = rt |> Store.mapRStore (fun x -> x = RootTabs.Editor)
+                    IsActive = mapTabStore RootTabs.Editor
                     Value =
                         let gfi = store |> Store.map MLens.getFocusedItem
                         let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
@@ -952,7 +968,13 @@ let view appMode =
 
                                 let aclStore =
                                     store
-                                    |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
+                                    |> Store.chooseRStore
+                                        {
+                                            UseEquality = true
+                                            DebugTitle = None
+                                        }
+                                        (MLens.getAclTypes >> Option.map Seq.ofArray)
+                                        aclTypes
 
                                 let r =
                                     NavEditor.renderEditor {
@@ -970,7 +992,7 @@ let view appMode =
                 {
                     Name = "Create"
                     TabType = Enabled <| Msg.TabChange RootTabs.Creator
-                    IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Creator)
+                    IsActive = mapTabStore RootTabs.Creator
                     Value =
                         let gAcl = store |> Store.map MLens.getAclTypes
 
@@ -982,7 +1004,13 @@ let view appMode =
                             | ValueSeqOption aclTypes ->
                                 let aclTypeStore =
                                     store
-                                    |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
+                                    |> Store.chooseRStore
+                                        {
+                                            UseEquality = true
+                                            DebugTitle = None
+                                        }
+                                        (MLens.getAclTypes >> Option.map Seq.ofArray)
+                                        aclTypes
 
                                 printfn "Rendering Acl Creator"
 
