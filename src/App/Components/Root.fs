@@ -870,149 +870,137 @@ let view appMode =
         data_ "file" "Root"
 
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
-        Bind.el (
-            store |> Store.map MLens.getRootTab,
-            fun rt ->
-                printfn "Rendering Root Tabs: %A" rt
+        let rt = store |> Store.mapRStore MLens.getRootTab
+        printfn "Rendering Root Tabs: %A" rt
 
-                let rootTab = {
-                    Name = "Root"
-                    TabType = Enabled <| Msg.TabChange RootTabs.Main
-                    IsActive = rt = RootTabs.Main
-                    Render =
-                        let r data =
-                            Renderers.renderRootView "" data dispatch
+        let rootTab = {
+            Name = "Root"
+            TabType = Enabled <| Msg.TabChange RootTabs.Main
+            IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Main)
+            Value =
+                let r data =
+                    Renderers.renderRootView "" data dispatch
 
-                        fun () ->
-                            printfn "Rendering root tab"
+                printfn "Rendering root tab"
 
-                            Bind.el (
-                                store |> Store.map MLens.getNavRootState,
-                                fun nrs ->
-                                    Renderers.renderRemote "Root" nrs (FetchReq.Nav None |> Msg.FetchRequest) r dispatch
-                            )
+                Bind.el (
+                    store |> Store.map MLens.getNavRootState,
+                    fun nrs -> Renderers.renderRemote "Root" nrs (FetchReq.Nav None |> Msg.FetchRequest) r dispatch
+                )
+        }
+
+        let pathTab = {
+            Name = "Path"
+            TabType = Enabled <| Msg.TabChange RootTabs.Sub
+            IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Sub)
+            Value =
+                printfn "Rendering path tab"
+
+                Html.div [
+                    // display the path input properly based on current state
+                    Bind.el (store |> Store.map MLens.getNavPathState, Renderers.renderPathInput store dispatch)
+                    Bind.el (
+                        store |> Store.map MLens.getNavPathState,
+                        (fun nps ->
+                            let r (x: NavPathResponse) =
+                                Renderers.renderRootView $"Sub:{x.Path}" x.Items dispatch
+
+                            Renderers.renderRemote
+                                $"Path:{store.Value.Path}"
+                                nps
+                                (Some() |> FetchReq.Nav |> Msg.FetchRequest)
+                                r
+                                dispatch)
+                    )
+                ]
+        }
+
+        // bulma tabs
+        renderTabs
+            []
+            [
+                rootTab
+                pathTab
+                {
+                    Name = "Edit"
+                    TabType =
+                        store.Value.FocusedItem
+                        |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
+                        |> Option.defaultValue (TabType.Disabled "is-disabled")
+                    IsActive = rt |> Store.mapRStore (fun x -> x = RootTabs.Editor)
+                    Value =
+                        let gfi = store |> Store.map MLens.getFocusedItem
+                        let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
+
+                        let r: _ -> SutilElement =
+                            function
+                            | _, None
+                            | None, _ -> Html.div []
+                            | Some item, Some aclTypes ->
+                                printfn "Render Root Path Tab"
+
+                                let itemStore =
+                                    store
+                                    |> Store.chooseStore
+                                        "RootPathTabItem"
+                                        (MLens.getFocusedItem,
+                                         fun nextItem -> {
+                                             store.Value with
+                                                 FocusedItem = nextItem
+                                         })
+                                        item
+
+                                let aclStore =
+                                    store
+                                    |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
+
+                                let r =
+                                    NavEditor.renderEditor {
+                                        AppMode = appMode
+                                        AclTypes = aclStore
+                                        NavItem = itemStore
+                                        EditorMode = NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
+                                    }
+
+                                r
+
+                        Bind.el2 gfi gAcl r
+
                 }
+                {
+                    Name = "Create"
+                    TabType = Enabled <| Msg.TabChange RootTabs.Creator
+                    IsActive = rt |> Store.mapRStore (fun rt -> rt = RootTabs.Creator)
+                    Value =
+                        let gAcl = store |> Store.map MLens.getAclTypes
 
-                let pathTab = {
-                    Name = "Path"
-                    TabType = Enabled <| Msg.TabChange RootTabs.Sub
-                    IsActive = rt = RootTabs.Sub
-                    Render =
-                        fun () ->
-                            printfn "Rendering path tab"
+                        printfn "Render Create Tab"
 
-                            Html.div [
-                                // display the path input properly based on current state
-                                Bind.el (
-                                    store |> Store.map MLens.getNavPathState,
-                                    Renderers.renderPathInput store dispatch
-                                )
-                                Bind.el (
-                                    store |> Store.map MLens.getNavPathState,
-                                    (fun nps ->
-                                        let r (x: NavPathResponse) =
-                                            Renderers.renderRootView $"Sub:{x.Path}" x.Items dispatch
+                        Bind.el (
+                            gAcl,
+                            function
+                            | ValueSeqOption aclTypes ->
+                                let aclTypeStore =
+                                    store
+                                    |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
 
-                                        Renderers.renderRemote
-                                            $"Path:{store.Value.Path}"
-                                            nps
-                                            (Some() |> FetchReq.Nav |> Msg.FetchRequest)
-                                            r
-                                            dispatch)
-                                )
-                            ]
+                                printfn "Rendering Acl Creator"
+
+                                App.Components.NavCreator.renderAclCreator {
+                                    DispatchParent = (Msg.CreatorMsg >> dispatch)
+                                    AppMode = appMode
+                                    AclTypes = aclTypeStore
+                                    Path = store.Value.Path
+                                }
+                            | _ ->
+                                printfn "No AclTypes, not trying creation"
+                                Html.div [ text "No Acl Types found" ]
+
+                        )
+
                 }
-
-                // bulma tabs
-                renderTabs
-                    []
-                    [
-                        rootTab
-                        pathTab
-                        {
-                            Name = "Edit"
-                            TabType =
-                                store.Value.FocusedItem
-                                |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
-                                |> Option.defaultValue (TabType.Disabled "is-disabled")
-                            IsActive = rt = RootTabs.Editor
-                            Render =
-                                let gfi = store |> Store.map MLens.getFocusedItem
-                                let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
-
-                                let r: _ -> SutilElement =
-                                    function
-                                    | _, None
-                                    | None, _ -> Html.div []
-                                    | Some item, Some aclTypes ->
-                                        printfn "Render Root Path Tab"
-
-                                        let itemStore =
-                                            store
-                                            |> Store.chooseStore
-                                                "RootPathTabItem"
-                                                (MLens.getFocusedItem,
-                                                 fun nextItem -> {
-                                                     store.Value with
-                                                         FocusedItem = nextItem
-                                                 })
-                                                item
-
-                                        let aclStore =
-                                            store
-                                            |> Store.chooseRStore (MLens.getAclTypes >> Option.map Seq.ofArray) aclTypes
-
-                                        let r =
-                                            NavEditor.renderEditor {
-                                                AppMode = appMode
-                                                AclTypes = aclStore
-                                                NavItem = itemStore
-                                                EditorMode = NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
-                                            }
-
-                                        r
-
-                                fun () -> Bind.el2 gfi gAcl r
-
-                        }
-                        {
-                            Name = "Create"
-                            TabType = Enabled <| Msg.TabChange RootTabs.Creator
-                            IsActive = rt = RootTabs.Creator
-                            Render =
-                                let gAcl = store |> Store.map MLens.getAclTypes
-
-                                fun () ->
-                                    printfn "Render Create Tab"
-
-                                    Bind.el (
-                                        gAcl,
-                                        function
-                                        | ValueSeqOption aclTypes ->
-                                            let aclTypeStore =
-                                                store
-                                                |> Store.chooseRStore
-                                                    (MLens.getAclTypes >> Option.map Seq.ofArray)
-                                                    aclTypes
-
-                                            printfn "Rendering Acl Creator"
-
-                                            App.Components.NavCreator.renderAclCreator {
-                                                DispatchParent = (Msg.CreatorMsg >> dispatch)
-                                                AppMode = appMode
-                                                AclTypes = aclTypeStore
-                                                Path = store.Value.Path
-                                            }
-                                        | _ ->
-                                            printfn "No AclTypes, not trying creation"
-                                            Html.div [ text "No Acl Types found" ]
-
-                                    )
-
-                        }
-                    ]
-                    dispatch
-        )
+            ]
+            dispatch
 
     ]
     |> withStyle css

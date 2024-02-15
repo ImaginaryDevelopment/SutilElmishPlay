@@ -402,7 +402,7 @@ let renderEditor (props: NavEditorProps) =
         props.NavItem
         |> Store.makeElmish init (update (props.AppMode, props.AclTypes) dispatchParent) ignore
 
-    let obsTab = store |> Store.map MLens.getTab
+    let obsTab = store |> Store.mapRStore MLens.getTab
 
     let obsItem =
         store
@@ -427,57 +427,50 @@ let renderEditor (props: NavEditorProps) =
 
     let core =
 
-        Bind.el (
-            obsTab,
-            (fun tab ->
-                printfn "Render NavEditor tabs"
+        printfn "Render NavEditor tabs"
 
-                renderTabs
-                    [ "fill" ]
-                    [
-                        {
-                            Name = "Props"
-                            TabType = Enabled <| TabChange EditorTabs.MainTab
-                            IsActive = tab = EditorTabs.MainTab
-                            Render = fun () -> propsTab
-                        }
-                        {
-                            Name = "Icon"
-                            TabType = Enabled <| TabChange EditorTabs.IconTab
-                            IsActive = tab = EditorTabs.IconTab
-                            Render =
-                                fun () ->
-                                    IconEditor.renderIconEditor
-                                        { PropValue = store.Value.Item.Icon }
-                                        (IconMsg >> dispatch)
-                        }
-                        {
-                            Name = "Acls"
-                            TabType = Enabled <| TabChange EditorTabs.AclTab
-                            IsActive = tab = EditorTabs.AclTab
-                            Render =
-                                fun () ->
-                                    Bind.el (
-                                        props.AclTypes,
-                                        fun aclTypes ->
-                                            AclEditor.renderAclsEditor {
-                                                ItemAcls =
-                                                    store.Value.Item.AclRefs
-                                                    |> Map.toSeq
-                                                    |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
-                                                AclTypes = aclTypes
-                                                DispatchParent =
-                                                    (fun msg ->
-                                                        printfn "AclEditor ParentMsg:%A" msg
-                                                        msg)
-                                                    >> EditAcl
-                                                    >> dispatch
-                                            }
-                                    )
-                        }
-                    ]
-                    dispatch)
-        )
+        renderTabs
+            [ "fill" ]
+            [
+                {
+                    Name = "Props"
+                    TabType = Enabled <| TabChange EditorTabs.MainTab
+                    IsActive =
+                        let x = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.MainTab)
+                        x
+                    Value = propsTab
+                }
+                {
+                    Name = "Icon"
+                    TabType = Enabled <| TabChange EditorTabs.IconTab
+                    IsActive = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.IconTab)
+                    Value = IconEditor.renderIconEditor { PropValue = store.Value.Item.Icon } (IconMsg >> dispatch)
+                }
+                {
+                    Name = "Acls"
+                    TabType = Enabled <| TabChange EditorTabs.AclTab
+                    IsActive = obsTab |> Store.mapRStore (fun tab -> tab = EditorTabs.AclTab)
+                    Value =
+                        Bind.el (
+                            props.AclTypes,
+                            fun aclTypes ->
+                                AclEditor.renderAclsEditor {
+                                    ItemAcls =
+                                        store.Value.Item.AclRefs
+                                        |> Map.toSeq
+                                        |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                                    AclTypes = aclTypes
+                                    DispatchParent =
+                                        (fun msg ->
+                                            printfn "AclEditor ParentMsg:%A" msg
+                                            msg)
+                                        >> EditAcl
+                                        >> dispatch
+                                }
+                        )
+                }
+            ]
+            dispatch
 
     Html.div [
         disposeOnUnmount [ store ]

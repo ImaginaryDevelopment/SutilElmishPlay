@@ -20,8 +20,8 @@ type TabType<'t> =
 type BulmaTab<'t> = {
     Name: string
     TabType: TabType<'t>
-    IsActive: bool
-    Render: unit -> Core.SutilElement
+    IsActive: IReadOnlyStore<bool>
+    Value: Core.SutilElement
 }
 
 let renderTabs containerClasses items dispatch =
@@ -44,17 +44,33 @@ let renderTabs containerClasses items dispatch =
                                 Attr.className cn
                             ]
                         | Enabled msg ->
-                            Html.a [
-                                match item.IsActive with
-                                | false -> onClick (fun _ -> dispatch msg) List.empty
-                                | true -> Attr.classes [ isActiveCn; "has-text-primary" ]
+                            let aClsStore =
+                                item.IsActive
+                                |> Store.map (fun v -> if v then isActiveCn + " has-text-primary" else "")
 
+                            Html.a [
+                                Bind.attr ("class", aClsStore)
+                                onClick
+                                    (fun _ ->
+                                        if not item.IsActive.Value then
+                                            dispatch msg)
+                                    List.empty
                                 text item.Name
                             ]
                     ]
             ]
         ]
-        match items |> Seq.tryFind (fun item -> item.IsActive) with
-        | Some active -> active.Render()
-        | _ -> Html.div []
+
+        yield!
+            items
+            |> Seq.map (fun bt ->
+                Html.div [
+                    Bind.attr ("class", bt.IsActive |> Store.map (fun v -> if not v then "is-hidden" else ""))
+                    // if not bt.IsActive.Value then
+                    //     Attr.className "is-invisible"
+                    bt.Value
+                ])
+    // match items |> Seq.tryFind (fun item -> item.IsActive) with
+    // | Some active -> active.Render()
+    // | _ -> Html.div []
     ]
