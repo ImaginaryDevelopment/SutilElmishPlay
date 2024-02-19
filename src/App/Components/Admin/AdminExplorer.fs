@@ -20,15 +20,44 @@ module Style =
     open type Feliz.length
     open type Feliz.borderStyle
 
+    // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
     let css = [
-        // rule "span.info" Gen.CssRules.titleIndicator
-        rule ".leftMe" [
-            // Css.borderBottom (px 1, solid, "black")
-            Css.marginLeft (px -100)
+        rule "*" [
+            Css.lineHeight (rem 1.5)
+            Css.height (percent 100)
+            Css.marginLeft 0
+        // Css.backgroundColor "#ECF0F3"
+        ]
+        rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
+        rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
+        rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
+        rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
+        rule ".menu-label" [
+            Css.color "#8F99A3"
+            Css.custom ("letter-spacing", "1.3")
+            Css.fontWeight 700
+        ]
+        rule ".menu-list a" [ Css.color "#8F99A3"; Css.fontSize (px 14); Css.fontWeight 700 ]
+        rule ".menu-list a:hover, .menu-label:hover" [
+            Css.backgroundColor "transparent"
+            Css.color "#276cda"
+            Css.cursorPointer
+        ]
+        rule ".menu-list a.is-active, .menu-label.is-active" [
+            Css.backgroundColor "transparent"
+            Css.color "#276cda"
+            Css.fontWeight 700
         ]
     ]
 
     let withCss = withStyle css
+
+type AdminErrorType = string * System.DateTime
+
+let translateErrorType: ErrorType -> AdminErrorType =
+    function
+    | Choice1Of2 e -> e |> String.concat ",", System.DateTime.Now
+    | Choice2Of2 e -> string e, System.DateTime.Now
 
 type LazyNavItem = {
     NavItem: NavItem
@@ -37,9 +66,9 @@ type LazyNavItem = {
 
 type Model = {
     Token: string
-    Items: Result<LazyNavItem[], string * System.DateTime> option
+    Items: Result<LazyNavItem[], AdminErrorType> option
     Item: NavItem option
-    Errors: (string * System.DateTime) list
+    Errors: AdminErrorType list
 }
 
 let private liA aClsOpt linkText =
@@ -179,11 +208,14 @@ module Cmd =
         Cmd.OfAsync.either f () id (fun ex -> Msg.RootResponse(Error(Choice2Of2 ex)))
 
     let getRootChildren token (lni: LazyNavItem) : Cmd<Msg> =
+        printfn "Maybe fetching root children"
+
         match lni.ChildStore.Value with
         | Responded _
         | NotRequested ->
             let f x =
                 async {
+                    printfn "Fetching root children: %A" lni.NavItem.Id
                     let! resp = App.Adapters.Api.Mapped.NavItems.getNavPath token x
 
                     match resp with
@@ -206,24 +238,28 @@ let init token : Model * Cmd<Msg> =
     next, Cmd.getRootItems token
 
 let private update msg (model: Model) : Model * Cmd<Msg> =
-    printfn "AdminExplorer update: %A" msg
+    printfn "AdminExplorer update: %A"
+    <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
     | Msg.RootResponse(Ok v) ->
-        let childStore = Store.make NotRequested
 
         let nextItems =
             v
-            |> Array.map (fun navItem -> {
-                NavItem = navItem
-                ChildStore = childStore
-            })
+            |> Array.map (fun navItem ->
+                let childStore = Store.make NotRequested
+
+                {
+                    NavItem = navItem
+                    ChildStore = childStore
+                })
 
         {
             model with
                 Items = Some(Ok nextItems)
         },
         Cmd.none
+
     | Msg.RootResponse(Error e) ->
         Core.log e
 
@@ -236,13 +272,10 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.PathResponse(lni, Ok children) ->
         lni.ChildStore.Update(fun _ -> Responded(Ok(children, true)))
         model, Cmd.none
+
     | Msg.PathResponse(lni, Error e) ->
         lni.ChildStore.Update(fun _ -> Responded(Error(e)))
         model, Cmd.none
-    // | Msg.PathToggle(lni, expanded) ->
-
-    //     model, Cmd.none
-
 
     | Msg.PathRequested lni ->
         let mutable cmd = Cmd.none
@@ -267,21 +300,44 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
         model, cmd
 
-let viewLeftNavItem (selectedItem: NavItem) dispatch (rootItem: LazyNavItem) =
-    let isActive = rootItem.NavItem.Id = selectedItem.Id
+let viewLeftNavItem (selectedItem: IStore<NavItem option>) dispatch (rootItem: LazyNavItem) =
 
     let genRootItem children =
         Html.pc "menu-label" [
             text rootItem.NavItem.Name
-            if isActive then
-                Attr.className "is-active"
+            Bind.el (
+                selectedItem,
+                fun _ ->
+                    bButton "Select Item" [
+                        Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
+                        onClick (fun _ -> selectedItem.Update(fun _ -> Some rootItem.NavItem)) []
+                    ]
+
+            )
+            Bind.attr (
+                "class",
+                selectedItem
+                |> Observable.map (fun si ->
+                    match si with
+                    | Some navItem ->
+                        if navItem.Id = rootItem.NavItem.Id then
+                            "menu-label is-active"
+                        else
+                            "menu-label"
+                    | _ -> "menu-label")
+                |> Observable.distinctUntilChanged
+            )
+            // if isActive then
+            //     Attr.className "is-active"
             yield! children
         ]
+
+    printfn "viewLeftNavItem: %A" rootItem.NavItem.Id
 
     Bind.el (
         rootItem.ChildStore,
         fun childRemote ->
-            printfn "Rerender item child store"
+            printfn "Render item child store: %A" rootItem.NavItem.Id
 
             match childRemote with
             // TODO: plus to try to expand children
@@ -303,14 +359,26 @@ let viewLeftNavItem (selectedItem: NavItem) dispatch (rootItem: LazyNavItem) =
                     // TODO: loading indicator
                     ]
                 ]
+            | Responded(Error e) ->
+                fragment [
+                    Attr.className "is-error"
+                    App.Components.Gen.ErrorHandling.renderErrors [ translateErrorType e ]
+                ]
+
 
             | Responded(Ok(items, expanded)) ->
                 fragment [
                     genRootItem [
-                        bButton "Collapse Item" [
-                            Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Minimize")
-                            onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, false)))) []
-                        ]
+                        if expanded then
+                            bButton "Collapse Item" [
+                                Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Minimize")
+                                onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, false)))) []
+                            ]
+                        else
+                            bButton "Expand Item" [
+                                Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                                onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, true)))) []
+                            ]
                     ]
                     if expanded then
                         Html.ul [
@@ -325,17 +393,19 @@ let viewLeftNavItem (selectedItem: NavItem) dispatch (rootItem: LazyNavItem) =
                                         ]
                                     ])
                         ]
-                    else
-                        bButton "Expand Item" [
-                            Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                            // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
-                            onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, true)))) []
-                        ]
+                // else
+                //     bButton "Expand Item" [
+                //         Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                //         // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
+                //         onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, true)))) []
+                //     ]
                 ]
 
     )
 
-let viewLeftNav (items: LazyNavItem[]) (selectedItem: NavItem) dispatch =
+let viewLeftNav (items: LazyNavItem[]) selectedItem dispatch =
+    printfn "Render viewLeftNav"
+
     fragment [
         Html.aside [
             Attr.className "menu is-hidden-mobile"
@@ -350,8 +420,14 @@ let view token =
     printfn "AdminExplorer"
     let store, dispatch = token |> Store.makeElmish init update ignore
 
+    let selectedItem =
+        let getter model =
+            model.Item |> Option.map (fun item -> item)
+
+        let setter nextValue = { store.Value with Item = nextValue }
+        store |> Store.mapStore "AESelectedItem" (getter, setter)
+
     Html.div [
-        // Attr.className "leftMe"
         Samples.viewNavBar ()
         Html.divc "container" [
             Html.divc "columns" [
@@ -361,8 +437,7 @@ let view token =
                         function
                         | None -> Html.div [ text "Loading..." ]
                         | Some(Ok items) ->
-                            let selectedItem =
-                                store.Value.Item |> Option.defaultWith (fun () -> items[0].NavItem)
+                            printfn "Render view left column"
 
                             viewLeftNav items selectedItem dispatch
                         | Some(Error e) ->
@@ -376,11 +451,31 @@ let view token =
                     Samples.viewBreadCrumbs ()
                     Html.sectionc "hero is-info welcome is-small" [
                         Html.divc "hero-body" [
-                            Html.divc "container" [
+                            Bind.el (
+                                store |> Store.map (fun model -> model.Item),
+                                function
+                                | None ->
+                                    Html.divc "container" [
 
-                                Html.h1 [ Attr.className "title"; text "Hello, Admin." ]
-                                Html.h2 [ Attr.className "subtitle"; text "I Hope you are having a great day!" ]
-                            ]
+                                        Html.h1 [ Attr.className "title"; text "Hello, Admin." ]
+                                        Html.h2 [ Attr.className "subtitle"; text "I Hope you are having a great day!" ]
+                                    ]
+                                | Some selectedItem ->
+                                    Html.divc "container" [
+                                        Html.h1 [
+                                            Attr.className "title"
+                                            if selectedItem.Type = NavItemType.Folder then
+                                                "FolderOpen"
+                                            else
+                                                "Link"
+                                            |> App.Init.IconSearchType.MuiIcon
+                                            |> Icons.tryIcon
+
+                                            text selectedItem.Name
+                                        ]
+                                        Html.h2 [ Attr.className "subtitle"; text "I Hope you are having a great day!" ]
+                                    ]
+                            )
                         ]
                     ]
 
