@@ -17,15 +17,44 @@ type TabType<'t> =
     | Enabled of 't
     | Disabled of className: string
 
+type TabVariance<'t> =
+    | NoVariance of TabType<'t>
+    | Variance of IReadOnlyStore<TabType<'t>>
+
 type BulmaTab<'t> = {
     Name: string
-    TabType: TabType<'t>
+    TabType: TabVariance<'t>
     IsActive: IReadOnlyStore<bool>
     Value: Core.SutilElement
 }
 
-let renderTabs containerClasses items dispatch =
+let private renderTab tt (item: BulmaTab<_>) dispatch =
     let isActiveCn = "is-active"
+
+    match tt with
+    | Disabled cn ->
+        Html.button [
+            Attr.title "No Item selected"
+            Attr.disabled true
+            text item.Name
+            Attr.className cn
+        ]
+    | Enabled msg ->
+        let aClsStore =
+            item.IsActive
+            |> Store.map (fun v -> if v then isActiveCn + " has-text-primary" else "")
+
+        Html.a [
+            Bind.attr ("class", aClsStore)
+            onClick
+                (fun _ ->
+                    if not item.IsActive.Value then
+                        dispatch msg)
+                List.empty
+            text item.Name
+        ]
+
+let renderTabs containerClasses items dispatch =
     // Attr.className
     Html.div [
         Attr.classes [ "tabContainer"; yield! containerClasses ]
@@ -36,27 +65,8 @@ let renderTabs containerClasses items dispatch =
                 for item in items do
                     Html.li [
                         match item.TabType with
-                        | Disabled cn ->
-                            Html.button [
-                                Attr.title "No Item selected"
-                                Attr.disabled true
-                                text item.Name
-                                Attr.className cn
-                            ]
-                        | Enabled msg ->
-                            let aClsStore =
-                                item.IsActive
-                                |> Store.map (fun v -> if v then isActiveCn + " has-text-primary" else "")
-
-                            Html.a [
-                                Bind.attr ("class", aClsStore)
-                                onClick
-                                    (fun _ ->
-                                        if not item.IsActive.Value then
-                                            dispatch msg)
-                                    List.empty
-                                text item.Name
-                            ]
+                        | NoVariance tt -> renderTab tt item dispatch
+                        | Variance tt -> Bind.el (tt, (fun tt -> renderTab tt item dispatch))
                     ]
             ]
         ]

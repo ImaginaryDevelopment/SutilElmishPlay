@@ -449,7 +449,7 @@ let renderEditor (props: NavEditorProps) =
             [
                 {
                     Name = "Props"
-                    TabType = Enabled <| TabChange EditorTabs.MainTab
+                    TabType = NoVariance(Enabled <| TabChange EditorTabs.MainTab)
                     IsActive =
                         let x =
                             obsTab
@@ -465,7 +465,7 @@ let renderEditor (props: NavEditorProps) =
                 }
                 {
                     Name = "Icon"
-                    TabType = Enabled <| TabChange EditorTabs.IconTab
+                    TabType = NoVariance(Enabled <| TabChange EditorTabs.IconTab)
                     IsActive =
                         obsTab
                         |> Store.mapRStore
@@ -478,7 +478,7 @@ let renderEditor (props: NavEditorProps) =
                 }
                 {
                     Name = "Acls"
-                    TabType = Enabled <| TabChange EditorTabs.AclTab
+                    TabType = NoVariance(Enabled <| TabChange EditorTabs.AclTab)
                     IsActive =
                         obsTab
                         |> Store.mapRStore

@@ -340,6 +340,7 @@ let init appMode =
                    } ->
                 printfn "Blocking editor as root, no focused item"
                 None
+            | Some { RootTab = RootTabs.Main } -> Some RootTabs.Main
             | Some cs ->
                 printfn "Using %A as root tab from cache " cs.RootTab
                 Some cs.RootTab
@@ -629,12 +630,35 @@ module Updates =
                     FocusedItem = None
                     RootTab = RootTabs.Main
             }
+        | NavEditor.StandaloneParentMsg.Saved nextItem, { NavPathState = Responded(Ok resp) } ->
+            // BUG: BUGS this does not account for any of the cases below in comments
+            // what if this is a new item?
+            // what if the item is NavPathState instead of in addition to NavRootState?
+            resp.Items
+            |> Array.tryFindIndex (fun item -> item.Id = nextItem.Id)
+            |> function
+                | Some ix ->
+                    printfn "Found save to update"
 
-        | NavEditor.StandaloneParentMsg.Saved _, _ ->
-            // TODO: post updated value back to api
-            printfn "Saved!"
-            // is there anything to do?
-            block "Save completed"
+                    {
+                        model with
+                            NavPathState =
+                                Responded(
+                                    Ok {
+                                        resp with
+                                            Items =
+                                                resp.Items
+                                                |> Array.mapi (fun i item -> if i = ix then nextItem else item)
+                                    }
+                                )
+                            FocusedItem = None
+                            RootTab = RootTabs.Main
+                    }
+                    |> justModel
+                | None -> { model with FocusedItem = None } |> justModel
+        | NavEditor.StandaloneParentMsg.Saved nextItem, _ ->
+            let chc = "Save without NavPathState" |> Choice1Of2
+            model |> MLens.addChcError "Root Save" chc |> justModel
 
 
 ()
@@ -845,20 +869,52 @@ let css = [
     rule "div.buttonColumn button.button" [ Css.fontSize (em 0.7) ]
 ]
 
+let renderEditTab appMode store dispatch =
+    let gfi = store |> Store.map MLens.getFocusedItem
+    let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
+
+    let r: _ -> SutilElement =
+        function
+        | _, None
+        | None, _ -> Html.div []
+        | Some item, Some aclTypes ->
+            printfn "Render Root Path Tab"
+
+            let itemStore =
+                store
+                |> Store.chooseStore
+                    "RootPathTabItem"
+                    (MLens.getFocusedItem,
+                     fun nextItem -> {
+                         store.Value with
+                             FocusedItem = nextItem
+                     })
+                    item
+
+            let aclStore =
+                store
+                |> Store.chooseRStore
+                    {
+                        UseEquality = true
+                        DebugTitle = None
+                    }
+                    (MLens.getAclTypes >> Option.map Seq.ofArray)
+                    aclTypes
+
+            let r =
+                NavEditor.renderEditor {
+                    AppMode = appMode
+                    AclTypes = aclStore
+                    NavItem = itemStore
+                    EditorMode = NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
+                }
+
+            r
+
+    Bind.el2 gfi gAcl r
+
 let view appMode =
     let store, dispatch = appMode |> Store.makeElmish init update ignore
-
-    let aclMap (x: AclLookupState) : ResolvedAclLookup =
-        x
-        |> Map.choose (fun v k ->
-            (v,
-             k
-             |> Map.choose (fun aclRefId ->
-                 function
-                 | Response(Ok aclDisplay) -> Some(aclRefId, aclDisplay)
-                 | _ -> None))
-            |> Some)
-
 
     toGlobalWindow "root_model" store.Value
 
@@ -874,7 +930,7 @@ let view appMode =
             |> Store.mapRStore
                 {
                     UseEquality = true
-                    DebugTitle = Some "getRootTab"
+                    DebugTitle = None // Some "getRootTab"
                 }
                 MLens.getRootTab
 
@@ -883,7 +939,7 @@ let view appMode =
             |> Store.mapRStore
                 {
                     UseEquality = true
-                    DebugTitle = Some $"RootTabs.%A{tab}Store"
+                    DebugTitle = None // Some $"RootTabs.%A{tab}Store"
                 }
                 (fun rt -> rt = tab)
 
@@ -891,7 +947,7 @@ let view appMode =
 
         let rootTab = {
             Name = "Root"
-            TabType = Enabled <| Msg.TabChange RootTabs.Main
+            TabType = NoVariance(Enabled <| Msg.TabChange RootTabs.Main)
             IsActive = mapTabStore RootTabs.Main
             Value =
                 let r data =
@@ -907,7 +963,7 @@ let view appMode =
 
         let pathTab = {
             Name = "Path"
-            TabType = Enabled <| Msg.TabChange RootTabs.Sub
+            TabType = NoVariance(Enabled <| Msg.TabChange RootTabs.Sub)
             IsActive = mapTabStore RootTabs.Sub
             Value =
                 printfn "Rendering path tab"
@@ -940,58 +996,27 @@ let view appMode =
                 {
                     Name = "Edit"
                     TabType =
-                        store.Value.FocusedItem
-                        |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
-                        |> Option.defaultValue (TabType.Disabled "is-disabled")
+                        Variance(
+                            store
+                            |> Store.mapRStore
+                                {
+                                    UseEquality = true
+                                    DebugTitle = None
+                                }
+                                (fun fi ->
+                                    let v =
+                                        fi.FocusedItem
+                                        |> Option.map (fun _ -> TabType.Enabled <| Msg.TabChange RootTabs.Editor)
+                                        |> Option.defaultValue (TabType.Disabled "is-disabled")
+
+                                    v)
+                        )
                     IsActive = mapTabStore RootTabs.Editor
-                    Value =
-                        let gfi = store |> Store.map MLens.getFocusedItem
-                        let gAcl = store |> Store.map (MLens.getAclTypes >> Option.map Seq.ofArray)
-
-                        let r: _ -> SutilElement =
-                            function
-                            | _, None
-                            | None, _ -> Html.div []
-                            | Some item, Some aclTypes ->
-                                printfn "Render Root Path Tab"
-
-                                let itemStore =
-                                    store
-                                    |> Store.chooseStore
-                                        "RootPathTabItem"
-                                        (MLens.getFocusedItem,
-                                         fun nextItem -> {
-                                             store.Value with
-                                                 FocusedItem = nextItem
-                                         })
-                                        item
-
-                                let aclStore =
-                                    store
-                                    |> Store.chooseRStore
-                                        {
-                                            UseEquality = true
-                                            DebugTitle = None
-                                        }
-                                        (MLens.getAclTypes >> Option.map Seq.ofArray)
-                                        aclTypes
-
-                                let r =
-                                    NavEditor.renderEditor {
-                                        AppMode = appMode
-                                        AclTypes = aclStore
-                                        NavItem = itemStore
-                                        EditorMode = NavEditor.EditorMode.Standalone(Msg.EditorMsg >> dispatch)
-                                    }
-
-                                r
-
-                        Bind.el2 gfi gAcl r
-
+                    Value = renderEditTab appMode store dispatch
                 }
                 {
                     Name = "Create"
-                    TabType = Enabled <| Msg.TabChange RootTabs.Creator
+                    TabType = NoVariance(Enabled <| Msg.TabChange RootTabs.Creator)
                     IsActive = mapTabStore RootTabs.Creator
                     Value =
                         let gAcl = store |> Store.map MLens.getAclTypes
