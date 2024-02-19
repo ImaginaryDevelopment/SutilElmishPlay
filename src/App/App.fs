@@ -157,7 +157,7 @@ let init () : Model * Cmd<Message> =
     cmd
 
 let update (msg: Message) (model: Model) : Model * Cmd<Message> =
-    printfn "App msg update"
+    printfn "AdminExplorer msg update"
 
     match msg with
     | AuthFinished x ->
@@ -182,8 +182,16 @@ let view () =
             ActiveTab = 0
             Tabs = [|
                 {
-                    Label = "Admin"
+                    Label = "Explorer"
                     Value = 0
+                    Component =
+                        mustAuthEl "ExplorerTab" model (function
+                            | Auth(ai, token) -> App.Components.Admin.Explorer.view token.accessToken
+                            | Demo -> App.Components.Admin.Explorer.Samples.view ())
+                }
+                {
+                    Label = "Admin"
+                    Value = 1
                     Component =
                         mustAuthEl "AdminTab" model (function
                             | Auth(ai, token) -> App.Components.Root.view (Auth token.accessToken)
@@ -191,7 +199,7 @@ let view () =
                 }
                 {
                     Label = "Diag"
-                    Value = 1
+                    Value = 2
                     Component =
                         mustAuthEl "DiagTab" model (function
                             | Auth(ai, token) -> App.Components.Diag.view { AppMode = Auth token.accessToken }

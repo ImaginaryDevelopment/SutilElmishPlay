@@ -30,6 +30,7 @@
     <Compile Include="Components/NavCreator.fs" />
     <Compile Include="Components/Root.fs" />
     <Compile Include="Components/Diag.fs" />
+    <Compile Include="Components/Admin/AdminExplorer.fs" />
 
     <Compile Include="Msal.fs" />
     <Compile Include="App.fs" />
