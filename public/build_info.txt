@@ -1,8 +1,8 @@
 // cspell: disable
-2024.02.14 02:12:38 -05:00
+2024.02.19 11:39:45 -05:00
 Git:
 master
-819ba66 fix icon select, fix create url, overhaul navEditor for some rerender reduction
+a9a27c7 overhaul tabs for less rerendering
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
