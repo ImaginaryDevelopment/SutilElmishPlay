@@ -411,14 +411,18 @@ module Renderers =
             | _ -> true
 
         let tButton title isActiveButton isPrimary isDisabled icon fOnClick =
-            bButton title [
-                Attr.classes [
-                    "button"
+            let bClasses =
+                seq [
                     "is-small"
                     if isPrimary then
                         "is-primary"
                     if isActiveButton then "is-light" else "is-link"
+
                 ]
+                |> Choice2Of2
+                |> Static
+
+            bButtonC title bClasses [
                 tryIcon icon
                 Attr.disabled isDisabled
                 if not isDisabled then

@@ -20,11 +20,32 @@ type ButtonType =
     | Reset
     | Button
 
-let tButton title (buttonType: ButtonType) props =
-    Html.buttonc "button" [ type' (string buttonType |> String.toLower); Attr.title title; yield! props ]
+type ButtonClassArg =
+    | Static of Choice<string, string seq>
+    | Dynamic of System.IObservable<string>
 
-let bButton title props = tButton title Button props
-let rButton title props = tButton title Reset props
+let tButton title buttonClassArg (buttonType: ButtonType) props =
+    let addButtonCls =
+        function
+        | ValueString cls -> $"button {cls}"
+        | _ -> "button"
+
+    Html.button [
+        match buttonClassArg with
+        | None -> Attr.className "button"
+        | Some(Static(Choice1Of2 v)) -> addButtonCls v |> Attr.className
+        | Some(Static(Choice2Of2 values)) -> Attr.classes [ "button"; yield! values ]
+        | Some(Dynamic obs) -> Bind.attr ("class", obs |> Observable.map addButtonCls)
+
+        type' (string buttonType |> String.toLower)
+        Attr.title title
+        yield! props
+    ]
+
+let bButton title props = tButton title None Button props
+let bButtonC title bca props = tButton title (Some bca) Button props
+
+let rButton title props = tButton title None Reset props
 
 let columns2 col1 col2 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2 ]

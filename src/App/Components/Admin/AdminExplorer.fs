@@ -64,10 +64,20 @@ type LazyNavItem = {
     ChildStore: IStore<RemoteData<NavItem[] * bool>>
 }
 
+type SelectedItemType = (LazyNavItem * NavItem option) option
+
+let getSelectedItem: SelectedItemType -> NavItem option =
+    function
+    | None -> None
+    | Some(lni, None) -> Some lni.NavItem
+    | Some(_, Some item) -> Some item
+
+
 type Model = {
     Token: string
     Items: Result<LazyNavItem[], AdminErrorType> option
-    Item: NavItem option
+    // must track parent for bread crumbs
+    Item: SelectedItemType
     Errors: AdminErrorType list
 }
 
@@ -192,6 +202,9 @@ type Msg =
     | PathResponse of LazyNavItem * Result<NavItem[], ErrorType>
     // | PathToggle of LazyNavItem * expand: bool
     | PathRequested of LazyNavItem
+    // should they be able to create folders?
+    // if so, then this should be an option
+    | StartNewRequested of parent: LazyNavItem option
 
 
 module Cmd =
@@ -242,6 +255,10 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
+    // TODO: fix the Item selection to allow no parent
+    | Msg.StartNewRequested(Some parent) ->
+        // (LazyNavItem * NavItem option) option
+        { model with Item = Some(parent, None) }, Cmd.none
     | Msg.RootResponse(Ok v) ->
 
         let nextItems =
@@ -300,120 +317,127 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
         model, cmd
 
-let viewLeftNavItem (selectedItem: IStore<NavItem option>) dispatch (rootItem: LazyNavItem) =
+// module Renders =
+//     let renderItemAsList item dispatch selectedItemStore =
+// let (|RootErr|RootReady|RootOther|Child| ) navItem (childRemote, selectedItem: SelectedItemType) =
+//     let isSelected = selectedItem |> getSelectedItem |> Option.map(fun v -> v.Id = navItem.Id)
+//     match childRemote with
 
-    let genRootItem children =
-        Html.pc "menu-label" [
-            text rootItem.NavItem.Name
-            Bind.el (
-                selectedItem,
-                fun _ ->
-                    bButton "Select Item" [
-                        Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
-                        onClick (fun _ -> selectedItem.Update(fun _ -> Some rootItem.NavItem)) []
-                    ]
 
-            )
-            Bind.attr (
-                "class",
-                selectedItem
-                |> Observable.map (fun si ->
-                    match si with
-                    | Some navItem ->
-                        if navItem.Id = rootItem.NavItem.Id then
-                            "menu-label is-active"
-                        else
-                            "menu-label"
-                    | _ -> "menu-label")
-                |> Observable.distinctUntilChanged
-            )
-            // if isActive then
-            //     Attr.className "is-active"
+let viewLeftNavItem
+    (selectedItemStore: IStore<SelectedItemType>)
+    dispatch
+    (root: LazyNavItem, childItemOpt: NavItem option)
+    =
+    let navItem = childItemOpt |> Option.defaultValue root.NavItem
+
+    navItem |> (fun x -> x.Id) |> printfn "viewLeftNavItem: %A"
+
+    let simpleNavItemButton name active fActivateOpt children =
+        bButton "Select Item" [
+            text name
+            // will this add button to is-active or overwrite?
+            if active then
+                Attr.className "is-active"
+            else
+                match fActivateOpt with
+                | None -> Attr.disabled true
+                | Some fActivate -> onClick (fun _ -> fActivate ()) []
             yield! children
         ]
 
-    printfn "viewLeftNavItem: %A" rootItem.NavItem.Id
 
-    Bind.el (
-        rootItem.ChildStore,
-        fun childRemote ->
-            printfn "Render item child store: %A" rootItem.NavItem.Id
+    // stateOpt = None assumes child
+    let navItemButton name active disabled stateOpt =
+        if disabled then
+            simpleNavItemButton name active None []
+        else
+            let reqData _ = Msg.PathRequested root |> dispatch
 
-            match childRemote with
-            // TODO: plus to try to expand children
-            | NotRequested ->
-                fragment [
-                    genRootItem [
-                        bButton "Expand Item" [
-                            Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                            // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
-                            onClick (fun _ -> Msg.PathRequested rootItem |> dispatch) []
-                        ]
-
-                    ]
+            match stateOpt with
+            | Some InFlight -> simpleNavItemButton name active None [ data_ "InFlight" "true" ]
+            | Some NotRequested -> simpleNavItemButton name active (Some reqData) []
+            | Some(Responded(Error e)) ->
+                // allow data to be requested again when it fails
+                simpleNavItemButton name active (Some reqData) [
+                    match e with
+                    | Choice1Of2 e -> data_ "error" <| String.concat "," e
+                    | Choice2Of2 e -> data_ "error" e.Message
                 ]
-            // TODO: loading indicator for children
-            | InFlight ->
-                fragment [
-                    genRootItem [
-                    // TODO: loading indicator
-                    ]
-                ]
-            | Responded(Error e) ->
-                fragment [
-                    Attr.className "is-error"
-                    App.Components.Gen.ErrorHandling.renderErrors [ translateErrorType e ]
-                ]
+            | None
+            | Some(Responded(Ok _)) ->
+                let fSelect _ =
+                    selectedItemStore.Update(fun _ -> Some(root, childItemOpt))
 
+                simpleNavItemButton name active (Some fSelect) []
 
-            | Responded(Ok(items, expanded)) ->
-                fragment [
-                    genRootItem [
-                        if expanded then
-                            bButton "Collapse Item" [
-                                Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Minimize")
-                                onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, false)))) []
-                            ]
-                        else
-                            bButton "Expand Item" [
-                                Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                                onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, true)))) []
-                            ]
-                    ]
-                    if expanded then
-                        Html.ul [
-                            Attr.className "menu-list"
-                            yield!
-                                items
-                                |> Seq.map (fun item ->
-                                    Html.li [
-                                        Html.a [
-                                            text item.Name
+    match childItemOpt with
+    | Some child ->
+        Bind.el (
+            selectedItemStore,
+            fun selectedItem ->
+                let isActive =
+                    selectedItem
+                    |> Option.bind snd
+                    |> Option.map (fun si -> si.Id = child.Id)
+                    |> Option.defaultValue false
 
-                                        ]
-                                    ])
-                        ]
-                // else
-                //     bButton "Expand Item" [
-                //         Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                //         // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
-                //         onClick (fun _ -> rootItem.ChildStore.Update(fun _ -> Responded(Ok(items, true)))) []
-                //     ]
-                ]
+                let fSelect _ =
+                    selectedItemStore.Update(fun _ -> Some(root, childItemOpt))
 
-    )
+                simpleNavItemButton child.Name isActive (Some fSelect) []
+        )
+    | None ->
 
-let viewLeftNav (items: LazyNavItem[]) selectedItem dispatch =
+        // scenarios:
+        // root item, errored children
+        // this is a root item, already selected and already with fetched children
+        // this is a root item, already selected in flight
+        // this is a root item, already selected but shows as not requested ?
+        Bind.el2 root.ChildStore selectedItemStore (fun (childRemote, selectedItem) ->
+            printfn "Render item child store: %A" root.NavItem.Id
+
+            let isSelected =
+                selectedItem
+                |> Option.map (fun (lni, childOpt) -> childOpt |> Option.defaultValue lni.NavItem)
+                |> Option.map (fun ni -> ni.Id = navItem.Id)
+                |> Option.defaultValue false
+
+            navItemButton navItem.Name isSelected false (Some childRemote))
+
+let viewLeftNav (items: LazyNavItem[]) selectedItemStore dispatch =
     printfn "Render viewLeftNav"
 
-    fragment [
-        Html.aside [
-            Attr.className "menu is-hidden-mobile"
-            yield!
-                items
-                |> Seq.filter (fun item -> item.NavItem.Type = NavItemType.Folder)
-                |> Seq.map (viewLeftNavItem selectedItem dispatch)
-        ]
+    Html.aside [
+        Attr.className "menu is-hidden-mobile"
+        yield!
+            items
+            |> Seq.filter (fun item -> item.NavItem.Type = NavItemType.Folder)
+            |> Seq.map (fun lni -> viewLeftNavItem selectedItemStore dispatch (lni, None))
+    ]
+
+let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
+    Html.navc "breadcrumb" [
+        Attr.custom ("aria-label", "breadcrumbs")
+        Bind.el (
+            selectedItemStore,
+            fun _ ->
+                Html.ul [
+                    Html.li [ text "Root" ]
+                    match selectedItemStore.Value with
+                    | None -> ()
+                    | Some(lni, None) -> liA (Some "is-active") lni.NavItem.Name
+                    | Some(lni, Some ni) ->
+                        Html.li [
+                            Html.a [
+                                text lni.NavItem.Name
+                                onClick (fun _ -> selectedItemStore.Update(fun _ -> Some(lni, None))) []
+                            ]
+                        ]
+
+                        liA None ni.Name
+                ]
+        )
     ]
 
 let view token =
@@ -421,12 +445,13 @@ let view token =
     let store, dispatch = token |> Store.makeElmish init update ignore
 
     let selectedItem =
-        let getter model =
-            model.Item |> Option.map (fun item -> item)
+        let getter model = model.Item
 
         let setter nextValue = { store.Value with Item = nextValue }
         store |> Store.mapStore "AESelectedItem" (getter, setter)
-
+    // let breadCrumbStore =
+    //     let getter model = model.Item
+    //     let setter
     Html.div [
         Samples.viewNavBar ()
         Html.divc "container" [
@@ -447,35 +472,46 @@ let view token =
                             ]
                     )
                 ]
-                Html.divc "column is-9" [
-                    Samples.viewBreadCrumbs ()
+                // middle nav (root item child list)
+                Html.divc "column is-3" [
+                    let itemObs =
+                        store
+                        |> Store.map (fun model ->
+                            model.Item
+                            |> Option.map (function
+                                | lni, None -> (Some lni, None)
+                                | _, Some ni -> (None, Some ni))
+                            |> Option.defaultValue (None, None))
+
+                    Bind.el (
+                        itemObs,
+                        fun (parent, item) ->
+                            match parent with
+                            | None -> Html.div []
+                            | Some parent ->
+                                Html.div [
+                                    viewLeftNavItem selectedItem dispatch (parent, item)
+
+                                ]
+                    )
+                ]
+                Html.divc "column is-6" [
+                    viewBreadCrumbs selectedItem
                     Html.sectionc "hero is-info welcome is-small" [
                         Html.divc "hero-body" [
-                            Bind.el (
-                                store |> Store.map (fun model -> model.Item),
-                                function
-                                | None ->
-                                    Html.divc "container" [
+                            let itemObs =
+                                store
+                                |> Store.map (fun model ->
+                                    model.Item
+                                    |> Option.map (function
+                                        | lni, None -> (Some lni.NavItem, None)
+                                        | _, Some ni -> (None, Some ni))
+                                    |> Option.defaultValue (None, None))
 
-                                        Html.h1 [ Attr.className "title"; text "Hello, Admin." ]
-                                        Html.h2 [ Attr.className "subtitle"; text "I Hope you are having a great day!" ]
-                                    ]
-                                | Some selectedItem ->
-                                    Html.divc "container" [
-                                        Html.h1 [
-                                            Attr.className "title"
-                                            if selectedItem.Type = NavItemType.Folder then
-                                                "FolderOpen"
-                                            else
-                                                "Link"
-                                            |> App.Init.IconSearchType.MuiIcon
-                                            |> Icons.tryIcon
+                            let f (parent, child) =
+                                NavUI.view token { Parent = parent; Item = child }
 
-                                            text selectedItem.Name
-                                        ]
-                                        Html.h2 [ Attr.className "subtitle"; text "I Hope you are having a great day!" ]
-                                    ]
-                            )
+                            Bind.el (itemObs, f)
                         ]
                     ]
 
