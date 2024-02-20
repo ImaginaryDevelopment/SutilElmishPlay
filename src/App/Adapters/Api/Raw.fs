@@ -36,6 +36,18 @@ let genNavUrl pathOpt =
         invalidArg "pathOpt" txt
     | None -> b
 
+let deleteItem token (App.Adapters.Schema.NavId id) : Async<Result<ApiNavItem, exn>> =
+    let qv = Map [ "id", id ]
+
+    fetchJson<ApiNavItem>
+        "NavItem"
+        {
+            Token = token
+            RelPath = "/api/navigation/root"
+            Arg = Some { QueryValues = Some qv }
+        }
+        [ RequestProperties.Method HttpMethod.DELETE ]
+
 module ApiNavInternals =
 
     // are we doing display name?
