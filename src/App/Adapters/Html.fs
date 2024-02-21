@@ -47,8 +47,8 @@ let bButtonC title bca props = tButton title (Some bca) Button props
 
 let rButton title props = tButton title None Reset props
 
-let columns2 col1 col2 =
-    Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2 ]
+let columns2 attrs col1 col2 =
+    Html.divc "columns" [ yield! attrs; Html.divc "column" col1; Html.divc "column" col2 ]
 
 let columns3 col1 col2 col3 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2; Html.divc "column" col3 ]

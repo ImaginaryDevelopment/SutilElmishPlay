@@ -93,6 +93,22 @@ type NavItem = {
                 | AclParameterType.Reference _ -> Some(k, (aclType, v |> Set.map AclRefId))
                 | _ -> None))
 
+    // parent field may be ignore, but might be useful on our side for building path as name changes
+    static member CreateEmpty parent = {
+        Id = NavId null
+        Parent = parent |> Option.defaultValue null
+        Type = NavItemType.Folder
+        Description = null
+        Path = null
+        Name = ""
+        Url = ""
+        HasUrlKey = false
+        AclRefs = Map.empty
+        Icon = "City"
+        Weight = 0
+        Enabled = false
+    }
+
 // I think the compiled name was needed for serialization/deserialization, it assumed camel case without it
 [<RequireQualifiedAccess; StringEnum>]
 type ApiAclParameterType =

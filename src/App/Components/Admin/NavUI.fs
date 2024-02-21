@@ -14,6 +14,7 @@ open App.Adapters.Api.Shared
 
 open App.Components.Gen
 open App.Adapters.Api.Mapped
+open Core
 
 type Model = {
     // NavItem: NavItem
@@ -132,9 +133,14 @@ let (|CreateRootFolder|CreateChild|EditFolder|EditChild|InvalidAttempt|) =
       } -> EditChild(parent, child)
 
 let view token props =
+    toGlobalWindow "NavUI_props" props
+
     let store, dispatch =
         () |> Store.makeElmish (init token props.Item) (update token) ignore
     // if parent is empty the only type can be folder
+
+    toGlobalWindow "NavUI_model" store.Value
+
     let isCreate = Option.isNone props.Item
     let hasParent = Option.isSome props.Parent
 
@@ -213,5 +219,22 @@ let view token props =
             ]
         ]
         <| renderErrors "Type"
+        formField [ text "Name" ] [
+            textInput
+                {
+                    Titling = "NavUI.Name"
+                    Value = store |> Store.map (fun v -> v.Item.Name)
+                    OnChange =
+                        (fun value ->
+                            store.Update(fun old -> {
+                                old with
+                                    Item = { old.Item with Name = value }
+                            }))
+                    DebounceOverride = None
+                }
+                []
+
+        ]
+        <| renderErrors "Name"
 
     ]

@@ -147,7 +147,7 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
             ]
         ] []
         formField [ text "Icon Name" ] [
-            columns2 [ nameInput ] [
+            columns2 [] [ nameInput ] [
                 Bind.el (store |> Store.map (fun v -> v.SearchValue), (fun _ -> nameSelect store dispatch))
             ]
         ] []

@@ -127,7 +127,7 @@ let renderAclCreator (props: AclCreatorProps) =
 
     let renderCreationEditor getError allErrors (itemStore: IReadOnlyStore<NavItem>) vItem = [
 
-        columns2 [
+        columns2 [] [
             if store.Value.Item.Type = Link then
                 focusableFormField getError {
                     Name = "Path"
