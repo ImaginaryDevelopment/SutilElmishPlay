@@ -105,6 +105,7 @@ let textInput (tia: TextInputArgs) children =
         Handlers.onValueInputD (tia.DebounceOverride |> Option.defaultValue Handlers.debounceDefault) tia.OnChange
     ]
 
+
 let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> 't) (dispatch: Dispatch<'t>) =
     Html.inputc "checkbox" [
         type' "checkbox"
@@ -113,6 +114,99 @@ let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> '
         Attr.title titling
         yield! children
         Handlers.onValueChange dispatch (fun _ -> not store.Value |> onChange)
+    ]
+
+// the existence of a selected attribute always means true it appears
+type SelectType<'t> =
+    | ObservedSelect of IReadOnlyStore<'t option> * onChange: ('t -> unit)
+    | StoredSelect of IStore<'t option>
+// | Static of 't option * onChange: ('t -> unit)
+
+type SelectProps<'t> = {
+    Values: 't seq
+    HasEmpty: bool
+
+    ValueGetter: 't -> string
+    NameGetter: 't -> string
+
+    SelectType: SelectType<'t>
+    // for spreading attributes on children
+    OptionChildren: 't option -> Core.SutilElement list
+}
+
+// no designed with multi-select in mind
+let selectInput (props: SelectProps<'t>) children =
+    let tryFind rawId : 't option =
+        props.Values
+        |> Seq.tryFind (fun value -> props.ValueGetter value = rawId)
+        |> function
+            | None ->
+                eprintfn "Selected option not found in values: %s" rawId
+                None
+            | Some value -> Some value
+
+    let selectAttrs = [
+        yield! children
+        match props.SelectType with
+        | ObservedSelect(store, onChange) ->
+            yield! [
+                Bind.attr ("data-store", store |> Store.map (Option.map props.ValueGetter))
+                Handlers.onValueChange ignore (fun v ->
+                    tryFind v
+                    |> function
+                        | None -> eprintfn "Could not find value:%s" v
+                        | Some value -> onChange value)
+            ]
+        | StoredSelect store ->
+            let updateStore value = store.Update(fun _ -> value)
+
+            yield! [
+                Bind.attr ("data-store", store |> Store.map (Option.map props.ValueGetter))
+                Handlers.onValueChange updateStore (function
+                    | ValueString selectedRawId -> tryFind selectedRawId
+                    | _ -> None)
+            ]
+    ]
+
+    Html.select [
+        Attr.className "select"
+        yield! selectAttrs
+
+        if props.HasEmpty then
+            Html.option [ text ""; yield! props.OptionChildren None ]
+
+        for item in props.Values do
+            let strId = props.ValueGetter item
+
+            match props.SelectType with
+            | ObservedSelect(store, _) ->
+                Bind.el (
+                    store,
+                    fun selected ->
+                        Html.option [
+                            // data_ "item" (Core.pretty item.NavItem)
+                            Attr.value strId
+                            text <| props.NameGetter item
+                            match selected with
+                            | None -> ()
+                            | Some selected ->
+                                if props.ValueGetter selected = strId then
+                                    Attr.selected true
+                        ]
+                )
+            | StoredSelect store ->
+                Bind.el (
+                    store,
+                    fun selected ->
+                        Html.option[Attr.value strId
+                                    text <| props.NameGetter item
+
+                                    match selected with
+                                    | None -> ()
+                                    | Some selected ->
+                                        if props.ValueGetter selected = strId then
+                                            Attr.selected true]
+                )
     ]
 
 module Observable =

@@ -3,6 +3,7 @@ module App.Components.Admin.Explorer
 // https://github.com/BulmaTemplates/bulma-templates/blob/master/templates/admin.html
 // demo https://bulmatemplates.github.io/bulma-templates/templates/admin.html
 
+open BReusable
 
 open Sutil
 open Sutil.Core
@@ -22,53 +23,57 @@ module Style =
     open type Feliz.borderStyle
 
     // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
-    let css = [
-        rule "*" [ Css.lineHeight (rem 1.5); Css.height (percent 100); Css.marginLeft 0 ]
-        rule ".adminExplorer" [ Css.backgroundColor "#ECF0F3" ]
-        rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
-        rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
-        rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
-        rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
-        rule ".overlay" [
-            Css.positionFixed
-            Css.displayBlock
-            Css.width (percent 100)
-            Css.height (percent 100)
-            Css.top 0
-            Css.left 0
-            Css.right 0
-            Css.bottom 0
-            Css.backgroundColor "rgba(0,0,0,0.5)"
-            Css.zIndex 31
-        ]
+    let css =
+        // navbar is ~30
+        let zOverlay = 31
 
-        rule ".bordered" [
-            Css.border (px 2, solid, "#A9A9A9") // https://www.w3schools.com/colors/colors_shades.asp
-            Css.custom ("border-radius", "0 0 .5rem .5rem")
-        ]
+        [
+            rule "*" [ Css.lineHeight (rem 1.5); Css.height (percent 100); Css.marginLeft 0 ]
+            rule ".adminExplorer" [ Css.backgroundColor "#ECF0F3" ]
+            rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
+            rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
+            rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
+            rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
+            rule ".overlay" [
+                Css.positionFixed
+                Css.displayBlock
+                Css.width (percent 100)
+                Css.height (percent 100)
+                Css.top 0
+                Css.left 0
+                Css.right 0
+                Css.bottom 0
+                Css.backgroundColor "rgba(0,0,0,0.5)"
+                Css.zIndex zOverlay
+            ]
 
-        rule ".menu-label" [
-            Css.color "#8F99A3"
-            Css.custom ("letter-spacing", "1.3")
-            Css.fontWeight 700
+            rule ".bordered" [
+                Css.border (px 2, solid, "#A9A9A9") // https://www.w3schools.com/colors/colors_shades.asp
+                Css.custom ("border-radius", "0 0 .5rem .5rem")
+            ]
+
+            rule ".menu-label" [
+                Css.color "#8F99A3"
+                Css.custom ("letter-spacing", "1.3")
+                Css.fontWeight 700
+            ]
+            rule ".menu-list a" [ Css.color "#8F99A3"; Css.fontSize (px 14); Css.fontWeight 700 ]
+            rule ".menu-list a:hover, .menu-label:hover" [
+                Css.backgroundColor "transparent"
+                Css.color "#276cda"
+                Css.cursorPointer
+            ]
+            rule ".menu-list a.is-active, .menu-label.is-active" [
+                Css.backgroundColor "transparent"
+                Css.color "#276cda"
+                Css.fontWeight 700
+            ]
+            rule ".flyover" [
+                Css.animationDuration (System.TimeSpan.FromMilliseconds 300)
+                Css.animationTimingFunctionEaseIn
+                Css.zIndex <| zOverlay + 1
+            ]
         ]
-        rule ".menu-list a" [ Css.color "#8F99A3"; Css.fontSize (px 14); Css.fontWeight 700 ]
-        rule ".menu-list a:hover, .menu-label:hover" [
-            Css.backgroundColor "transparent"
-            Css.color "#276cda"
-            Css.cursorPointer
-        ]
-        rule ".menu-list a.is-active, .menu-label.is-active" [
-            Css.backgroundColor "transparent"
-            Css.color "#276cda"
-            Css.fontWeight 700
-        ]
-        rule ".flyover" [
-            Css.animationDuration (System.TimeSpan.FromMilliseconds 300)
-            Css.animationTimingFunctionEaseIn
-            Css.zIndex 32
-        ]
-    ]
 
     let withCss = withStyle css
 
@@ -84,23 +89,28 @@ type LazyNavItem = {
     ChildStore: IStore<RemoteData<NavItem[] * bool>>
 }
 
+type FolderSelectionType =
+    | NewFolder of NavItem
+    | Existing of LazyNavItem * editing: bool
+
 type SelectedItemState =
     // a new folder won't have a child store?
-    | FolderSelected of Choice<LazyNavItem, NavItem> * editing: bool
+    | FolderSelected of FolderSelectionType
     | ChildSelected of LazyNavItem * NavItem
 
 type SelectedItemType = SelectedItemState option
 
 let getSelectedItem: SelectedItemType -> NavItem option =
     Option.map (function
-        | FolderSelected(Choice1Of2 lni, _) -> lni.NavItem
-        | FolderSelected(Choice2Of2 item, _) -> item
+        | FolderSelected(Existing(lni, _)) -> lni.NavItem
+        | FolderSelected(NewFolder item) -> item
         | ChildSelected(_, ni) -> ni)
 
 
 type Model = {
     Token: string
     Items: Result<LazyNavItem[], AdminErrorType> option
+    CreateParentSelector: LazyNavItem option
     // must track parent for bread crumbs
     Item: SelectedItemType
     Errors: AdminErrorType list
@@ -230,7 +240,11 @@ type Msg =
     // should they be able to create folders?
     // if so, then this should be an option
     | StartNewRequested of parent: LazyNavItem option
+    | DeleteRequested of Choice<LazyNavItem, NavItem>
+    | DeleteResponse of Result<NavItem, ErrorType>
 
+// allow for pathRequest, and direct store selection update
+// let getActivateItemAttrs dispatch
 
 module Cmd =
     let getRootItems token : Cmd<Msg> =
@@ -251,7 +265,7 @@ module Cmd =
         match lni.ChildStore.Value with
         | Responded _
         | NotRequested ->
-            let f x =
+            let f x : Async<Msg> =
                 async {
                     printfn "Fetching root children: %A" lni.NavItem.Id
                     let! resp = App.Adapters.Api.Mapped.NavItems.getNavPath token x
@@ -265,10 +279,31 @@ module Cmd =
 
         | InFlight -> Cmd.none
 
+    let deleteItem token (item: NavItem) : Cmd<Msg> =
+        let deleteErr ex =
+            Msg.DeleteResponse(Error(Choice2Of2 ex))
+
+        if item.Type <> NavItemType.Link then
+            eprintfn "Deletes only implemented for links"
+            Cmd.none
+        else
+            let f x : Async<Msg> =
+                async {
+                    let! resp = App.Adapters.Api.Mapped.NavItems.delete token x
+
+                    match resp with
+                    | Ok(ni: NavItem) -> return Msg.DeleteResponse(Ok ni)
+                    | Error e -> return deleteErr e
+                }
+
+            Cmd.OfAsync.either f item.Id id deleteErr
+
+
 let init token : Model * Cmd<Msg> =
     let next = {
         Token = token
         Items = None
+        CreateParentSelector = None
         Item = None
         Errors = List.empty
     }
@@ -280,7 +315,6 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
-    // TODO: fix the Item selection to allow no parent
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
         {
@@ -291,9 +325,11 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.StartNewRequested(None) ->
         {
             model with
-                Item = Some(FolderSelected(Choice2Of2(NavItem.CreateEmpty None), false))
+                Item = Some(FolderSelected(NewFolder(NavItem.CreateEmpty None)))
         },
         Cmd.none
+    | Msg.DeleteRequested(Choice1Of2 { NavItem = ni })
+    | Msg.DeleteRequested(Choice2Of2 ni) -> model, Cmd.deleteItem model.Token ni
     | Msg.RootResponse(Ok v) ->
 
         let nextItems =
@@ -352,7 +388,7 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
         {
             model with
-                Item = Some(FolderSelected(Choice1Of2 lni, false))
+                Item = Some(FolderSelected(Existing(lni, false)))
         },
         cmd
 
@@ -361,121 +397,257 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 // let (|RootErr|RootReady|RootOther|Child| ) navItem (childRemote, selectedItem: SelectedItemType) =
 //     let isSelected = selectedItem |> getSelectedItem |> Option.map(fun v -> v.Id = navItem.Id)
 //     match childRemote with
+type NavItemProps = {
+    SelectedItemStore: IStore<SelectedItemType>
+    Parent: LazyNavItem option
+    Item: Choice<LazyNavItem, NavItem>
+    Dispatch: Msg -> unit
+}
 
+// types of buttons:
+// parent: click to load, click to edit
+// child: click to edit
+()
 
-let viewLeftNavItem
-    (selectedItemStore: IStore<SelectedItemType>)
-    dispatch
-    (root: LazyNavItem, childItemOpt: NavItem option)
-    =
-    let navItem = childItemOpt |> Option.defaultValue root.NavItem
+let renderNavItem props =
+    let activate () =
+        // what if it is already active?
+        match props.Parent, props.Item with
+        | Some parent, Choice2Of2 child ->
+            let next = SelectedItemState.ChildSelected(parent, child)
 
-    // navItem |> (fun x -> x.Id) |> printfn "viewLeftNavItem: %A"
+            if props.SelectedItemStore.Value <> Some next then
+                props.SelectedItemStore.Update(fun _ ->
+                    printfn "Activating child"
+                    Some next)
+        | _, Choice1Of2 lni ->
+            match lni.ChildStore.Value with
+            | Responded(Ok _) ->
+                props.SelectedItemStore.Update(fun selectedItem ->
+                    let nextSelection =
+                        match selectedItem with
+                        | None -> SelectedItemState.FolderSelected(Existing(lni, false))
+                        | Some(FolderSelected(Existing(lni, editing))) ->
+                            SelectedItemState.FolderSelected(Existing(lni, not editing))
+                        // is this useful?
+                        | Some(FolderSelected(NewFolder lni)) -> FolderSelected(NewFolder lni)
+                        | Some x -> x
 
-    let simpleNavItemButton name active fActivateOpt children =
+                    printfn "selected ok: %A" nextSelection
+                    nextSelection |> Some)
+            | NotRequested -> Msg.PathRequested lni |> props.Dispatch
+            | InFlight -> eprintfn "In Flight item click"
+            | _ ->
+                eprintfn "Selected parent?"
+                ()
+        | None, Choice2Of2 ni ->
+            eprintfn "Orphaned child selected"
+            ()
+
+    let navItem =
+        match props.Item with
+        | Choice1Of2 lni -> lni.NavItem
+        | Choice2Of2 ni -> ni
+
+    ()
+
+    let f selectedModel =
+        let selected =
+            selectedModel
+            |> Option.map (function
+                | FolderSelected(Existing(lni, _)) -> lni.NavItem
+                | FolderSelected(NewFolder ni) -> ni
+                | ChildSelected(_, ni) -> ni)
+
+        let isActive =
+            selected
+            |> Option.map (fun ni -> ni.Id = navItem.Id)
+            |> Option.defaultValue false
+
         bButton "Select Item" [
-            text name
-            // will this add button to is-active or overwrite?
-            if active then
+            text navItem.Name
+            if isActive then
                 Attr.className "is-active"
-            else
-                match fActivateOpt with
-                | None -> Attr.disabled true
-                | Some fActivate -> onClick (fun _ -> fActivate ()) []
-            yield! children
+            onClick (fun _ -> activate ()) []
+
         ]
 
+    Bind.el (props.SelectedItemStore, f)
 
-    // stateOpt = None assumes child
-    let navItemButton (item: Choice<_, NavItem>) active disabled stateOpt =
-        let name =
-            match item with
-            | Choice1Of2 lni -> lni.NavItem.Name
-            | Choice2Of2 ni -> ni.Name
+()
 
-        if disabled then
-            simpleNavItemButton name active None []
-        else
-            let reqData _ = Msg.PathRequested root |> dispatch
+// let viewLeftNavItem
+//     (selectedItemStore: _)
+//     dispatch
+//     (root: LazyNavItem, childItemOpt: NavItem option)
+//     =
+//     let navItem = childItemOpt |> Option.defaultValue root.NavItem
 
-            match stateOpt with
-            | Some InFlight -> simpleNavItemButton name active None [ data_ "InFlight" "true" ]
-            | Some NotRequested -> simpleNavItemButton name active (Some reqData) []
-            | Some(Responded(Error e)) ->
-                // allow data to be requested again when it fails
-                simpleNavItemButton name active (Some reqData) [
-                    match e with
-                    | Choice1Of2 e -> data_ "error" <| String.concat "," e
-                    | Choice2Of2 e -> data_ "error" e.Message
-                ]
-            | None
-            | Some(Responded(Ok _)) ->
-                // selecting this already-loaded parent
-                let fSelect _ =
-                    selectedItemStore.Update(fun _ -> Some(SelectedItemState.FolderSelected(item, true)))
+//     // navItem |> (fun x -> x.Id) |> printfn "viewLeftNavItem: %A"
 
-                simpleNavItemButton name active (Some fSelect) []
+//     let simpleNavItemButton name active fActivateOpt children =
+//         bButton "Select Item" [
+//             text name
+//             // will this add button to is-active or overwrite?
+//             if active then
+//                 Attr.className "is-active"
+//             else
+//                 match fActivateOpt with
+//                 | None -> Attr.disabled true
+//                 | Some fActivate -> onClick (fun _ -> fActivate ()) []
+//             yield! children
+//         ]
 
-    match childItemOpt with
-    | Some child ->
-        Bind.el (
-            selectedItemStore,
-            fun selectedItem ->
-                let isActive =
-                    selectedItem
-                    |> getSelectedItem
-                    |> Option.map (fun si -> si.Id = child.Id)
-                    |> Option.defaultValue false
 
-                let fSelect _ =
-                    selectedItemStore.Update(fun _ -> Some(SelectedItemState.ChildSelected(root, child)))
+//     // stateOpt = None assumes child
+//     let navItemButton (item: Choice<_, NavItem>) active disabled stateOpt =
+//         let name =
+//             match item with
+//             | Choice1Of2 lni -> lni.NavItem.Name
+//             | Choice2Of2 ni -> ni.Name
 
-                simpleNavItemButton child.Name isActive (Some fSelect) []
-        )
-    | None ->
+//         if disabled then
+//             simpleNavItemButton name active None []
+//         else
+//             let reqData _ = Msg.PathRequested root |> dispatch
 
-        // scenarios:
-        // root item, errored children
-        // this is a root item, already selected and already with fetched children
-        // this is a root item, already selected in flight
-        // this is a root item, already selected but shows as not requested ?
-        Bind.el2 root.ChildStore selectedItemStore (fun (childRemote, selectedItem) ->
-            // printfn "Render item child store: %A" root.NavItem.Id
+//             match stateOpt with
+//             | Some InFlight -> simpleNavItemButton name active None [ data_ "InFlight" "true" ]
+//             | Some NotRequested -> simpleNavItemButton name active (Some reqData) []
+//             | Some(Responded(Error e)) ->
+//                 // allow data to be requested again when it fails
+//                 simpleNavItemButton name active (Some reqData) [
+//                     match e with
+//                     | Choice1Of2 e -> data_ "error" <| String.concat "," e
+//                     | Choice2Of2 e -> data_ "error" e.Message
+//                 ]
+//             | None
+//             | Some(Responded(Ok _)) ->
+//                 // selecting this already-loaded parent
+//                 let fSelect _ =
+//                     selectedItemStore.Update(fun _ -> Some(SelectedItemState.FolderSelected(item, true)))
 
-            let isSelected =
-                getSelectedItem selectedItem
-                |> Option.map (fun ni -> ni.Id = navItem.Id)
-                |> Option.defaultValue false
+//                 simpleNavItemButton name active (Some fSelect) []
 
-            navItemButton (Choice2Of2 navItem) isSelected false (Some childRemote))
+//     match childItemOpt with
+//     | Some child ->
+//         Bind.el (
+//             selectedItemStore,
+//             fun selectedItem ->
+//                 let isActive =
+//                     selectedItem
+//                     |> getSelectedItem
+//                     |> Option.map (fun si -> si.Id = child.Id)
+//                     |> Option.defaultValue false
 
-let viewLeftNav (items: LazyNavItem[]) selectedItemStore dispatch =
+//                 let fSelect _ =
+//                     selectedItemStore.Update(fun _ -> Some(SelectedItemState.ChildSelected(root, child)))
+
+//                 simpleNavItemButton child.Name isActive (Some fSelect) []
+//         )
+//     | None ->
+
+//         // scenarios:
+//         // root item, errored children
+//         // this is a root item, already selected and already with fetched children
+//         // this is a root item, already selected in flight
+//         // this is a root item, already selected but shows as not requested ?
+//         Bind.el2 root.ChildStore selectedItemStore (fun (childRemote, selectedItem) ->
+//             // printfn "Render item child store: %A" root.NavItem.Id
+
+//             let isSelected =
+//                 getSelectedItem selectedItem
+//                 |> Option.map (fun ni -> ni.Id = navItem.Id)
+//                 |> Option.defaultValue false
+
+//             navItemButton (Choice2Of2 navItem) isSelected false (Some childRemote))
+
+let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemType>) (dispatch: Msg -> unit) =
     printfn "Render viewLeftNav"
+    // could this be a navId or a LazyNavItem?
+    let store: IStore<LazyNavItem option> = None |> Store.make
 
     Html.aside [
         Attr.className "menu is-hidden-mobile"
         columns2 [ Attr.className "bordered" ] [
-            Html.select [
-                Attr.className "select"
-                Html.option [ text "" ]
-                for item in items do
-                    Html.option [
-                        data_ "item" (Core.pretty item.NavItem)
-                        Attr.value item.NavItem.Name
-                        text item.NavItem.Name
-                        Attr.title <| Core.pretty item.NavItem.Description
-                        Bind.attr ("selected", selectedItemStore |> Store.map (fun selectedItem -> selectedItem))
-                    ]
+            selectInput
+                {
+                    Values = items
+                    HasEmpty = true
+                    SelectType = StoredSelect store
+                    ValueGetter =
+                        fun lni ->
+                            lni.NavItem.Id
+                            |> function
+                                | NavId x -> x
+                    NameGetter = fun lni -> lni.NavItem.Name
+                    OptionChildren = fun _ -> List.empty
+                }
+                [ Html.option [ text "" ] ]
+        // Html.select [
+        //     Attr.className "select"
+        //     Bind.attr ("data-store", store |> Store.map id)
+        //     Html.option [ text "" ]
+        //     for item in items do
+        //         let strId =
+        //             match item.NavItem.Id with
+        //             | NavId x -> x
 
-            ]
+        //         Html.option [
+        //             // data_ "item" (Core.pretty item.NavItem)
+        //             Attr.value strId
+        //             text item.NavItem.Name
+        //             Attr.title item.NavItem.Description
+        //             Handlers.onValueChange ignore (function
+        //                 | ValueString rawId -> store.Update(fun _ -> Some rawId)
+        //                 | _ -> store.Update(fun _ -> None))
+        //             Bind.attr (
+        //                 "selected",
+        //                 selectedItemStore
+        //                 |> Store.map (fun selectedItem ->
+        //                     match store.Value, getSelectedItem selectedItem with
+        //                     | Some rawId, Some selectedItem -> NavId rawId = selectedItem.Id
+        //                     | _ -> false)
+        //             )
+        //         ]
+        // ]
 
         ] [
-            bButton "Add Item" [ "Add" |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon ]
+            bButton "Add Item" [
+                "Add" |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+                onClick
+                    (fun _ ->
+                        // let selectedItem = getSelectedItem selectedItemStore.Value
+                        match store.Value with
+                        | Some lni -> Msg.StartNewRequested(Some lni) |> dispatch
+                        // | Some _ -> eprintfn "addItem selector Value was empty"
+                        | None -> Msg.StartNewRequested None |> dispatch
+
+                    )
+                    []
+            ]
+            bButton "Delete Item" [
+                "Delete" |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+                onClick
+                    (fun _ ->
+
+                        match store.Value with
+                        | None -> ()
+                        | Some lni -> Msg.DeleteRequested(Choice1Of2 lni) |> dispatch)
+                    []
+
+            ]
         ]
         yield!
             items
             |> Seq.filter (fun item -> item.NavItem.Type = NavItemType.Folder)
-            |> Seq.map (fun lni -> viewLeftNavItem selectedItemStore dispatch (lni, None))
+            |> Seq.map (fun lni ->
+                renderNavItem {
+                    SelectedItemStore = selectedItemStore
+                    Dispatch = dispatch
+                    Item = Choice1Of2 lni
+                    Parent = Some lni
+                })
     ]
 
 let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
@@ -489,25 +661,25 @@ let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
                     match selectedItemStore.Value with
                     | None -> ()
                     // | Some(ChildSelected (_, ni)) -> liA (Some "isActive") ni.Name
-                    | Some(FolderSelected(Choice1Of2 lni, enabled)) ->
+                    | Some(FolderSelected(Existing(lni, enabled))) ->
                         Html.li [
                             Html.a [
                                 text lni.NavItem.Name
                                 onClick
                                     (fun _ ->
                                         selectedItemStore.Update(fun _ ->
-                                            Some(FolderSelected(Choice1Of2 lni, not enabled))))
+                                            Some(FolderSelected(Existing(lni, not enabled)))))
                                     []
                             ]
                         ]
-                    | Some(FolderSelected(Choice2Of2 ni, _)) -> liA (Some "is-active") ni.Name
+                    | Some(FolderSelected(NewFolder ni)) -> liA (Some "is-active") ni.Name
                     | Some(ChildSelected(lni, ni)) ->
                         Html.li [
                             Html.a [
                                 text lni.NavItem.Name
                                 onClick
                                     (fun _ ->
-                                        selectedItemStore.Update(fun _ -> Some(FolderSelected(Choice1Of2 lni, false))))
+                                        selectedItemStore.Update(fun _ -> Some(FolderSelected(Existing(lni, false)))))
                                     []
                             ]
                         ]
@@ -525,12 +697,12 @@ let view token =
     let getValueDisplay =
         function
         | None -> "null"
-        | Some(FolderSelected(Choice1Of2 lni, editing)) -> $"FolderSelected(lni:%A{lni.NavItem.Name}, %A{editing})"
-        | Some(FolderSelected(Choice2Of2 ni, editing)) -> $"FolderSelected(ni:%A{ni.Name}, %A{editing})"
+        | Some(FolderSelected(Existing(lni, editing))) -> $"FolderSelected(lni:%A{lni.NavItem.Name}, %A{editing})"
+        | Some(FolderSelected(NewFolder ni)) -> $"FolderSelected(ni:%A{ni.Name})"
         | Some(ChildSelected(lni, ni)) -> $"ChildSelected(lni:%s{lni.NavItem.Name}, ni:%s{ni.Name})"
 
     let selectedItemStore =
-        let getter model = model.Item
+        let getter (model: Model) = model.Item
 
         let setter nextValue =
             let oldValue = getter store.Value
@@ -553,8 +725,8 @@ let view token =
         |> Store.map (fun model ->
             model.Item
             |> Option.map (function
-                | FolderSelected(Choice1Of2 lni, _) -> (Some lni, None)
-                | FolderSelected(Choice2Of2 _, _) -> None, None
+                | FolderSelected(Existing(lni, _)) -> (Some lni, None)
+                | FolderSelected(NewFolder _) -> None, None
                 | ChildSelected(lni, ni) -> (Some lni, Some ni))
             |> Option.defaultValue (None, None))
 
@@ -564,7 +736,7 @@ let view token =
         Bind.el (
             selectedItemStore,
             function
-            | Some(FolderSelected(_, false))
+            | Some(FolderSelected(Existing(_, false)))
             | None ->
                 printfn "Overlay render hide"
                 Html.div [ Attr.id "overlay"; Attr.styleAppend [ Css.visibilityHidden ] ]
@@ -581,9 +753,9 @@ let view token =
 
                             let next =
                                 match selectedItem with
-                                | SelectedItemState.FolderSelected(fs, true) ->
+                                | SelectedItemState.FolderSelected(Existing(fs, true)) ->
                                     printfn "Unselecting folder"
-                                    FolderSelected(fs, false) |> Some
+                                    FolderSelected(Existing(fs, false)) |> Some
                                 | _ -> None
 
                             selectedItemStore.Update(fun _ -> next))
@@ -594,6 +766,7 @@ let view token =
         viewBreadCrumbs selectedItemStore
         Html.divc "container" [
             Html.divc "columns" [
+                // left selection
                 Html.divc "column is-3" [
                     Bind.el (
                         store |> Store.map (fun model -> model.Items),
@@ -603,6 +776,7 @@ let view token =
                             printfn "Render view left column"
 
                             viewLeftNav items selectedItemStore dispatch
+
                         | Some(Error e) ->
                             Html.div [
                                 Attr.className "is-error"
@@ -612,6 +786,24 @@ let view token =
                 ]
                 // middle nav (root item child list)
                 Html.divc "column is-3" [
+                    Bind.el (
+                        selectedItemStore,
+                        fun selectedItem ->
+                            printfn "Render middle column"
+
+                            match selectedItem with
+                            | Some(ChildSelected(lni, _))
+                            | Some(FolderSelected(Existing(lni, _))) ->
+                                Bind.el (
+                                    lni.ChildStore,
+                                    fun childStore ->
+                                        match childStore with
+                                        | _ -> Html.div []
+                                )
+
+                            | Some(FolderSelected(NewFolder _))
+                            | None -> Html.div []
+                    )
 
                     Bind.el (
                         itemObs,
@@ -630,38 +822,47 @@ let view token =
                                     | NotRequested -> Html.divc "is-error" [ text "Not requested" ]
                                     | Responded(Error e) -> Html.divc "is-error" [ text <| string e ]
                                     | Responded(Ok(values, _)) ->
-                                        Html.ul [
-                                            yield!
-                                                values
-                                                |> Seq.map (fun v ->
-                                                    let x = viewLeftNavItem selectedItemStore dispatch (parent, Some v)
-                                                    x)
+                                        if Array.isEmpty values then
+                                            Html.div [ text "No items found." ]
+                                        else
+                                            Html.ul [
+                                                yield!
+                                                    values
+                                                    |> Seq.map (fun v ->
+                                                        Html.li [
+                                                            renderNavItem {
+                                                                SelectedItemStore = selectedItemStore
+                                                                Dispatch = dispatch
+                                                                Parent = Some parent
+                                                                Item = Choice2Of2 v
+                                                            }
+                                                        ])
 
-                                        ]
+                                            ]
 
                                 )
-                    // Html.div [
-                    //     viewLeftNavItem selectedItemStore dispatch (parent, item)
-                    //     ]
                     )
                 ]
                 Html.divc "column is-6" [
-                    let itemObs =
-                        itemObs
-                        |> Observable.map (fun (lni, ni) -> lni |> Option.map (fun lni -> lni.NavItem), ni)
+                    let renderEditor parentOpt childOpt =
+                        Html.sectionc "flyover hero is-info welcome is-small" [
+                            Html.divc "hero-body" [
+                                NavUI.view token { Parent = parentOpt; Item = childOpt }
+
+                            ]
+                        ]
+
 
                     Bind.el (
-                        itemObs,
-                        fun (parentOpt, childOpt) ->
-                            match parentOpt, childOpt with
-                            | None, None -> Html.div []
-                            | _ ->
-                                Html.sectionc "flyover hero is-info welcome is-small" [
-                                    Html.divc "hero-body" [
-                                        NavUI.view token { Parent = parentOpt; Item = childOpt }
+                        selectedItemStore,
+                        fun selectedItem ->
+                            match selectedItem with
+                            | None
+                            | Some(FolderSelected(Existing(_, false))) -> Html.div []
+                            | Some(FolderSelected(NewFolder ni)) -> renderEditor None (Some ni)
+                            | Some(FolderSelected(Existing(lni, true))) -> renderEditor (Some lni.NavItem) None
+                            | Some(ChildSelected(lni, ni)) -> renderEditor (Some lni.NavItem) (Some ni)
 
-                                    ]
-                                ]
                     )
 
                 ]

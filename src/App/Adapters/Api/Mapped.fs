@@ -168,3 +168,7 @@ module NavItems =
 
         ApiNavInternals.save token apiNavItem
         |> Async.map (Result.map NavItemAdapters.ofApiNavItem)
+
+    let delete token navId =
+        Raw.deleteItem token navId
+        |> Async.map (Result.map NavItemAdapters.ofApiNavItem)
