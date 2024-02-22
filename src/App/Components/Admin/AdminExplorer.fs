@@ -17,65 +17,6 @@ open App.Adapters.Api.Schema
 open App.Components.Gen
 open Core
 
-module Style =
-    open Sutil.Styling
-    open type Feliz.length
-    open type Feliz.borderStyle
-
-    // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
-    let css =
-        // navbar is ~30
-        let zOverlay = 31
-
-        [
-            rule "*" [ Css.lineHeight (rem 1.5); Css.height (percent 100); Css.marginLeft 0 ]
-            rule ".adminExplorer" [ Css.backgroundColor "#ECF0F3" ]
-            rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
-            rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
-            rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
-            rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
-            rule ".overlay" [
-                Css.positionFixed
-                Css.displayBlock
-                Css.width (percent 100)
-                Css.height (percent 100)
-                Css.top 0
-                Css.left 0
-                Css.right 0
-                Css.bottom 0
-                Css.backgroundColor "rgba(0,0,0,0.5)"
-                Css.zIndex zOverlay
-            ]
-
-            rule ".bordered" [
-                Css.border (px 2, solid, "#A9A9A9") // https://www.w3schools.com/colors/colors_shades.asp
-                Css.custom ("border-radius", "0 0 .5rem .5rem")
-            ]
-
-            rule ".menu-label" [
-                Css.color "#8F99A3"
-                Css.custom ("letter-spacing", "1.3")
-                Css.fontWeight 700
-            ]
-            rule ".menu-list a" [ Css.color "#8F99A3"; Css.fontSize (px 14); Css.fontWeight 700 ]
-            rule ".menu-list a:hover, .menu-label:hover" [
-                Css.backgroundColor "transparent"
-                Css.color "#276cda"
-                Css.cursorPointer
-            ]
-            rule ".menu-list a.is-active, .menu-label.is-active" [
-                Css.backgroundColor "transparent"
-                Css.color "#276cda"
-                Css.fontWeight 700
-            ]
-            rule ".flyover" [
-                Css.animationDuration (System.TimeSpan.FromMilliseconds 300)
-                Css.animationTimingFunctionEaseIn
-                Css.zIndex <| zOverlay + 1
-            ]
-        ]
-
-    let withCss = withStyle css
 
 type AdminErrorType = string * System.DateTime
 
@@ -105,7 +46,6 @@ let getSelectedItem: SelectedItemType -> NavItem option =
         | FolderSelected(Existing(lni, _)) -> lni.NavItem
         | FolderSelected(NewFolder item) -> item
         | ChildSelected(_, ni) -> ni)
-
 
 type Model = {
     Token: string
@@ -231,6 +171,70 @@ module Samples =
                 ]
             ]
         ]
+
+module Style =
+    open Sutil.Styling
+    open type Feliz.length
+    open type Feliz.borderStyle
+
+    // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
+    let css =
+        // navbar is ~30
+        let zOverlay = 31
+
+        [
+            rule "*" [ Css.lineHeight (rem 1.5); Css.height (percent 100); Css.marginLeft 0 ]
+            rule ".adminExplorer" [ Css.backgroundColor "#ECF0F3" ]
+            rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
+            rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
+            rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
+            rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
+            // rule ".full-overlay" [
+
+            // ]
+            rule ".overlay" [
+                Css.positionFixed
+                // Css.displayBlock
+                Css.width (percent 100)
+                Css.height (percent 100)
+                Css.top 0
+                Css.left 0
+                Css.right 0
+                Css.bottom 0
+                Css.backgroundColor "rgba(0,0,0,0.5)"
+                Css.zIndex zOverlay
+            ]
+
+            rule ".bordered" [
+                Css.border (px 2, solid, "#A9A9A9") // https://www.w3schools.com/colors/colors_shades.asp
+                Css.custom ("border-radius", "0 0 .5rem .5rem")
+            ]
+
+            rule ".menu-label" [
+                Css.color "#8F99A3"
+                Css.custom ("letter-spacing", "1.3")
+                Css.fontWeight 700
+            ]
+            rule ".menu-list a" [ Css.color "#8F99A3"; Css.fontSize (px 14); Css.fontWeight 700 ]
+            rule ".menu-list a:hover, .menu-label:hover" [
+                Css.backgroundColor "transparent"
+                Css.color "#276cda"
+                Css.cursorPointer
+            ]
+            rule ".menu-list a.is-active, .menu-label.is-active" [
+                Css.backgroundColor "transparent"
+                Css.color "#276cda"
+                Css.fontWeight 700
+            ]
+            rule ".above-overlay" [ Css.zIndex <| zOverlay + 3 ]
+            rule ".flyover" [
+                Css.animationDuration (System.TimeSpan.FromMilliseconds 300)
+                Css.animationTimingFunctionEaseIn
+                Css.zIndex <| zOverlay + 5
+            ]
+        ]
+
+    let withCss = withStyle css
 
 type Msg =
     | RootResponse of Result<NavItem[], ErrorType>
@@ -446,7 +450,7 @@ let renderNavItem props =
             | _ ->
                 eprintfn "Selected parent?"
                 ()
-        | None, Choice2Of2 ni ->
+        | None, Choice2Of2 _ ->
             eprintfn "Orphaned child selected"
             ()
 
@@ -739,41 +743,41 @@ let view token =
     Html.div [
         Attr.className "adminExplorer"
         disposeOnUnmount [ dispose ]
-        Bind.el (
-            selectedItemStore,
-            function
-            | Some(FolderSelected(Existing(_, false)))
-            | None ->
-                printfn "Overlay render hide"
-                Html.div [ Attr.id "overlay"; Attr.styleAppend [ Css.visibilityHidden ] ]
-            // TODO: add left side props editor display
-            | Some selectedItem ->
-                printfn "Overlay render"
-
-                Html.divc "overlay" [
-                    Attr.id "overlay"
-                    // leave folder selected but turn off editing if editing is on
-                    onClick
-                        (fun _ ->
-                            printfn "Overlay click handler"
-
-                            let next =
-                                match selectedItem with
-                                | SelectedItemState.FolderSelected(Existing(fs, true)) ->
-                                    printfn "Unselecting folder"
-                                    FolderSelected(Existing(fs, false)) |> Some
-                                | _ -> None
-
-                            selectedItemStore.Update(fun _ -> next))
-                        []
-                ]
-        )
         Samples.viewNavBar ()
         viewBreadCrumbs selectedItemStore
         Html.divc "container" [
             Html.divc "columns" [
                 // left selection
                 Html.divc "column is-3" [
+                    Bind.el (
+                        selectedItemStore,
+                        function
+                        | Some(FolderSelected(Existing(_, false)))
+                        | None ->
+                            printfn "Overlay render hide"
+                            Html.div [ Attr.id "overlay"; Attr.styleAppend [ Css.visibilityHidden ] ]
+                        // TODO: add left side props editor display
+                        | Some selectedItem ->
+                            printfn "Overlay render"
+
+                            Html.divc "overlay" [
+                                Attr.id "overlay"
+                                // leave folder selected but turn off editing if editing is on
+                                onClick
+                                    (fun _ ->
+                                        printfn "Overlay click handler"
+
+                                        let next =
+                                            match selectedItem with
+                                            | SelectedItemState.FolderSelected(Existing(fs, true)) ->
+                                                printfn "Unselecting folder"
+                                                FolderSelected(Existing(fs, false)) |> Some
+                                            | _ -> None
+
+                                        selectedItemStore.Update(fun _ -> next))
+                                    []
+                            ]
+                    )
                     Bind.el (
                         store |> Store.map (fun model -> model.Items),
                         function
@@ -849,7 +853,7 @@ let view token =
                                 )
                     )
                 ]
-                Html.divc "column is-6" [
+                Html.divc "column is-6 above-overlay" [
                     let renderEditor parentOpt childOpt =
                         Html.sectionc "flyover hero is-info welcome is-small" [
                             Html.divc "hero-body" [

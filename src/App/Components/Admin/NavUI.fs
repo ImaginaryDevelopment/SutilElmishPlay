@@ -23,6 +23,22 @@ type Model = {
     Acls: (AclData * AclType) list
 }
 
+module Style =
+    open Sutil.Styling
+    open type Feliz.length
+    open type Feliz.borderStyle
+
+    // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
+    let css =
+        // navbar is ~30
+        let zOverlay = 31
+
+        [
+        // rule ".full-overlay" [
+        ]
+
+    let withCss = withStyle css
+
 type Msg =
     | ItemTypeChange of NavItemType
     | AclSearchRequest of AclRefValueArgs
@@ -238,3 +254,4 @@ let view token props =
         <| renderErrors "Name"
 
     ]
+    |> Style.withCss
