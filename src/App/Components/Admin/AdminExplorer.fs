@@ -423,12 +423,18 @@ let renderNavItem props =
         | _, Choice1Of2 lni ->
             match lni.ChildStore.Value with
             | Responded(Ok _) ->
-                props.SelectedItemStore.Update(fun selectedItem ->
+                props.SelectedItemStore.Update(fun previousSelection ->
                     let nextSelection =
-                        match selectedItem with
+                        match previousSelection with
                         | None -> SelectedItemState.FolderSelected(Existing(lni, false))
-                        | Some(FolderSelected(Existing(lni, editing))) ->
-                            SelectedItemState.FolderSelected(Existing(lni, not editing))
+                        | Some(FolderSelected(Existing(oldLni, editing))) ->
+                            let editing =
+                                if oldLni.NavItem.Id = lni.NavItem.Id then
+                                    not editing
+                                else
+                                    false
+
+                            SelectedItemState.FolderSelected(Existing(lni, editing))
                         // is this useful?
                         | Some(FolderSelected(NewFolder lni)) -> FolderSelected(NewFolder lni)
                         | Some x -> x
