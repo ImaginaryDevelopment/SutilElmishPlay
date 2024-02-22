@@ -854,10 +854,10 @@ let view token =
                     )
                 ]
                 Html.divc "column is-6 above-overlay" [
-                    let renderEditor parentOpt childOpt =
+                    let renderEditor focus =
                         Html.sectionc "flyover hero is-info welcome is-small" [
                             Html.divc "hero-body" [
-                                NavUI.view token { Parent = parentOpt; Item = childOpt }
+                                NavUI.view token { Focus = focus }
 
                             ]
                         ]
@@ -869,9 +869,10 @@ let view token =
                             match selectedItem with
                             | None
                             | Some(FolderSelected(Existing(_, false))) -> Html.div []
-                            | Some(FolderSelected(NewFolder ni)) -> renderEditor None (Some ni)
-                            | Some(FolderSelected(Existing(lni, true))) -> renderEditor (Some lni.NavItem) None
-                            | Some(ChildSelected(lni, ni)) -> renderEditor (Some lni.NavItem) (Some ni)
+                            | Some(FolderSelected(NewFolder ni)) -> renderEditor (NavUI.NavUIFocus.Parent ni)
+                            | Some(FolderSelected(Existing(lni, true))) ->
+                                renderEditor <| NavUI.NavUIFocus.Parent lni.NavItem
+                            | Some(ChildSelected(lni, ni)) -> renderEditor <| NavUI.NavUIFocus.Child(lni.NavItem, ni)
 
                     )
 

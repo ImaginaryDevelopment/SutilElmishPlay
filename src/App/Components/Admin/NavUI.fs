@@ -34,6 +34,11 @@ module Style =
         let zOverlay = 31
 
         [
+            rule ".flyover" [
+                Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
+                Css.animationTimingFunctionEaseIn
+                Css.zIndex <| zOverlay + 5
+            ]
         // rule ".full-overlay" [
         ]
 
@@ -62,20 +67,7 @@ module Commands =
 let init token item () =
 
     {
-        Item = {
-            Id = NavId null
-            Parent = null
-            Type = NavItemType.Link
-            Description = null
-            Path = ""
-            Name = ""
-            Url = ""
-            HasUrlKey = false
-            AclRefs = Map.empty
-            Icon = "City"
-            Weight = 0
-            Enabled = false
-        }
+        Item = item
         Acls = List.empty
     // Focus = FocusType.Creator NameFocus
     },
@@ -125,40 +117,38 @@ module RenderHelpers =
 // Some _, None -> Create new child - Link
 // None, Some => Edit folder
 // Some _, Some _ -> Edit child - Link
+type NavUIFocus =
+    | Parent of NavItem
+    | Child of parent: NavItem * child: NavItem
 
-type NavUIProps = {
-    Parent: NavItem option
-    Item: NavItem option
-}
+type NavUIProps = { Focus: NavUIFocus }
 
-let (|CreateRootFolder|CreateChild|EditFolder|EditChild|InvalidAttempt|) =
+let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
     function
-    | { Parent = None; Item = None } -> CreateRootFolder
-    | { Parent = Some parent; Item = None } -> CreateChild parent
-    | {
-          Parent = None
-          Item = Some { Type = NavItemType.Link }
-      } -> InvalidAttempt "Cannot edit or create a link at root"
-    | {
-          Parent = None
-          Item = Some({ Type = NavItemType.Folder } as rootFolder)
-      } -> EditFolder rootFolder
-    | {
-          Parent = Some parent
-          Item = Some child
-      } -> EditChild(parent, child)
+    | { Focus = Parent ni } when ni.Id = NavId "" -> CreateRootFolder ni
+    | { Focus = Parent ni } -> EditFolder ni
+    | { Focus = Child(pni, ni) } ->
+        if ni.Id = NavId "" then
+            CreateChild(pni, ni)
+        else
+            EditChild(pni, ni)
 
-let view token props =
+let view token (props: NavUIProps) =
     toGlobalWindow "NavUI_props" props
+    printfn "NavUI render"
 
-    let store, dispatch =
-        () |> Store.makeElmish (init token props.Item) (update token) ignore
+    let item, isCreate, hasParent =
+        match props with
+        | CreateRootFolder ni -> ni, true, false
+        | EditFolder ni -> ni, false, false
+        | CreateChild(_, ni) -> ni, true, true
+        | EditChild(_, ni) -> ni, false, true
+
+
+    let store, dispatch = () |> Store.makeElmish (init token item) (update token) ignore
     // if parent is empty the only type can be folder
 
     toGlobalWindow "NavUI_model" store.Value
-
-    let isCreate = Option.isNone props.Item
-    let hasParent = Option.isSome props.Parent
 
     let vStore =
         store
@@ -184,7 +174,7 @@ let view token props =
             let elems = RenderHelpers.getError (snd vStore.Value) None
             elems
 
-    Html.divc "container" [
+    Html.divc "container flyover" [
         Html.h1 [
             Attr.className "title"
             Bind.el (
