@@ -188,6 +188,12 @@ module Parse =
             | false, _ when x = "on" -> Some true
             | false, _ -> None
 
+    let tryInt (x: string) : int option =
+        System.Int32.TryParse x
+        |> function
+            | true, v -> Some v
+            | false, _ -> None
+
 module Map =
     let upsert key value (m: Map<_, _ list>) =
         m

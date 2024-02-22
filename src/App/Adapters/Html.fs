@@ -135,6 +135,7 @@ type SelectProps<'t> = {
 }
 
 // no designed with multi-select in mind
+// designed without looking at this https://sutil.dev/#examples-select-bindings?SelectBindings.fs
 let selectInput (props: SelectProps<'t>) children =
     let tryFind rawId : 't option =
         props.Values

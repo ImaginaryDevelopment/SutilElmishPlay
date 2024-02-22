@@ -34,18 +34,13 @@ module Style =
         let zOverlay = 31
 
         [
-            rule ".flyover" [
-                Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
-                Css.animationTimingFunctionEaseIn
-                Css.zIndex <| zOverlay + 5
-            ]
+            rule ".fill" [ Css.width (percent 100); Css.height (percent 100) ]
         // rule ".full-overlay" [
         ]
 
     let withCss = withStyle css
 
 type Msg =
-    | ItemTypeChange of NavItemType
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResolve of Result<AclSearchResult, exn>
     | AclParamResolveRequest of AclRefLookup
@@ -73,19 +68,12 @@ let init token item () =
     },
     Cmd.none
 
+module MLens =
+    let updateItem f model = { model with Item = f model.Item }
+
 let private update token msg (model: Model) : Model * Cmd<Msg> =
     match msg with
 
-    | ItemTypeChange nit ->
-        if model.Item.Type <> nit then
-            {
-                model with
-                    Item = { model.Item with Type = nit }
-            },
-            Cmd.none
-        else
-            eprintfn "Unexpected type change attempt : %A to %A" model.Item.Type nit
-            model, Cmd.none
 
     | AclSearchRequest aclRefValueArgs ->
         let cmd = Commands.runAclSearch token aclRefValueArgs
@@ -117,21 +105,24 @@ module RenderHelpers =
 // Some _, None -> Create new child - Link
 // None, Some => Edit folder
 // Some _, Some _ -> Edit child - Link
-type NavUIFocus =
-    | Parent of NavItem
-    | Child of parent: NavItem * child: NavItem
+type EditType =
+    | Parent
+    | Child of NavItem
 
-type NavUIProps = { Focus: NavUIFocus }
+type NavUIProps = { Item: NavItem; EditType: EditType }
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
     function
-    | { Focus = Parent ni } when ni.Id = NavId "" -> CreateRootFolder ni
-    | { Focus = Parent ni } -> EditFolder ni
-    | { Focus = Child(pni, ni) } ->
-        if ni.Id = NavId "" then
-            CreateChild(pni, ni)
-        else
-            EditChild(pni, ni)
+    | {
+          EditType = Parent
+          Item = { Id = NavId "" } as ni
+      } -> CreateRootFolder ni
+    | { EditType = Parent; Item = ni } -> EditFolder ni
+    | {
+          EditType = Child pni
+          Item = { Id = NavId "" } as ni
+      } -> CreateChild(pni, ni)
+    | { EditType = Child pni; Item = ni } -> EditChild(pni, ni)
 
 let view token (props: NavUIProps) =
     toGlobalWindow "NavUI_props" props
@@ -146,7 +137,6 @@ let view token (props: NavUIProps) =
 
 
     let store, dispatch = () |> Store.makeElmish (init token item) (update token) ignore
-    // if parent is empty the only type can be folder
 
     toGlobalWindow "NavUI_model" store.Value
 
@@ -174,7 +164,7 @@ let view token (props: NavUIProps) =
             let elems = RenderHelpers.getError (snd vStore.Value) None
             elems
 
-    Html.divc "container flyover" [
+    Html.divc "container fill" [
         Html.h1 [
             Attr.className "title"
             Bind.el (
@@ -189,42 +179,7 @@ let view token (props: NavUIProps) =
             )
             text store.Value.Item.Name
         ]
-        formField [
-            if isCreate then text "Create Type" else text "Type"
-        ] [
 
-            Html.divc "select" [
-                Html.select [
-                    let fChange =
-                        Handlers.onValueChangeIf dispatch (fun v ->
-                            NavItemType.TryParse v |> Option.map Msg.ItemTypeChange)
-
-                    text "ItemType"
-                    Attr.className "select"
-                    // TODO: if this should not be editable disable it
-                    // Attr.disabled disabled
-                    Attr.disabled true
-
-                    // match props with
-                    // | CreateChild item -> fChange
-                    // | CreateRootFolder _ ->
-                    // | EditFolder _ -> Attr.disabled true
-                    // | EditChild _ -> Attr.disabled true
-                    // | InvalidAttempt _ -> ()
-
-
-                    // Html.option [ text "" ]
-                    for o in NavItemType.All do
-                        Html.option [
-                            Attr.value (string o)
-                            text (string o)
-                            if store.Value.Item.Type = o then
-                                Attr.selected true
-                        ]
-                ]
-            ]
-        ]
-        <| renderErrors "Type"
         formField [ text "Name" ] [
             textInput
                 {
@@ -242,6 +197,45 @@ let view token (props: NavUIProps) =
 
         ]
         <| renderErrors "Name"
+        let enabledTitle = nameof item.Enabled
+
+        formField [ text enabledTitle ] [
+            let eStore = store |> Store.map (fun v -> v.Item.Enabled)
+
+            Html.inputc "checkbox" [
+                type' "checkbox"
+                Attr.name enabledTitle
+                // Attr.isChecked store.Value
+                Bind.attr ("checked", value = eStore)
+                Attr.title enabledTitle
+                Handlers.onValueChange ignore (fun _ ->
+                    store.Update(fun model -> {
+                        model with
+                            Item = {
+                                model.Item with
+                                    Enabled = not model.Item.Enabled
+                            }
+                    }))
+            ]
+        ] []
+
+        let weightTitle = nameof item.Weight
+
+        formField [ text weightTitle ] [
+            textInput
+                {
+                    Titling = $"NavUI.{weightTitle}"
+                    Value = store |> Store.map (fun v -> string v.Item.Weight)
+                    OnChange =
+                        (fun value ->
+                            store.Update(MLens.updateItem (fun oldItem -> { oldItem with Weight = int value })))
+                    DebounceOverride = None
+                }
+                []
+
+        ] []
+
+        Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
 
     ]
     |> Style.withCss

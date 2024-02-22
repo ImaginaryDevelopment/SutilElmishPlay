@@ -189,9 +189,7 @@ module Style =
             rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
-            // rule ".full-overlay" [
 
-            // ]
             rule ".overlay" [
                 Css.positionFixed
                 // Css.displayBlock
@@ -227,11 +225,25 @@ module Style =
                 Css.fontWeight 700
             ]
             rule ".above-overlay" [ Css.zIndex <| zOverlay + 3 ]
+
             rule ".flyover" [
-                Css.animationDuration (System.TimeSpan.FromMilliseconds 300)
-                Css.animationTimingFunctionEaseIn
+                Css.positionFixed
+                Css.top 0
+                // start off screen
+                Css.right (percent -25)
+                // adjust as needed
+                Css.width (percent 50)
+                Css.height (vh 100)
+                Css.transition ("right 0.3s ease")
+
+                // Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
+                // Css.animationTimingFunctionEaseIn
                 Css.zIndex <| zOverlay + 5
+                Css.backgroundColor "black"
+                Css.paddingLeft (px 10)
             ]
+
+            rule ".flyover.active" [ Css.right 0 ]
         ]
 
     let withCss = withStyle css
@@ -853,15 +865,37 @@ let view token =
                                 )
                     )
                 ]
-                Html.divc "column is-6 above-overlay" [
-                    let renderEditor focus =
-                        Html.sectionc "flyover hero is-info welcome is-small" [
+                // begin 3rd column/editor/creator
+                let willRenderStore =
+                    selectedItemStore
+                    |> Store.map (function
+                        | None -> false
+                        | Some(FolderSelected(Existing(_, false))) -> false
+                        | Some _ -> true)
+
+                let flyoverClassAttr =
+                    let always = [ "column"; "is-6"; "flyover"; "above-overlay" ]
+
+                    Bind.attr (
+                        "class",
+                        willRenderStore
+                        |> Store.map (
+                            function
+                            | true -> [ yield! always; "active" ]
+                            | false -> always
+                            >> String.concat " "
+                        )
+                    )
+
+                Html.div [
+                    flyoverClassAttr
+                    let renderEditor item editType =
+                        Html.sectionc "hero is-info welcome is-small" [
                             Html.divc "hero-body" [
-                                NavUI.view token { Focus = focus }
+                                NavUI.view token { Item = item; EditType = editType }
 
                             ]
                         ]
-
 
                     Bind.el (
                         selectedItemStore,
@@ -869,13 +903,11 @@ let view token =
                             match selectedItem with
                             | None
                             | Some(FolderSelected(Existing(_, false))) -> Html.div []
-                            | Some(FolderSelected(NewFolder ni)) -> renderEditor (NavUI.NavUIFocus.Parent ni)
+                            | Some(FolderSelected(NewFolder ni)) -> renderEditor ni NavUI.EditType.Parent
                             | Some(FolderSelected(Existing(lni, true))) ->
-                                renderEditor <| NavUI.NavUIFocus.Parent lni.NavItem
-                            | Some(ChildSelected(lni, ni)) -> renderEditor <| NavUI.NavUIFocus.Child(lni.NavItem, ni)
-
+                                renderEditor lni.NavItem NavUI.EditType.Parent
+                            | Some(ChildSelected(lni, ni)) -> renderEditor ni <| NavUI.EditType.Child lni.NavItem
                     )
-
                 ]
             ]
         ]
