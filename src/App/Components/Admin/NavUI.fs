@@ -109,7 +109,12 @@ type EditType =
     | Parent
     | Child of NavItem
 
-type NavUIProps = { Item: NavItem; EditType: EditType }
+// should we be keeping resolved ACLs past the lifetime of this item editor?
+type NavUIProps = {
+    Item: NavItem
+    EditType: EditType
+    AclTypes: AclType[]
+}
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
     function
@@ -137,9 +142,10 @@ let view token (props: NavUIProps) =
 
 
     let store, dispatch = () |> Store.makeElmish (init token item) (update token) ignore
+    let resolvedAcls = List.empty |> Store.make
+
     // AclTypes: IReadOnlyStore<AclType seq>
     // consider letting a parent manage this
-    let aclStore = List.empty |> Store.make
 
     toGlobalWindow "NavUI_model" store.Value
 
@@ -256,8 +262,7 @@ let view token (props: NavUIProps) =
                         store.Value.Item.AclRefs
                         |> Map.toSeq
                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
-                    AclTypes = // AclType seq
-                        aclStore.Value
+                    AclTypes = props.AclTypes // AclType seq
                     DispatchParent = // : Dispatch<AclParentMsg>
                         function
                         | _ -> ()

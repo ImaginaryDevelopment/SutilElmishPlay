@@ -108,9 +108,9 @@ module private MLens =
     let getRootTab x = x.RootTab
     let getErrors x = x.Errors
 
-    let addError msg (x: Model) = {
+    let addError title (x: Model) = {
         x with
-            Errors = (msg, System.DateTime.Now) :: x.Errors
+            Errors = (title, System.DateTime.Now) :: x.Errors
     }
 
     let addExnError title (ex: exn) x = addError $"%s{title}: %s{ex.Message}" x

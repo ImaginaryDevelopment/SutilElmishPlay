@@ -51,6 +51,7 @@ type Model = {
     Token: string
     Items: Result<LazyNavItem[], AdminErrorType> option
     CreateParentSelector: LazyNavItem option
+    AclTypes: AclType[]
     // must track parent for bread crumbs
     Item: SelectedItemType
     Errors: AdminErrorType list
@@ -189,6 +190,13 @@ module Style =
             rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
+            rule "#middle-child" [ Css.displayFlex; Css.custom ("flex-flow", "row wrap") ]
+            rule "#middle-child>li" [
+                // Css.flexBasisInitial
+                // Css.flexBasisAuto
+                Css.custom ("flex-basis", "50%")
+
+            ]
 
             // not working properly or the target isn't rising properly
             rule ".overlay" [
@@ -249,6 +257,20 @@ module Style =
 
     let withCss = withStyle css
 
+module MLens =
+
+    let addError title (x: Model) = {
+        x with
+            Errors = (title, System.DateTime.Now) :: x.Errors
+    }
+
+    let addExnError title (ex: exn) x = addError $"%s{title}: %s{ex.Message}" x
+
+    let addChcError title (choice: Choice<_, exn>) x =
+        match choice with
+        | Choice1Of2 errStr -> x |> addError $"%s{title}: %A{errStr}"
+        | Choice2Of2 exn -> x |> addExnError title exn
+
 type Msg =
     | RootResponse of Result<NavItem[], ErrorType>
     | PathResponse of LazyNavItem * Result<NavItem[], ErrorType>
@@ -259,6 +281,7 @@ type Msg =
     | StartNewRequested of parent: LazyNavItem option
     | DeleteRequested of Choice<LazyNavItem, NavItem>
     | DeleteResponse of Result<NavItem, ErrorType>
+    | AclTypeResponse of Result<AclType[], ErrorType>
 
 // allow for pathRequest, and direct store selection update
 // let getActivateItemAttrs dispatch
@@ -296,6 +319,13 @@ module Cmd =
 
         | InFlight -> Cmd.none
 
+    let getAclTypes token : Cmd<Msg> =
+        let f x =
+            App.Adapters.Api.Mapped.getAclTypes token x
+
+        Cmd.OfAsync.either f () (Result.mapError Choice2Of2) (Choice2Of2 >> Error)
+        |> Cmd.map Msg.AclTypeResponse
+
     let deleteItem token (item: NavItem) : Cmd<Msg> =
         let deleteErr ex =
             Msg.DeleteResponse(Error(Choice2Of2 ex))
@@ -319,19 +349,24 @@ module Cmd =
 let init token : Model * Cmd<Msg> =
     let next = {
         Token = token
+        AclTypes = Array.empty
         Items = None
         CreateParentSelector = None
         Item = None
         Errors = List.empty
     }
 
-    next, Cmd.getRootItems token
+    next, Cmd.batch [ Cmd.getRootItems token; Cmd.getAclTypes token ]
+
+let justModel m = m, Cmd.none
 
 let private update msg (model: Model) : Model * Cmd<Msg> =
     printfn "AdminExplorer update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
+    | Msg.AclTypeResponse(Ok v) -> { model with AclTypes = v }, Cmd.none
+    | Msg.AclTypeResponse(Error e) -> model |> MLens.addChcError "AclTypeResponse Error" e |> justModel
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
         {
@@ -808,35 +843,21 @@ let view token =
                     )
                 ]
                 // middle nav (root item child list)
-                Html.divc "column is-3" [
-                    Bind.el (
-                        selectedItemStore,
-                        fun selectedItem ->
-                            printfn "Render middle column"
+                // resize if selected
+                Bind.el (
+                    itemObs,
+                    fun (parent, itemOpt) ->
+                        let emptyDiv = Html.divc "column is-3" []
+                        printfn "Render middle column"
 
-                            match selectedItem with
-                            | Some(ChildSelected(lni, _))
-                            | Some(FolderSelected(Existing(lni, _))) ->
-                                Bind.el (
-                                    lni.ChildStore,
-                                    fun childStore ->
-                                        match childStore with
-                                        | _ -> Html.div []
-                                )
+                        match parent with
+                        | None -> emptyDiv
+                        | Some parent ->
+                            let hasItem = Option.isSome itemOpt
+                            printfn "Render children"
 
-                            | Some(FolderSelected(NewFolder _))
-                            | None -> Html.div []
-                    )
-
-                    Bind.el (
-                        itemObs,
-                        fun (parent, item) ->
-                            printfn "Render middle column"
-
-                            match parent with
-                            | None -> Html.div []
-                            | Some parent ->
-                                printfn "Render children"
+                            Html.div [
+                                Attr.classes [ "column"; if hasItem then " is-3" else " is-9" ]
 
                                 Bind.el (
                                     parent.ChildStore,
@@ -849,6 +870,7 @@ let view token =
                                             Html.div [ text "No items found." ]
                                         else
                                             Html.ul [
+                                                Attr.id "middle-child"
                                                 yield!
                                                     values
                                                     |> Seq.map (fun v ->
@@ -864,8 +886,10 @@ let view token =
                                             ]
 
                                 )
-                    )
-                ]
+
+                            ]
+
+                )
                 // begin 3rd column/editor/creator
                 let willRenderStore =
                     selectedItemStore
@@ -893,7 +917,11 @@ let view token =
                     let renderEditor item editType =
                         Html.sectionc "hero is-info welcome is-small" [
                             Html.divc "hero-body" [
-                                NavUI.view token { Item = item; EditType = editType }
+                                NavUI.view token {
+                                    Item = item
+                                    EditType = editType
+                                    AclTypes = store.Value.AclTypes
+                                }
 
                             ]
                         ]
