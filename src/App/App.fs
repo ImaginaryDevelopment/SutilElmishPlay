@@ -234,7 +234,14 @@ let view () =
     ]
 
 let _removeMySheet =
-    globalCss |> Sutil.Styling.addGlobalStyleSheet (Browser.Dom.document)
+    let addGlobal x =
+        x |> Sutil.Styling.addGlobalStyleSheet (Browser.Dom.document)
+
+    globalCss |> addGlobal |> ignore<unit -> unit>
+
+    App.Components.Admin.Explorer.Style.globalRules
+    |> addGlobal
+    |> ignore<unit -> unit>
 
 App.Init.FA.dom |> ignore
 // Start the app

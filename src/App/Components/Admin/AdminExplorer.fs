@@ -178,10 +178,47 @@ module Style =
     open type Feliz.length
     open type Feliz.borderStyle
 
+    let private zOverlay = 31
+
+    let globalRules = [
+        rule ".above-overlay" [ Css.zIndex <| zOverlay + 3 ]
+
+        rule ".flyover" [
+            Css.positionFixed
+            Css.top 0
+            // start off screen
+            Css.right (percent -25)
+            // adjust as needed
+            Css.width (percent 50)
+            Css.height (vh 100)
+            Css.transition ("right 0.3s ease")
+
+            // Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
+            // Css.animationTimingFunctionEaseIn
+            Css.zIndex <| zOverlay + 5
+            Css.backgroundColor "black"
+            Css.paddingLeft (px 10)
+        ]
+
+        rule ".flyover.active" [ Css.right 0 ]
+
+    ]
+
+    // let specialCss =
+    //     let mutable iHaveSpoken = false
+
+    //     fun () ->
+    //         if not iHaveSpoken then
+    //             iHaveSpoken <- true
+
+    //             // hacky work around for attr class binding overwriting component-level styling
+
+    //             Sutil.Styling.addGlobalStyleSheet Browser.Dom.document specialRules ()
+
+
     // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
     let css =
         // navbar is ~30
-        let zOverlay = 31
 
         [
             rule "*" [ Css.lineHeight (rem 1.5); Css.height (percent 100); Css.marginLeft 0 ]
@@ -190,16 +227,52 @@ module Style =
             rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
+            // linksComponent-grid
             rule "#middle-child" [
                 Css.displayGrid
+                Css.width (percent 100)
                 Css.gridTemplateColumns[fr 1
                                         fr 1
                                         fr 1
                                         fr 1]
+                // from body
+                yield! [
+                    Css.fontWeight 400
+                    Css.fontSize (rem 1)
+                    // built-in won't allow 1.5
+                    Css.custom ("line-height", "1.5")
+                    Css.custom ("letter-spacing", "0.00938em")
+                ]
+
             ]
-            rule "#middle-child>li>button" [
-                Css.displayGrid
-                Css.gridTemplateColumns [ fr 1; fr 3 ]
+            // MuiPaper-root MuiPaper-outlined MuiPaper-rounded MuiCard-root LinksComponent-button css-______
+            rule "#middle-child>div" [
+                Css.margin (px 5)
+                Css.overflowHidden
+            // Css.width (percent 100)
+
+
+            ]
+            // MuiButtonBase-root MuiCardActionArea-root LinksComponent-buttonAction css-1m5f78l
+            rule "#middle-child>div>button" [
+                Css.padding (px 20)
+                Css.custom ("white-space", "normal")
+                Css.height (px 75)
+                // dynamically added
+                yield! [
+                    Css.alignItemsCenter
+                    Css.justifyContentCenter
+                    Css.positionRelative
+                    Css.boxSizingBorderBox
+                    Css.outlineStyleNone
+                    Css.borderStyleNone
+                    Css.margin 0
+                    Css.verticalAlignMiddle
+                    Css.textDecorationNone
+                    Css.width (percent 100)
+                ]
+            // Css.displayGrid
+            // Css.gridTemplateColumns [ fr 1; fr 3 ]
 
             ]
 
@@ -238,29 +311,12 @@ module Style =
                 Css.color "#276cda"
                 Css.fontWeight 700
             ]
-            rule ".above-overlay" [ Css.zIndex <| zOverlay + 3 ]
-
-            rule ".flyover" [
-                Css.positionFixed
-                Css.top 0
-                // start off screen
-                Css.right (percent -25)
-                // adjust as needed
-                Css.width (percent 50)
-                Css.height (vh 100)
-                Css.transition ("right 0.3s ease")
-
-                // Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
-                // Css.animationTimingFunctionEaseIn
-                Css.zIndex <| zOverlay + 5
-                Css.backgroundColor "black"
-                Css.paddingLeft (px 10)
-            ]
-
-            rule ".flyover.active" [ Css.right 0 ]
         ]
 
-    let withCss = withStyle css
+    let withCss x =
+        // Sutil.Styling.addGlobalStyleSheet Browser.Dom.document css ()
+        // specialCss ()
+        withStyle css x
 
 module MLens =
 
@@ -791,7 +847,7 @@ let view token =
         |> Store.map (fun model ->
             model.Item
             |> Option.map (function
-                | FolderSelected(Existing(lni, _)) -> (Some lni, None)
+                | FolderSelected(Existing(lni, _)) -> (Some lni, Some lni.NavItem)
                 | FolderSelected(NewFolder _) -> None, None
                 | ChildSelected(lni, ni) -> (Some lni, Some ni))
             |> Option.defaultValue (None, None))
@@ -856,16 +912,16 @@ let view token =
                     itemObs,
                     fun (parent, itemOpt) ->
                         let emptyDiv = Html.divc "column is-3" []
-                        printfn "Render middle column"
+                        let hasItem = Option.isSome itemOpt
+                        printfn "Render middle column(hasItem:%A)" hasItem
 
                         match parent with
                         | None -> emptyDiv
                         | Some parent ->
-                            let hasItem = Option.isSome itemOpt
                             printfn "Render children"
 
                             Html.div [
-                                Attr.classes [ "column"; if hasItem then " is-3" else " is-9" ]
+                                Attr.classes [ "column"; if hasItem then " is-9" else " is-9" ]
 
                                 Bind.el (
                                     parent.ChildStore,
@@ -877,12 +933,12 @@ let view token =
                                         if Array.isEmpty values then
                                             Html.div [ text "No items found." ]
                                         else
-                                            Html.ul [
+                                            Html.div [
                                                 Attr.id "middle-child"
                                                 yield!
                                                     values
                                                     |> Seq.map (fun v ->
-                                                        Html.li [
+                                                        Html.div [
                                                             renderNavItem {
                                                                 SelectedItemStore = selectedItemStore
                                                                 Dispatch = dispatch
@@ -907,20 +963,34 @@ let view token =
                         | Some _ -> true)
 
                 let flyoverClassAttr =
-                    let always = [ "column"; "is-6"; "flyover"; "above-overlay" ]
+                    let always = [ "flyover"; "above-overlay" ]
 
-                    Bind.attr (
-                        "class",
+                    let obs =
                         willRenderStore
-                        |> Store.map (
-                            function
-                            | true -> [ yield! always; "active" ]
-                            | false -> always
-                            >> String.concat " "
-                        )
-                    )
+                        |> Store.map (function
+                            | true -> [
+                                //"column"; "is-6";
+                                yield! always
+                                "active"
+                              ]
+                            | false -> always)
+
+                    Bind.classNames obs
+
+
+                //     Bind.attr (
+                //         "class",
+                //         willRenderStore
+                //         |> Store.map (
+                //             function
+                //             | true -> [ "column"; "is-6"; yield! always; "active" ]
+                //             | false -> always
+                //             >> String.concat " "
+                //         )
+                //     )
 
                 Html.div [
+                    // Attr.className "column is-3"
                     flyoverClassAttr
                     let renderEditor item editType =
                         Html.sectionc "hero is-info welcome is-small" [
