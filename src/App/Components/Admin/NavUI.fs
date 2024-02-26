@@ -137,6 +137,9 @@ let view token (props: NavUIProps) =
 
 
     let store, dispatch = () |> Store.makeElmish (init token item) (update token) ignore
+    // AclTypes: IReadOnlyStore<AclType seq>
+    // consider letting a parent manage this
+    let aclStore = List.empty |> Store.make
 
     toGlobalWindow "NavUI_model" store.Value
 
@@ -235,7 +238,36 @@ let view token (props: NavUIProps) =
 
         ] []
 
-        Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
+        Html.divc "card" [
+            Html.h2 [ text "Icon" ]
+
+            Html.divc "section" [
+                App.Components.IconEditor.renderIconEditor { PropValue = nameof item.Icon } (function
+                    | App.Components.IconEditor.Accepted nextIcon ->
+                        store.Update(MLens.updateItem (fun oldItem -> { oldItem with Icon = nextIcon })))
+            ]
+        ]
+
+        Html.divc "card" [
+            Html.h2 [ text "ACL" ]
+            Html.divc "section" [
+                App.Components.AclEditor.renderAclsEditor {
+                    ItemAcls = // : AclData seq
+                        store.Value.Item.AclRefs
+                        |> Map.toSeq
+                        |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                    AclTypes = // AclType seq
+                        aclStore.Value
+                    DispatchParent = // : Dispatch<AclParentMsg>
+                        function
+                        | _ -> ()
+                }
+            ]
+        ]
+
+        Html.divc "section" [
+            Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
+        ]
 
     ]
     |> Style.withCss

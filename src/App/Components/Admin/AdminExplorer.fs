@@ -190,17 +190,18 @@ module Style =
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
 
+            // not working properly or the target isn't rising properly
             rule ".overlay" [
-                Css.positionFixed
-                // Css.displayBlock
-                Css.width (percent 100)
-                Css.height (percent 100)
-                Css.top 0
-                Css.left 0
-                Css.right 0
-                Css.bottom 0
-                Css.backgroundColor "rgba(0,0,0,0.5)"
-                Css.zIndex zOverlay
+            // Css.positionFixed
+            // // Css.displayBlock
+            // Css.width (percent 100)
+            // Css.height (percent 100)
+            // Css.top 0
+            // Css.left 0
+            // Css.right 0
+            // Css.bottom 0
+            // Css.backgroundColor "rgba(0,0,0,0.5)"
+            // Css.zIndex zOverlay
             ]
 
             rule ".bordered" [
