@@ -190,11 +190,16 @@ module Style =
             rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
-            rule "#middle-child" [ Css.displayFlex; Css.custom ("flex-flow", "row wrap") ]
-            rule "#middle-child>li" [
-                // Css.flexBasisInitial
-                // Css.flexBasisAuto
-                Css.custom ("flex-basis", "50%")
+            rule "#middle-child" [
+                Css.displayGrid
+                Css.gridTemplateColumns[fr 1
+                                        fr 1
+                                        fr 1
+                                        fr 1]
+            ]
+            rule "#middle-child>li>button" [
+                Css.displayGrid
+                Css.gridTemplateColumns [ fr 1; fr 3 ]
 
             ]
 
