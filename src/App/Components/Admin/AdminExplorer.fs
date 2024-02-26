@@ -185,13 +185,16 @@ module Style =
 
         rule ".flyover" [
             Css.positionFixed
+            Css.overflowAuto
             Css.top 0
             // start off screen
             Css.right (percent -25)
             // adjust as needed
             Css.width (percent 50)
             Css.height (vh 100)
-            Css.transition ("right 0.3s ease")
+            Css.transition ("right 0.4s ease, opacity 0.1s ease")
+            // kills the animation, but stops it from being on screen when not in use
+            Css.opacity 0
 
             // Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
             // Css.animationTimingFunctionEaseIn
@@ -200,7 +203,7 @@ module Style =
             Css.paddingLeft (px 10)
         ]
 
-        rule ".flyover.active" [ Css.right 0 ]
+        rule ".flyover.active" [ Css.right 0; Css.opacity 1 ]
 
     ]
 
@@ -278,16 +281,16 @@ module Style =
 
             // not working properly or the target isn't rising properly
             rule ".overlay" [
-            // Css.positionFixed
-            // // Css.displayBlock
-            // Css.width (percent 100)
-            // Css.height (percent 100)
-            // Css.top 0
-            // Css.left 0
-            // Css.right 0
-            // Css.bottom 0
-            // Css.backgroundColor "rgba(0,0,0,0.5)"
-            // Css.zIndex zOverlay
+                Css.positionFixed
+                // Css.displayBlock
+                Css.width (percent 100)
+                Css.height (percent 100)
+                Css.top 0
+                Css.left 0
+                Css.right 0
+                Css.bottom 0
+                Css.backgroundColor "rgba(0,0,0,0.5)"
+                Css.zIndex zOverlay
             ]
 
             rule ".bordered" [

@@ -207,6 +207,7 @@ let view token (props: NavUIProps) =
         ]
         <| renderErrors "Name"
         let enabledTitle = nameof item.Enabled
+        let urlTitle = nameof item.Url
 
         formField [ text enabledTitle ] [
             let eStore = store |> Store.map (fun v -> v.Item.Enabled)
@@ -227,6 +228,20 @@ let view token (props: NavUIProps) =
                     }))
             ]
         ] []
+
+        if store.Value.Item.Type = NavItemType.Link then
+            formField [ text urlTitle ] [
+                textInput
+                    {
+                        Titling = $"NavUI.{urlTitle}"
+                        Value = store |> Store.map (fun v -> v.Item.Url)
+                        OnChange =
+                            fun value -> store.Update(MLens.updateItem (fun oldItem -> { oldItem with Url = value }))
+                        DebounceOverride = None
+                    }
+                    []
+            ]
+            <| renderErrors urlTitle
 
         let weightTitle = nameof item.Weight
 
@@ -269,6 +284,7 @@ let view token (props: NavUIProps) =
                 }
             ]
         ]
+        // bButton ""
 
         Html.divc "section" [
             Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
