@@ -523,7 +523,10 @@ let renderNavItem props =
             |> Option.defaultValue false
 
         bButton "Select Item" [
-            text navItem.Name
+            match navItem.Icon with
+            | ValueString icon -> navItem.Icon |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+            | _ -> Html.spanc "icon" []
+            Html.span [ text navItem.Name ]
             if isActive then
                 Attr.className "is-active"
             onClick (fun _ -> activate ()) []
