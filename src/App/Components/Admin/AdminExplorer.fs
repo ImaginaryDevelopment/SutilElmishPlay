@@ -231,6 +231,38 @@ module Style =
             rule "nav.navbar" [ Css.borderTop (px 4., solid, "#276cda"); Css.marginBottom (rem 1.0) ]
             rule ".navbar-item.brand-text" [ Css.fontWeight 300 ]
             rule ".navbar-item, .navbar-link" [ Css.fontSize (px 14); Css.fontWeight 700 ]
+
+            rule "#admin-explorer-left-nav" [
+                Css.displayFlex
+                Css.flexDirectionColumn
+                Css.borderRadius (px 4)
+                Css.backgroundColor "rgb(238, 238, 238)"
+            // Css.backgroundColor "rgb(255, 255, 255)"
+            // Css.color "rgba(0, 0, 0, 0.87)"
+            // Css.flex "1 0 auto"
+            // Css.marginTop (px 30)
+            // Css.positionFixed
+            // Css.margin 0
+            // Css.marginTop (px 59)
+            ]
+
+            rule "#admin-explorer-left-nav>button" [
+                Css.border (px 0, Feliz.borderStyle.none, "black")
+                Css.marginBottom (px 10)
+                Css.padding (px 15)
+                Css.width (percent 100)
+                Css.color "rgb(61, 60, 65)"
+            ]
+            rule "#admin-explorer-left-nav>button:hover" [
+                Css.backgroundColor "rgb(255, 255, 255)"
+
+            ]
+
+            rule "#admin-explorer-left-nav>button.is-active" [
+                Css.backgroundColor "rgba(0, 108, 185, 0.12)"
+                Css.color "rgb(0, 108, 185)"
+            ]
+
             rule ".columns" [ Css.width (percent 100); Css.height (percent 100); Css.marginLeft 0 ]
             // linksComponent-grid
             rule "#middle-child" [
@@ -352,6 +384,12 @@ module MLens =
           }
         | Some(FolderSelected(Existing(_, false))) -> { model with Item = None }
         | Some(ChildSelected _) -> { model with Item = None }
+
+    let hasChildId childId (lni: LazyNavItem) =
+        lni.ChildStore.Value
+        |> RemoteData.TryGet
+        |> Option.map (fst >> Array.exists (fun ni -> ni.Id = childId))
+        |> Option.defaultValue false
 
 
     let updateChildStore (childStore: IStore<RemoteData<NavItem[] * bool>>) (nextItems, x) =
@@ -684,13 +722,17 @@ let renderNavItem props =
         let selected =
             selectedModel
             |> Option.map (function
-                | FolderSelected(Existing(lni, _)) -> lni.NavItem
-                | FolderSelected(NewFolder ni) -> ni
-                | ChildSelected(_, ni) -> ni)
+                | FolderSelected(Existing(lni, _)) -> Some lni, lni.NavItem
+                | FolderSelected(NewFolder ni) -> None, ni
+                | ChildSelected(lni, ni) -> Some lni, ni)
 
+        // not working
+        // include the case where the parent is-active because a child is selected
         let isActive =
             selected
-            |> Option.map (fun ni -> ni.Id = navItem.Id)
+            |> Option.map (fun (lniOpt, ni) ->
+                ni.Id = navItem.Id
+                || lniOpt |> Option.map (MLens.hasChildId navItem.Id) |> Option.defaultValue false)
             |> Option.defaultValue false
 
         bButton "Select Item" [
@@ -800,6 +842,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
     let store: IStore<LazyNavItem option> = None |> Store.make
 
     Html.aside [
+        Attr.id "admin-explorer-left-nav"
         Attr.className "menu is-hidden-mobile"
         columns2 [ Attr.className "bordered" ] [
             selectInput
@@ -816,33 +859,6 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
                     OptionChildren = fun _ -> List.empty
                 }
                 [ Html.option [ text "" ] ]
-        // Html.select [
-        //     Attr.className "select"
-        //     Bind.attr ("data-store", store |> Store.map id)
-        //     Html.option [ text "" ]
-        //     for item in items do
-        //         let strId =
-        //             match item.NavItem.Id with
-        //             | NavId x -> x
-
-        //         Html.option [
-        //             // data_ "item" (Core.pretty item.NavItem)
-        //             Attr.value strId
-        //             text item.NavItem.Name
-        //             Attr.title item.NavItem.Description
-        //             Handlers.onValueChange ignore (function
-        //                 | ValueString rawId -> store.Update(fun _ -> Some rawId)
-        //                 | _ -> store.Update(fun _ -> None))
-        //             Bind.attr (
-        //                 "selected",
-        //                 selectedItemStore
-        //                 |> Store.map (fun selectedItem ->
-        //                     match store.Value, getSelectedItem selectedItem with
-        //                     | Some rawId, Some selectedItem -> NavId rawId = selectedItem.Id
-        //                     | _ -> false)
-        //             )
-        //         ]
-        // ]
 
         ] [
             bButton "Add Item" [
@@ -965,7 +981,7 @@ let view token =
     Html.div [
         Attr.className "adminExplorer"
         disposeOnUnmount [ dispose ]
-        Samples.viewNavBar ()
+        // Samples.viewNavBar ()
         viewBreadCrumbs selectedItemStore
         Html.divc "container" [
             Html.divc "columns" [
@@ -980,20 +996,19 @@ let view token =
                             Html.div [ Attr.id "overlay"; Attr.styleAppend [ Css.visibilityHidden ] ]
                         // TODO: add left side props editor display
                         | Some selectedItem ->
-                            printfn "Overlay render"
-
                             Html.divc "overlay" [
                                 Attr.id "overlay"
                                 // leave folder selected but turn off editing if editing is on
                                 onClick
                                     (fun _ ->
-                                        printfn "Overlay click handler"
 
                                         let next =
                                             match selectedItem with
                                             | SelectedItemState.FolderSelected(Existing(fs, true)) ->
                                                 printfn "Unselecting folder"
                                                 FolderSelected(Existing(fs, false)) |> Some
+                                            | SelectedItemState.ChildSelected(lni, child) ->
+                                                FolderSelected(Existing(lni, false)) |> Some
                                             | _ -> None
 
                                         selectedItemStore.Update(fun _ -> next))

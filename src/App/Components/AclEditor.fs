@@ -367,7 +367,8 @@ module Renderers =
                         ]
 
                         bButton "Search" [
-                            text "Search"
+                            // text "Search"
+                            tryIcon (App.Init.IconSearchType.MuiIcon "Search")
                             onClick
                                 (fun _ ->
                                     AclParentMsg.SearchRequest {
@@ -597,10 +598,6 @@ let renderAclsEditor (props: AclEditorProps) =
                     |> Option.map (fst >> fun item -> item.Name)
 
                 Html.div [
-                    bButton "Create New Acl" [
-                        tryIcon (App.Init.IconSearchType.MuiIcon "Add")
-                        onClick (fun _ -> Msg.AclSelect None |> dispatch) []
-                    ]
                     Renderers.renderAclTypeSelector
                         {
                             AclTypes = props.AclTypes
@@ -614,12 +611,27 @@ let renderAclsEditor (props: AclEditorProps) =
                                IsNew = true
                                AclValue = Some(aclType, pSet)
                            } ->
-                        bButton "Save New Acl" [
+                        let addText = "Add New Acl"
+
+                        bButton addText [
+                            data_ "button-purpose" addText
                             // floppy disk icon
                             tryIcon (App.Init.IconSearchType.MuiIcon "Save")
+                            // text addText
                             onClick (fun _ -> AclParentMsg.CreateAcl(aclType, pSet) |> props.DispatchParent) []
                         ]
-                    | _ -> ()
+
+                        bButton "Cancel Add Acl" [
+                            tryIcon (App.Init.IconSearchType.MuiIcon "Cancel")
+
+                        ]
+                    | _ ->
+                        bButton "Add Acl" [
+                            data_ "button-purpose" "Add Acl"
+                            tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                            // text "Add Acl"
+                            onClick (fun _ -> Msg.AclSelect None |> dispatch) []
+                        ]
 
                     match focusAclOpt with
                     | Some focusedAcl -> yield! renderFocusedAcl focusedAcl

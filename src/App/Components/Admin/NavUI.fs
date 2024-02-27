@@ -211,6 +211,7 @@ let view token (props: NavUIProps) =
     Html.divc "container fill" [
         Html.h1 [
             Attr.className "title"
+
             Bind.el (
                 store |> Store.map (fun model -> model.Item.Type),
                 fun itemType ->
@@ -222,6 +223,11 @@ let view token (props: NavUIProps) =
                     |> Icons.tryIcon
             )
             text store.Value.Item.Name
+            bButton "Save" [
+                App.Components.Gen.Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Save")
+                // text "Save"
+                onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+            ]
         ]
 
         formField [ text "Name" ] [
@@ -320,14 +326,9 @@ let view token (props: NavUIProps) =
             ]
         ]
 
-        bButton "Save" [
-            App.Components.Gen.Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Save")
-            onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
-        ]
-
-        Html.divc "section" [
-            Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
-        ]
+    // Html.divc "section" [
+    //     Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
+    // ]
 
     ]
     |> Style.withCss

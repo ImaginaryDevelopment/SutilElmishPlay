@@ -139,6 +139,7 @@ module Icons =
             | None, App.Init.IconSearchType.FAIcon x
             | None, App.Init.IconSearchType.MuiIcon x ->
                 // text $"missing:{x}"
+                App.Adapters.Html.data_ "icon" x
                 Attr.title x
                 Bulma.FontAwesome.fa x
             | Some(App.Init.FaResult v), _ ->
@@ -146,9 +147,10 @@ module Icons =
                     eprintfn "Unexpected fa html len: %i" v.html.Length
 
                 let html = v.html[0]
+                App.Adapters.Html.data_ "icon" v.iconName
                 Html.parse html
             | Some(App.Init.MuiResult dPath), _ ->
-
+                App.Adapters.Html.data_ "icon" "(dPath)"
                 Svg.svg [ Attr.className "mui"; Svg.path [ Attr.d dPath ] ] |> withStyle css
         ]
 

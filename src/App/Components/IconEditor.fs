@@ -130,6 +130,7 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
     Html.div [
         Bind.el (store |> Store.map (fun v -> v.NameValue), (fun nv -> tryIcon (App.Init.IconSearchType.MuiIcon nv)))
 
+        // https://bulma.io/documentation/form/general/#form-addons
         formField [ text "Search" ] [
 
             textInput
@@ -142,7 +143,8 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
                 []
 
             bButton "Search" [
-                text "Search Icons"
+                // text "Search Icons"
+                tryIcon (App.Init.IconSearchType.MuiIcon "Search")
                 onClick (fun _ -> Msg.SearchIcons |> dispatch) List.empty
             ]
         ] []
