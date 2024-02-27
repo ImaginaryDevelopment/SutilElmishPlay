@@ -47,9 +47,11 @@ let getSelectedItem: SelectedItemType -> NavItem option =
         | FolderSelected(NewFolder item) -> item
         | ChildSelected(_, ni) -> ni)
 
+type ItemsState = Result<LazyNavItem[], AdminErrorType>
+
 type Model = {
     Token: string
-    Items: Result<LazyNavItem[], AdminErrorType> option
+    Items: ItemsState option
     CreateParentSelector: LazyNavItem option
     AclTypes: AclType[]
     // must track parent for bread crumbs
@@ -335,6 +337,26 @@ module MLens =
         | Choice1Of2 errStr -> x |> addError $"%s{title}: %A{errStr}"
         | Choice2Of2 exn -> x |> addExnError title exn
 
+    let updateItems nextItems model = {
+        model with
+            Items = Some(Ok nextItems)
+    }
+
+    let unselectItem model =
+        match model.Item with
+        | None -> model
+        | Some(FolderSelected(NewFolder _)) -> { model with Item = None }
+        | Some(FolderSelected(Existing(folder, true))) -> {
+            model with
+                Item = Some(FolderSelected(Existing(folder, false)))
+          }
+        | Some(FolderSelected(Existing(_, false))) -> { model with Item = None }
+        | Some(ChildSelected _) -> { model with Item = None }
+
+
+    let updateChildStore (childStore: IStore<RemoteData<NavItem[] * bool>>) (nextItems, x) =
+        childStore.Update(fun _ -> Responded(Ok(nextItems, x)))
+
 type Msg =
     | RootResponse of Result<NavItem[], ErrorType>
     | PathResponse of LazyNavItem * Result<NavItem[], ErrorType>
@@ -346,6 +368,7 @@ type Msg =
     | DeleteRequested of Choice<LazyNavItem, NavItem>
     | DeleteResponse of Result<NavItem, ErrorType>
     | AclTypeResponse of Result<AclType[], ErrorType>
+    | Saved of SaveType * NavItem
 
 // allow for pathRequest, and direct store selection update
 // let getActivateItemAttrs dispatch
@@ -424,6 +447,45 @@ let init token : Model * Cmd<Msg> =
 
 let justModel m = m, Cmd.none
 
+let (|CreateFolder|CreateItem|UpdateFolder|UpdateItem|InvalidSave|): NavItem * SaveType * ItemsState option -> _ =
+    function
+    | { Type = Folder }, SaveType.Create, Some(Ok items) -> CreateFolder items
+
+    | { Type = Link; Parent = parentPath }, SaveType.Create, Some(Ok items) ->
+        // find parent by... item.Parent?
+        items
+        |> Array.tryFindIndex (fun lni -> String.equalsI lni.NavItem.Path parentPath)
+        |> function
+            | Some i -> CreateItem(i, items)
+            | None -> InvalidSave "Could not find parent"
+
+    | { Type = Folder; Id = navId }, SaveType.Update, Some(Ok items) ->
+        items
+        |> Seq.tryFindIndex (fun lni -> lni.NavItem.Id = navId)
+        |> function
+            | Some i -> UpdateFolder(i, items)
+            | None -> InvalidSave "Could not find target item to update"
+
+    | { Type = Link; Id = navId }, SaveType.Update, Some(Ok items) ->
+        // ignores possibility there is a duplicate id in two parents
+        items
+        |> Seq.choose (fun lni ->
+            lni.ChildStore.Value
+            |> function
+                | RemoteData.Responded(Ok(children, expanded)) ->
+                    children
+                    |> Array.tryFindIndex (fun child -> child.Id = navId)
+                    |> Option.map (fun i -> lni.ChildStore, (children, expanded), i)
+                | _ -> None)
+        |> Seq.tryHead
+        |> function
+            | None -> InvalidSave "Could not find target child to update"
+            | Some(childStore, childThing, i) -> UpdateItem(childStore, childThing, i)
+
+    | _, _, Some(Error _) -> InvalidSave "Batman Error: Parents invalid"
+    | _, _, None -> InvalidSave "Batman Error: No Parents found"
+
+
 let private update msg (model: Model) : Model * Cmd<Msg> =
     printfn "AdminExplorer update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
@@ -431,6 +493,51 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     match msg with
     | Msg.AclTypeResponse(Ok v) -> { model with AclTypes = v }, Cmd.none
     | Msg.AclTypeResponse(Error e) -> model |> MLens.addChcError "AclTypeResponse Error" e |> justModel
+    | Msg.Saved(st, nextItem) ->
+        // assume folders are root, and links are children
+        // what if this is a successful create?
+        match nextItem, st, model.Items with
+        | UpdateFolder(x, items) ->
+            items
+            |> Array.updateI x (fun item -> { item with NavItem = nextItem })
+            |> function
+                | Ok nextItems -> MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
+                | Error e -> model |> MLens.addError e, Cmd.none
+
+        | CreateFolder items ->
+            let childStore = Store.make NotRequested
+
+            let nextItems =
+                Array.append items [|
+                    {
+                        NavItem = nextItem
+                        ChildStore = childStore
+                    }
+                |]
+
+            MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
+
+        // oops this is bad code, it should be creating something in a parent store
+        | CreateItem(x, items) ->
+            items
+            |> Array.updateI x (fun oldItem -> { oldItem with NavItem = nextItem })
+            |> function
+                | Ok nextItems -> MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
+                | Error e -> model |> MLens.addError e, Cmd.none
+
+        | UpdateItem(childStore, (children, expanded), i) ->
+            // update children, use them to update parent store directly (no model change needed)
+            children
+            |> Array.updateI i (fun _ -> nextItem)
+            |> function
+                | Ok nextItems ->
+                    MLens.updateChildStore childStore (nextItems, expanded)
+                    model |> MLens.unselectItem, Cmd.none
+                | Error e -> model |> MLens.addError e, Cmd.none
+
+        | InvalidSave e -> model |> MLens.addError e, Cmd.none
+
+
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
         {
@@ -1002,6 +1109,7 @@ let view token =
                                     Item = item
                                     EditType = editType
                                     AclTypes = store.Value.AclTypes
+                                    Saved = (fun nextItem -> Msg.Saved nextItem |> dispatch)
                                 }
 
                             ]

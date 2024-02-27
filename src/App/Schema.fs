@@ -23,6 +23,10 @@ type AclDisplay = {
     DisplayName: string
 }
 
+type SaveType =
+    | Create
+    | Update
+
 type AclLookup<'t> = Map<AclName, Map<AclRefId, 't>>
 
 type ResolvedAclLookup = AclLookup<AclDisplay>

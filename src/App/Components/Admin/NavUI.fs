@@ -16,11 +16,14 @@ open App.Components.Gen
 open App.Adapters.Api.Mapped
 open Core
 
+type SaveResult = SaveType * NavItem
+
 type Model = {
     // NavItem: NavItem
 
     Item: NavItem
     Acls: (AclData * AclType) list
+    SaveStatus: RemoteData<SaveResult>
 }
 
 module Style =
@@ -44,19 +47,44 @@ type Msg =
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResolve of Result<AclSearchResult, exn>
     | AclParamResolveRequest of AclRefLookup
+    | SaveRequest
+    | SaveResponse of Result<SaveResult, ErrorType>
 
 module Commands =
-    let runAclSearch token aclRefValueArgs =
+    let runAclSearch token aclRefValueArgs : Cmd<Msg> =
         let f x =
             async {
                 let! resp = searchAclRefValues token x
 
                 match resp with
-                | Ok v -> return Msg.AclSearchResolve(Ok v)
-                | Error e -> return Msg.AclSearchResolve(Error(e))
+                | Ok v -> return Ok v
+                | Error e -> return Error(e)
             }
 
-        Cmd.OfAsync.either f aclRefValueArgs id (fun ex -> Msg.AclSearchResolve(Error(ex)))
+        Cmd.OfAsync.either f aclRefValueArgs id Error |> Cmd.map Msg.AclSearchResolve
+
+    let save token navItem : Cmd<Msg> =
+        let f x =
+            async {
+                let! resp = App.Adapters.Api.Mapped.NavItems.save token x
+
+                match resp with
+                | Ok v ->
+                    let st =
+                        if navItem.Id = NavId "" then
+                            SaveType.Create
+                        else
+                            SaveType.Update
+
+                    return Ok(st, v)
+                | Error e ->
+                    let x: ErrorType = Choice2Of2 e
+                    return Error x
+            }
+
+        Cmd.OfAsync.either f navItem id (fun ex -> Choice2Of2 ex |> Error)
+        |> Cmd.map Msg.SaveResponse
+
 
 // does this need to fire off resolves for ACLs?
 let init token item () =
@@ -64,6 +92,7 @@ let init token item () =
     {
         Item = item
         Acls = List.empty
+        SaveStatus = NotRequested
     // Focus = FocusType.Creator NameFocus
     },
     Cmd.none
@@ -71,14 +100,18 @@ let init token item () =
 module MLens =
     let updateItem f model = { model with Item = f model.Item }
 
-let private update token msg (model: Model) : Model * Cmd<Msg> =
+let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
     match msg with
-
 
     | AclSearchRequest aclRefValueArgs ->
         let cmd = Commands.runAclSearch token aclRefValueArgs
 
         model, cmd
+
+    | SaveRequest -> { model with SaveStatus = InFlight }, Commands.save token model.Item
+    | SaveResponse(Ok sr) ->
+        onSave sr
+        model, Cmd.none
 
 module RenderHelpers =
 
@@ -114,6 +147,7 @@ type NavUIProps = {
     Item: NavItem
     EditType: EditType
     AclTypes: AclType[]
+    Saved: SaveType * NavItem -> unit
 }
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
@@ -140,8 +174,9 @@ let view token (props: NavUIProps) =
         | CreateChild(_, ni) -> ni, true, true
         | EditChild(_, ni) -> ni, false, true
 
+    let store, dispatch =
+        () |> Store.makeElmish (init token item) (update token props.Saved) ignore
 
-    let store, dispatch = () |> Store.makeElmish (init token item) (update token) ignore
     let resolvedAcls = List.empty |> Store.make
 
     // AclTypes: IReadOnlyStore<AclType seq>
@@ -284,7 +319,11 @@ let view token (props: NavUIProps) =
                 }
             ]
         ]
-        // bButton ""
+
+        bButton "Save" [
+            App.Components.Gen.Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Save")
+            onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+        ]
 
         Html.divc "section" [
             Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))

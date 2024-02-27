@@ -13,6 +13,11 @@ module String =
         | x when System.String.IsNullOrWhiteSpace x -> false
         | _ -> true
 
+    let equalsI (value: string) (x: string) =
+        isValueString x
+        && isValueString value
+        && x.Equals(value, System.StringComparison.InvariantCultureIgnoreCase)
+
     let equalsIStr (item: 't) (x: string) =
         isValueString x
         && x.Equals(string (box item), System.StringComparison.InvariantCultureIgnoreCase)
@@ -193,6 +198,24 @@ module Parse =
         |> function
             | true, v -> Some v
             | false, _ -> None
+
+module Array =
+    // updateAt exists but gives exceptions and doesn't pass the oldItem to the update function
+
+    let updateI i fUpdate items =
+        if i < 0 then
+            Error "Bad index"
+        elif i >= i then
+            Error "Index out of bounds"
+        else
+            items |> Array.mapi (fun x item -> if i <> x then item else fUpdate item) |> Ok
+
+    let updateItem findIndexPredicate fUpdate items =
+        items
+        |> Array.tryFindIndex findIndexPredicate
+        |> function
+            | None -> Error "Could not find item"
+            | Some x -> items |> Array.mapi (fun i item -> if i <> x then item else fUpdate item) |> Ok
 
 module Map =
     let upsert key value (m: Map<_, _ list>) =
