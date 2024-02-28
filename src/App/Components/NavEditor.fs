@@ -496,6 +496,7 @@ let renderEditor (props: NavEditorProps) =
                                         store.Value.Item.AclRefs
                                         |> Map.toSeq
                                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                                        |> List.ofSeq
                                     AclTypes = aclTypes
                                     AclLookupStore = None
                                     DispatchParent =

@@ -331,6 +331,7 @@ let view token (props: NavUIProps) =
                         store.Value.Item.AclRefs
                         |> Map.toSeq
                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
+                        |> List.ofSeq
                     AclTypes = props.AclTypes // AclType seq
                     AclLookupStore = None
                     DispatchParent = // : Dispatch<AclParentMsg>

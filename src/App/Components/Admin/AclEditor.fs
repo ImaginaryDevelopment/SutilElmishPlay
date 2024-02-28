@@ -52,7 +52,6 @@ module Styling =
 
 // should not be able to have IsNew=False; AclValue = None
 type AclState = {
-    IsNew: bool
     AclType: AclType
     AclParams: Set<string>
 }
@@ -66,16 +65,30 @@ type Model = {
     ErrorQueue: (string * System.DateTime) list
 }
 
+type AclChangeType =
+    | Remove
+    | Upsert of Set<string>
+
 module MLens =
     let getErrors model = model.ErrorQueue
     let getFocusedAcl model = model.FocusedAcl
+    // allows upsert and delete
+    let updateAcl aclName valueOpt model =
+        let nextAcls =
+            match valueOpt with
+            | Remove -> model.ItemAcls |> Map.remove aclName
+            | Upsert p -> model.ItemAcls |> Map.add aclName p
+
+        { model with ItemAcls = nextAcls }
 
 type Msg =
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResponse of Result<NavAclResolveResponse, ErrorType>
     | AclParamResolveRequest of AclRefLookup
     | AclParamResolveResponse of AclName * Result<NavAclResolveResponse, ErrorType>
-    | AclSelection of AclName
+    | AclSelection of AclName option
+// | AclCreateRequest of AclType * Set<string>
+// | AclRemoveRequest of AclType
 
 module Commands =
     let getAclResolved token req =
@@ -94,7 +107,9 @@ module Commands =
 
 let update aclTypes msg model : Model * Cmd<Msg> =
     match msg with
-    | Msg.AclSelection aclName ->
+    | Msg.AclSelection None -> { model with FocusedAcl = None }, Cmd.none
+
+    | Msg.AclSelection(Some aclName) ->
         let itemAcl = model.ItemAcls |> Map.tryFind aclName
         let aclType = aclTypes |> Map.tryFind aclName
 
@@ -105,7 +120,7 @@ let update aclTypes msg model : Model * Cmd<Msg> =
                 model with
                     FocusedAcl =
                         Some {
-                            IsNew = false
+                            // IsNew = false
                             AclType = aclType
                             AclParams = aclValues
                         }
@@ -119,14 +134,12 @@ let update aclTypes msg model : Model * Cmd<Msg> =
                 model with
                     FocusedAcl =
                         Some {
-                            IsNew = true
+                            // IsNew = true
                             AclType = aclType
                             AclParams = Set.empty
                         }
             },
             Cmd.none
-
-
 
 type AclEditorProps = {
     AclTypes: AclType seq
@@ -148,7 +161,7 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
             |> function
                 | Some aclType ->
                     Some {
-                        IsNew = false
+                        // IsNew = false
                         AclType = aclType
                         AclParams = values
                     }
@@ -179,7 +192,7 @@ module Renderers =
         let disabled =
             match props.Focus with
             | None -> true
-            | Some f -> not f.IsNew
+            | Some f -> false
 
         // Html.select [
         //     text "Acl!"
@@ -266,7 +279,7 @@ module Renderers =
             Html.divc "column is-one-fifth buttonColumn" [
                 if isConfigurable then
                     tButton "Edit Acl" isActiveRow true isActiveRow (IconSearchType.MuiIcon "Edit") (fun _ ->
-                        props.AclData.Name |> Msg.AclSelection |> dispatch)
+                        props.AclData.Name |> Some |> Msg.AclSelection |> dispatch)
             ]
             Html.divc "column is-one-fifth buttonColumn" [
                 tButton "Delete" isActiveRow false false (MuiIcon "Delete") (fun _ -> ())
@@ -290,6 +303,56 @@ module Renderers =
             ]
         ]
 
+    type AclInterfaceProps = {
+        AclType: AclType
+        HasParams: bool
+        Exists: bool
+    }
+
+    let renderAclInterface (props: AclInterfaceProps) (store: IStore<Model>) =
+        let updateAcl aclChangeType =
+            store.Update(fun model -> model |> MLens.updateAcl props.AclType.Name aclChangeType)
+
+        let renderAddButton () =
+            let addText = "Add New Acl"
+
+            bButton addText [
+                data_ "button-purpose" addText
+                tryIcon (IconSearchType.MuiIcon "Add")
+                // text addText
+                onClick (fun _ -> updateAcl (Upsert Set.empty)) []
+            ]
+
+        if props.HasParams then
+
+            columns2 [] [
+                Html.h2 [
+                    let titling =
+                        let t = if props.Exists then "Editing" else "Creating"
+                        $"{t} {props.AclType.Name}"
+
+                    text titling
+                ]
+            ] []
+        else
+            Html.div [
+                if props.Exists then
+                    let removeText = "Remove"
+
+                    bButton removeText [
+                        data_ "button-purpose" removeText
+                        tryIcon (IconSearchType.MuiIcon "Remove")
+
+                        onClick
+                            (fun _ -> store.Update(fun model -> model |> MLens.updateAcl props.AclType.Name Remove)
+
+                            )
+                            []
+                    ]
+                else
+                    renderAddButton ()
+            ]
+
 let render (props: AclEditorProps) =
     let aclTypeMap =
         props.AclTypes |> Seq.map (fun aclType -> aclType.Name, aclType) |> Map.ofSeq
@@ -306,56 +369,106 @@ let render (props: AclEditorProps) =
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
         data_ "file" "AclEditor"
         data_ "method" "renderAclsEditor"
-        Html.divc "card" [
+        collapsibleCard None (text "Existing Acls") [
+            CardContentType.Content [
+                Bind.el2 (store |> Store.map MLens.getFocusedAcl) (store |> Store.map (fun v -> v.ItemAcls))
+                <| fun (focusOpt, itemAcls) ->
+                    printfn "Render existing with %i items" <| Map.count itemAcls
 
-            Html.h2 [ text "Existing Acls" ]
-
-            Bind.el (
-                store |> Store.map MLens.getFocusedAcl,
-                fun focusOpt ->
                     Html.div [
-                        for (i, KeyValue(aclName, aclData)) in props.ItemAcls |> Seq.indexed do
-                            let thisAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = aclName)
+                        if Map.count itemAcls < 1 then
+                            Html.divc "has-text-warning-light has-background-grey-light" [ text "No Acls present" ]
+                        else
+                            for (i, KeyValue(aclName, aclData)) in itemAcls |> Seq.indexed do
+                                let thisAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = aclName)
 
-                            Html.div [
-                                if i % 2 = 0 then
-                                    Attr.className "has-background-link-light"
-                                // render the selected Acl if there is one
-                                match thisAclType with
-                                | None -> Html.div [ text <| AclName.getText aclName ]
-                                | Some aclType ->
-                                    Renderers.renderAcl
-                                        {
-                                            AclType = aclType
-                                            AclData = { Name = aclName; Parameters = aclData }
-                                            IsSelected =
-                                                focusOpt
-                                                |> Option.map (fun focus -> focus.AclType.Name = aclType.Name)
-                                                |> Option.defaultValue false
-                                        }
-                                        dispatch
-                            ]
+                                Html.div [
+                                    if i % 2 = 0 then
+                                        Attr.className "has-background-link-light"
+                                    // render the selected Acl if there is one
+                                    match thisAclType with
+                                    | None -> Html.div [ text <| AclName.getText aclName ]
+                                    | Some aclType ->
+                                        Renderers.renderAcl
+                                            {
+                                                AclType = aclType
+                                                AclData = { Name = aclName; Parameters = aclData }
+                                                IsSelected =
+                                                    focusOpt
+                                                    |> Option.map (fun focus -> focus.AclType.Name = aclType.Name)
+                                                    |> Option.defaultValue false
+                                            }
+                                            dispatch
+                                ]
                     ]
-            )
+
+            ]
         ]
+
         Html.divc "card" [
+            selectInput
+                {
+                    Values = props.AclTypes
+                    HasEmpty = true
+                    ValueGetter =
+                        function
+                        | { Name = AclName n } -> n
+                    NameGetter =
+                        function
+                        | { Name = AclName n } -> n
+                    OptionChildren = fun child -> []
+                    SelectType =
+                        let rStore =
+                            store
+                            |> Store.mapRStore
+                                {
+                                    UseEquality = true
+                                    DebugTitle = None
+                                }
+                                (MLens.getFocusedAcl >> Option.map (fun v -> v.AclType))
+
+                        ObservedSelect(
+                            rStore,
+                            // Option.ofValueString
+                            // >> Option.bind (fun aclName ->
+                            //     props.AclTypes |> Seq.tryFind (fun a -> a.Name = AclName aclName)),
+                            Option.map (fun x -> x.Name) >> Msg.AclSelection >> dispatch
+                        )
+                }
+                []
+
             Bind.el (
                 store |> Store.map MLens.getFocusedAcl,
                 function
                 | None -> Html.div []
-                | Some {
-                           IsNew = isNew
-                           AclType = { Name = AclName name }
-                       } ->
-                    columns2 [] [
-                        Html.h2 [
-                            let titling =
-                                let t = if isNew then "Creating" else "Editing"
-                                $"{t} {name}"
+                | Some({
+                           AclType = { Name = AclName name } as aclType
+                       } as focus) ->
+                    let hasParams =
+                        match focus.AclType.AclParamType with
+                        | AclParameterType.Selectable _ -> true
+                        | AclParameterType.Reference _ -> true
+                        | _ -> false
 
-                            text titling
-                        ]
-                    ] []
+                    let isSearchable =
+                        hasParams
+                        && match focus.AclType.AclParamType with
+                           | AclParameterType.Reference true -> true
+                           | _ -> false
+
+                    Bind.el (
+                        store |> Store.map (fun model -> model.ItemAcls |> Map.tryFind (AclName name)),
+                        fun x ->
+                            let exists = store.Value.ItemAcls |> Map.containsKey (AclName name)
+
+                            Renderers.renderAclInterface
+                                {
+                                    AclType = aclType
+                                    HasParams = hasParams
+                                    Exists = exists
+                                }
+                                store
+                    )
             )
         ]
     ]

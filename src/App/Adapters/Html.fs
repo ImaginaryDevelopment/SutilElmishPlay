@@ -117,7 +117,7 @@ let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> '
 
 // the existence of a selected attribute always means true it appears
 type SelectType<'t> =
-    | ObservedSelect of IReadOnlyStore<'t option> * onChange: ('t -> unit)
+    | ObservedSelect of IReadOnlyStore<'t option> * onChange: ('t option -> unit)
     | StoredSelect of IStore<'t option>
     | StaticSelect of selected: 't option * valueMap: (string -> 't option) * onChange: ('t -> unit)
 
@@ -154,8 +154,8 @@ let selectInput (props: SelectProps<'t>) children =
                 Handlers.onValueChange ignore (fun v ->
                     tryFind v
                     |> function
-                        | None -> eprintfn "Could not find value:%s" v
-                        | Some value -> onChange value)
+                        | None -> onChange None
+                        | Some value -> onChange <| Some value)
             ]
         | StoredSelect store ->
             let updateStore value = store.Update(fun _ -> value)

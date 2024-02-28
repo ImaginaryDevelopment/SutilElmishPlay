@@ -493,7 +493,7 @@ let css = [
 type ResolvedAcl = { Id: string; Display: string }
 
 type AclEditorProps = {
-    ItemAcls: AclData seq
+    ItemAcls: AclData list
     AclTypes: AclType seq
     DispatchParent: Dispatch<AclParentMsg>
     // in case a parent wants to manage this store
@@ -657,31 +657,35 @@ let renderAclsEditor (props: AclEditorProps) =
             fun focusOpt ->
 
                 Html.div [
-                    for (i, aclData) in props.ItemAcls |> Seq.indexed do
-                        let thisAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = aclData.Name)
+                    match props.ItemAcls with
+                    | [] -> Html.divc "has-text-warning-light" [ text "No Acls present" ]
+                    | _ ->
+                        for (i, aclData) in props.ItemAcls |> Seq.indexed do
+                            let thisAclType = props.AclTypes |> Seq.tryFind (fun v -> v.Name = aclData.Name)
 
-                        Html.div [
-                            if i % 2 = 0 then
-                                Attr.className "has-background-link-light"
-                            // render the selected Acl if there is one
-                            match thisAclType with
-                            | None -> Html.div [ text <| AclName.getText aclData.Name ]
-                            | Some aclType ->
-                                Renderers.renderAcl
-                                    {
-                                        AclType = aclType
-                                        AclData = aclData
-                                        DispatchParent = props.DispatchParent
-                                        IsSelected =
-                                            focusOpt
-                                            |> Option.bind (fun focus -> focus.AclValue)
-                                            |> Option.map fst
-                                            |> Option.map (fun selectedAclType -> selectedAclType.Name = aclType.Name)
-                                            |> Option.defaultValue false
+                            Html.div [
+                                if i % 2 = 0 then
+                                    Attr.className "has-background-link-light"
+                                // render the selected Acl if there is one
+                                match thisAclType with
+                                | None -> Html.div [ text <| AclName.getText aclData.Name ]
+                                | Some aclType ->
+                                    Renderers.renderAcl
+                                        {
+                                            AclType = aclType
+                                            AclData = aclData
+                                            DispatchParent = props.DispatchParent
+                                            IsSelected =
+                                                focusOpt
+                                                |> Option.bind (fun focus -> focus.AclValue)
+                                                |> Option.map fst
+                                                |> Option.map (fun selectedAclType ->
+                                                    selectedAclType.Name = aclType.Name)
+                                                |> Option.defaultValue false
 
-                                    }
-                                    dispatch
-                        ]
+                                        }
+                                        dispatch
+                            ]
                 ]
         )
     ]
