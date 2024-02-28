@@ -10,6 +10,7 @@ open Sutil.Core
 open Sutil.CoreElements
 
 open App.Adapters.Schema
+open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Api.Schema
@@ -201,7 +202,7 @@ module Style =
             // Css.animationDuration (System.TimeSpan.FromMilliseconds 700)
             // Css.animationTimingFunctionEaseIn
             Css.zIndex <| zOverlay + 5
-            Css.backgroundColor "black"
+            Css.backgroundColor "#3298dc"
             Css.paddingLeft (px 10)
         ]
 
@@ -737,7 +738,7 @@ let renderNavItem props =
 
         bButton "Select Item" [
             match navItem.Icon with
-            | ValueString icon -> navItem.Icon |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+            | ValueString icon -> navItem.Icon |> IconSearchType.MuiIcon |> tryIcon
             | _ -> Html.spanc "icon" []
             Html.span [ text navItem.Name ]
             if isActive then
@@ -749,92 +750,6 @@ let renderNavItem props =
     Bind.el (props.SelectedItemStore, f)
 
 ()
-
-// let viewLeftNavItem
-//     (selectedItemStore: _)
-//     dispatch
-//     (root: LazyNavItem, childItemOpt: NavItem option)
-//     =
-//     let navItem = childItemOpt |> Option.defaultValue root.NavItem
-
-//     // navItem |> (fun x -> x.Id) |> printfn "viewLeftNavItem: %A"
-
-//     let simpleNavItemButton name active fActivateOpt children =
-//         bButton "Select Item" [
-//             text name
-//             // will this add button to is-active or overwrite?
-//             if active then
-//                 Attr.className "is-active"
-//             else
-//                 match fActivateOpt with
-//                 | None -> Attr.disabled true
-//                 | Some fActivate -> onClick (fun _ -> fActivate ()) []
-//             yield! children
-//         ]
-
-
-//     // stateOpt = None assumes child
-//     let navItemButton (item: Choice<_, NavItem>) active disabled stateOpt =
-//         let name =
-//             match item with
-//             | Choice1Of2 lni -> lni.NavItem.Name
-//             | Choice2Of2 ni -> ni.Name
-
-//         if disabled then
-//             simpleNavItemButton name active None []
-//         else
-//             let reqData _ = Msg.PathRequested root |> dispatch
-
-//             match stateOpt with
-//             | Some InFlight -> simpleNavItemButton name active None [ data_ "InFlight" "true" ]
-//             | Some NotRequested -> simpleNavItemButton name active (Some reqData) []
-//             | Some(Responded(Error e)) ->
-//                 // allow data to be requested again when it fails
-//                 simpleNavItemButton name active (Some reqData) [
-//                     match e with
-//                     | Choice1Of2 e -> data_ "error" <| String.concat "," e
-//                     | Choice2Of2 e -> data_ "error" e.Message
-//                 ]
-//             | None
-//             | Some(Responded(Ok _)) ->
-//                 // selecting this already-loaded parent
-//                 let fSelect _ =
-//                     selectedItemStore.Update(fun _ -> Some(SelectedItemState.FolderSelected(item, true)))
-
-//                 simpleNavItemButton name active (Some fSelect) []
-
-//     match childItemOpt with
-//     | Some child ->
-//         Bind.el (
-//             selectedItemStore,
-//             fun selectedItem ->
-//                 let isActive =
-//                     selectedItem
-//                     |> getSelectedItem
-//                     |> Option.map (fun si -> si.Id = child.Id)
-//                     |> Option.defaultValue false
-
-//                 let fSelect _ =
-//                     selectedItemStore.Update(fun _ -> Some(SelectedItemState.ChildSelected(root, child)))
-
-//                 simpleNavItemButton child.Name isActive (Some fSelect) []
-//         )
-//     | None ->
-
-//         // scenarios:
-//         // root item, errored children
-//         // this is a root item, already selected and already with fetched children
-//         // this is a root item, already selected in flight
-//         // this is a root item, already selected but shows as not requested ?
-//         Bind.el2 root.ChildStore selectedItemStore (fun (childRemote, selectedItem) ->
-//             // printfn "Render item child store: %A" root.NavItem.Id
-
-//             let isSelected =
-//                 getSelectedItem selectedItem
-//                 |> Option.map (fun ni -> ni.Id = navItem.Id)
-//                 |> Option.defaultValue false
-
-//             navItemButton (Choice2Of2 navItem) isSelected false (Some childRemote))
 
 let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemType>) (dispatch: Msg -> unit) =
     printfn "Render viewLeftNav"
@@ -862,7 +777,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
 
         ] [
             bButton "Add Item" [
-                "Add" |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+                "Add" |> IconSearchType.MuiIcon |> tryIcon
                 onClick
                     (fun _ ->
                         // let selectedItem = getSelectedItem selectedItemStore.Value
@@ -875,7 +790,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
                     []
             ]
             bButton "Delete Item" [
-                "Delete" |> App.Init.IconSearchType.MuiIcon |> Icons.tryIcon
+                "Delete" |> IconSearchType.MuiIcon |> tryIcon
                 onClick
                     (fun _ ->
 

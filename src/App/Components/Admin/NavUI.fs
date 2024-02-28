@@ -7,6 +7,7 @@ open Sutil.Core
 open Sutil.CoreElements
 
 open App.Adapters.Schema
+open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Api.Schema
@@ -33,11 +34,10 @@ module Style =
 
     // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
     let css =
-        // navbar is ~30
-        let zOverlay = 31
 
         [
             rule ".fill" [ Css.width (percent 100); Css.height (percent 100) ]
+            rule ".card" [ Css.marginBottom (px 10) ]
         // rule ".full-overlay" [
         ]
 
@@ -219,12 +219,12 @@ let view token (props: NavUIProps) =
                         "FolderOpen"
                     else
                         "Link"
-                    |> App.Init.IconSearchType.MuiIcon
-                    |> Icons.tryIcon
+                    |> IconSearchType.MuiIcon
+                    |> tryIcon
             )
             text store.Value.Item.Name
             bButton "Save" [
-                App.Components.Gen.Icons.tryIcon (App.Init.IconSearchType.MuiIcon "Save")
+                tryIcon (IconSearchType.MuiIcon "Save")
                 // text "Save"
                 onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
             ]
@@ -300,35 +300,52 @@ let view token (props: NavUIProps) =
 
         ] []
 
-        Html.divc "card" [
-            Html.h2 [ text "Icon" ]
-
-            Html.divc "section" [
+        card [
+            CardContentType.Header(text "Icon")
+            CardContentType.Content [
                 App.Components.IconEditor.renderIconEditor { PropValue = nameof item.Icon } (function
                     | App.Components.IconEditor.Accepted nextIcon ->
                         store.Update(MLens.updateItem (fun oldItem -> { oldItem with Icon = nextIcon })))
+
             ]
         ]
 
-        Html.divc "card" [
-            Html.h2 [ text "ACL" ]
-            Html.divc "section" [
+        card [
+            CardContentType.Header(text "Acl Explorer")
+            CardContentType.Content [
+                App.Components.Admin.AclEditor.render {
+                    AclTypes = props.AclTypes // AclType seq
+                    ItemAcls = props.Item.AclRefs // NavItemAclRefsMap
+                    ResolvedAclStoreOpt = None
+
+                }
+
+            ]
+        ]
+
+        card [
+            CardContentType.Header <| text "ACL"
+            CardContentType.Content [
                 App.Components.AclEditor.renderAclsEditor {
                     ItemAcls = // : AclData seq
                         store.Value.Item.AclRefs
                         |> Map.toSeq
                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
                     AclTypes = props.AclTypes // AclType seq
+                    AclLookupStore = None
                     DispatchParent = // : Dispatch<AclParentMsg>
                         function
                         | _ -> ()
                 }
+
             ]
         ]
 
-    // Html.divc "section" [
-    //     Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
-    // ]
-
+        // TODO: maybe enable LS flag to make this visible to user instead of always
+        collapsibleCard None (text "Raw") [
+            CardContentType.Content [
+                Bind.el (store |> Store.map (fun v -> v.Item), (fun item -> Html.pre [ text <| Core.pretty item ]))
+            ]
+        ]
     ]
     |> Style.withCss

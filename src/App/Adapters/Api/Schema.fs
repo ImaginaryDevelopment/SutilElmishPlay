@@ -39,6 +39,8 @@ type AclType = {
     AclParamType: AclParameterType
 }
 
+type NavItemAclRefsMap = Map<AclName, Set<string>>
+
 type NavItem = {
     Id: NavId
     // do we need path and parent?
@@ -55,7 +57,7 @@ type NavItem = {
     // this is poorly named if not all Acls are reference types
     // can't use Map<AclName, AclRefId>, could be param, or ref param
     [<CompiledName("Acls")>]
-    AclRefs: Map<AclName, Set<string>>
+    AclRefs: NavItemAclRefsMap
 } with
     // value could be a literal value, or a reference
     static member TryChangeAclNameParam aclName (f: Set<_> -> Set<_>) (x: NavItem) =

@@ -4,11 +4,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="BReusable.fs" />
-
     <Compile Include="Schema.fs" />
-
     <Compile Include="Adapters/Js.fs" />
+    <Compile Include="Adapters/Mui.generated.fs" />
     <Compile Include="Adapters/Html.fs" />
+    <Compile Include="Adapters/Icons.fs" />
     <Compile Include="Adapters/Bulma.fs" />
     <Compile Include="Adapters/Config.fs" />
     <Compile Include="Adapters/Api/Schema.fs" />
@@ -16,12 +16,9 @@
     <Compile Include="Adapters/Api/Raw.fs" />
     <Compile Include="Adapters/Api/Mapped.fs" />
     <Compile Include="Adapters/Msal.fs" />
-    <Compile Include="Adapters/Mui.generated.fs" />
     <Compile Include="Adapters/Demo.fs" />
-
     <Compile Include="Init.fs" />
     <Compile Include="Global.fs" />
-
     <Compile Include="Components/Gen.fs" />
     <Compile Include="Components/AclEditor.fs" />
     <Compile Include="Components/IconEditor.fs" />
@@ -30,12 +27,11 @@
     <Compile Include="Components/NavCreator.fs" />
     <Compile Include="Components/Root.fs" />
     <Compile Include="Components/Diag.fs" />
+    <Compile Include="Components/Admin/AclEditor.fs" />
     <Compile Include="Components/Admin/NavUI.fs" />
     <Compile Include="Components/Admin/AdminExplorer.fs" />
-
     <Compile Include="Msal.fs" />
     <Compile Include="App.fs" />
-
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Browser.Dom" Version="2.14.0" />

@@ -268,9 +268,9 @@ let private update
         block $"Acl Create for existing acl '{AclName.getText aclRef.Name}'"
 
     // actions
-    | EditAcl(AclEditor.AclResolveRequest req) ->
-        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclParamResolveRequest req)
-        justModel model
+    // | EditAcl(AclEditor.AclResolveRequest req) ->
+    //     EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclParamResolveRequest req)
+    //     justModel model
 
     | TabChange t ->
         let next = { model with Tab = t }
@@ -319,9 +319,9 @@ let private update
             MLens.addError $"Failed to set property: %s{name} on %s{serialize model.Item}" model
             |> justModel
 
-    | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
-        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclTypeChange v)
-        justModel model
+    // | EditAcl(AclEditor.AclParentMsg.TypeChange v) ->
+    //     EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclTypeChange v)
+    //     justModel model
 
     | EditAcl(AclEditor.AclParentMsg.Change(aclName, pt, aclValue)) ->
 
@@ -363,9 +363,9 @@ let private update
         }
 
         justModel { model with Item = nextItem }
-    | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
-        EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclSearchRequest v)
-        justModel model
+    // | EditAcl(AclEditor.AclParentMsg.SearchRequest v) ->
+    //     EditorParentDispatchType.DispatchParent dispatchParent (NavShared.ParentMsg.AclSearchRequest v)
+    //     justModel model
 
     | Save(Responded(Error e)) ->
         eprintfn "NavEditor Api Error: %A" e
@@ -497,6 +497,7 @@ let renderEditor (props: NavEditorProps) =
                                         |> Map.toSeq
                                         |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
                                     AclTypes = aclTypes
+                                    AclLookupStore = None
                                     DispatchParent =
                                         (fun msg ->
                                             printfn "AclEditor ParentMsg:%A" msg

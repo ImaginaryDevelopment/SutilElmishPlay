@@ -184,7 +184,7 @@ let getAclReferenceDisplay
                 narResp.Resolved
                 |> Array.iter (fun r -> printfn $"Resolved %s{aclName} - '%s{r.DisplayName}' from '%A{r.Reference}'")
 
-                AclName aclName, narResp)
+                narResp)
         )
         |> Async.map (Result.mapError Choice2Of2)
     | _ -> Async.ofValue (Error <| Choice1Of2 [| "Type is not a reference type" |])

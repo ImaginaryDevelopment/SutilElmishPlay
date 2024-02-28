@@ -7,11 +7,12 @@ open Core
 open Sutil
 open Sutil.CoreElements
 
+open App.Adapters.Icons
+
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Shared
 open App.Adapters.Html
 
-open App.Components.Gen.Icons
 open Sutil.Styling
 open type Feliz.length
 
@@ -26,6 +27,7 @@ let css = [
     ]
 ]
 
+[<System.Obsolete>]
 type ParentMsg =
     | AclTypeChange of AclType
     | AclSearchRequest of AclRefValueArgs
@@ -38,7 +40,7 @@ let renderEditorFrame (value: NavItem) core siblings =
         // path
         Html.pc "panel-heading" [
             if value.Type = Folder then "FolderOpen" else "Link"
-            |> App.Init.IconSearchType.MuiIcon
+            |> IconSearchType.MuiIcon
             |> tryIcon
             Html.span [ text $"%s{value.Name}: %s{value.Path}" ]
         ]

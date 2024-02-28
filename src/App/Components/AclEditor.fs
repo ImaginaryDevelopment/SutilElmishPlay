@@ -15,9 +15,9 @@ open App.Adapters.Api.Shared
 
 open App.Adapters.Html
 open App.Adapters.Bulma
+open App.Adapters.Icons
 
 open Core
-open Gen.Icons
 
 module Handlers = App.Adapters.Html.Handlers
 
@@ -53,11 +53,6 @@ type AclParamModificationType =
     | RemoveParam
 
 type AclParentMsg =
-    // which Acl Type is highlighted
-    // None is a valid option
-    | TypeChange of AclType
-    | SearchRequest of AclRefValueArgs
-    | AclResolveRequest of AclRefLookup
     | CreateAcl of AclType * Set<string>
     | Change of AclName * AclParamModificationType * aclParam: string
     | Remove of AclType
@@ -75,7 +70,10 @@ let stateStore: LocalStorage.IAccessor<CachedState> =
 let inline justModel m = m, Cmd.none
 
 // assumes we won't ever have an aclRef that can't be found in the acls list
-let init (acls: Map<AclType, Set<string> option>) : Model * Cmd<Msg> =
+let init
+    (aclResolveStore: IStore<ResolvedAclLookup>)
+    (aclTypesToItemParamsMap: Map<AclType, Set<string> option>)
+    : Model * Cmd<Msg> =
     let cache = stateStore.TryGetValue()
 
     let searchText =
@@ -86,13 +84,29 @@ let init (acls: Map<AclType, Set<string> option>) : Model * Cmd<Msg> =
     let lastAcl =
         cache
         |> Option.bind (fun cs -> cs.AclTypeName)
-        |> Option.bind (fun lAclType -> acls |> Map.tryFindKey (fun acl _aclRef -> acl.Name = lAclType))
+        |> Option.bind (fun lAclType ->
+            aclTypesToItemParamsMap
+            |> Map.tryFindKey (fun acl _aclRef -> acl.Name = lAclType))
 
     let defaultFocus: AclState option =
         lastAcl
-        |> Option.orElseWith (fun () -> acls.Keys |> Seq.tryHead)
-        |> Option.bind (fun k -> acls |> Map.tryFind k |> Option.bind (fun v -> v |> Option.map (fun v -> k, v)))
+        |> Option.orElseWith (fun () -> aclTypesToItemParamsMap.Keys |> Seq.tryHead)
+        |> Option.bind (fun k ->
+            aclTypesToItemParamsMap
+            |> Map.tryFind k
+            |> Option.bind (fun v -> v |> Option.map (fun v -> k, v)))
         |> Option.map (fun (k, v) -> { IsNew = false; AclValue = Some(k, v) })
+
+    // let unresolvedAcls =
+    //     navItem
+    //     |> NavItem.GetRefParams aclTypes
+    //     |> Map.choose (fun k (aclType, v) ->
+    //         match resolvedAcls |> Map.tryFind k with
+    //         | None -> // all params need resolved
+    //             Some(k, (aclType, v))
+    //         | Some ra ->
+    //             let unresolved = ra.Keys |> Set.ofSeq |> Set.difference v
+    //             Some(k, (aclType, unresolved)))
 
     justModel {
         FocusedAcl = defaultFocus
@@ -269,7 +283,7 @@ module Renderers =
                 Html.divc "columns" [
                     Html.divc "column is-one-fifth" [
                         bButton "Add Acl Param" [
-                            tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                            tryIcon (IconSearchType.MuiIcon "Add")
 
                             // onClick (fun _ -> AclParentMsg.Change(aclType.Name, AddParam, value) |> dispatchParent) []
                             onClick (fun _ -> onParamAdd (name, value)) []
@@ -317,7 +331,7 @@ module Renderers =
                                         Html.divc "columns" [
                                             Html.divc "column is-one-fifth" [
                                                 bButton "Remove Acl Param" [
-                                                    tryIcon (App.Init.IconSearchType.MuiIcon "Remove")
+                                                    tryIcon (IconSearchType.MuiIcon "Remove")
                                                     onClick (fun _ -> Msg.AclParamRemove p |> dispatch) List.empty
 
                                                 ]
@@ -368,16 +382,8 @@ module Renderers =
 
                         bButton "Search" [
                             // text "Search"
-                            tryIcon (App.Init.IconSearchType.MuiIcon "Search")
-                            onClick
-                                (fun _ ->
-                                    AclParentMsg.SearchRequest {
-                                        SearchText = props.SearchText
-                                        AclName = props.AclType.Name
-                                        Max = Some 6
-                                    }
-                                    |> dispatchParent)
-                                []
+                            tryIcon (IconSearchType.MuiIcon "Search")
+                            onClick (fun _ -> ()) []
                         ]
                 ]
                 Html.divc "column is-three-fifths" [
@@ -435,9 +441,8 @@ module Renderers =
             data_ "method" "renderAcl"
             Html.divc "column is-one-fifth buttonColumn" [
                 if isConfigurable then
-                    tButton "Edit Acl" isActiveRow true isActiveRow (App.Init.IconSearchType.MuiIcon "Edit") (fun _ ->
-                        props.AclData |> Some |> Msg.AclSelect |> dispatch
-                        AclParentMsg.TypeChange props.AclType |> props.DispatchParent)
+                    tButton "Edit Acl" isActiveRow true isActiveRow (IconSearchType.MuiIcon "Edit") (fun _ ->
+                        props.AclData |> Some |> Msg.AclSelect |> dispatch)
             ]
             Html.divc "column is-one-fifth buttonColumn" [
                 tButton "Delete" isActiveRow false false (MuiIcon "Delete") (fun _ ->
@@ -485,10 +490,14 @@ let css = [
     rule ".columns" [ Css.marginTop (px 0); Css.marginBottom (px 0); Css.marginLeft (px 5) ]
 ]
 
+type ResolvedAcl = { Id: string; Display: string }
+
 type AclEditorProps = {
     ItemAcls: AclData seq
     AclTypes: AclType seq
     DispatchParent: Dispatch<AclParentMsg>
+    // in case a parent wants to manage this store
+    AclLookupStore: IStore<ResolvedAclLookup> option
 }
 
 // allow them to edit or create one
@@ -498,8 +507,13 @@ let renderAclsEditor (props: AclEditorProps) =
 
     toGlobalWindow "aclEditor_props" props
 
+    let aclResolveStore =
+        props.AclLookupStore |> Option.defaultWith (fun () -> Map.empty |> Store.make)
+
     let store, dispatch =
-        let m: Map<AclType, Set<string> option> =
+        // not the model
+        // map of all acl types to current item's parameters if there are any
+        let aclTypesToItemParamsMap: Map<AclType, Set<string> option> =
             props.AclTypes
             |> Seq.map (fun aclType ->
                 aclType,
@@ -508,17 +522,15 @@ let renderAclsEditor (props: AclEditorProps) =
                 |> Option.map (fun ar -> ar.Parameters))
             |> Map.ofSeq
 
-        m |> Store.makeElmish init (update props.AclTypes props.ItemAcls) ignore
+        aclTypesToItemParamsMap
+        |> Store.makeElmish (init aclResolveStore) (update props.AclTypes props.ItemAcls) ignore
+
 
     let updateModel () =
         toGlobalWindow "aclEditor_model" store.Value |> ignore
 
     updateModel ()
     // TODO: check store for unresolved params, and fire off acl type change to parent or other msg to get them looked up
-
-    // let m =
-    //     props.ResolvedParams
-    //     |> Observable.map (fun m -> m |> Map.map (fun _ v -> AclRefState.Response(Ok v)))
 
     let renderFocusedAcl (focusedAcl: AclState) = [
         // Html.spanc "info" [ text "*"; Attr.title (Core.pretty focusedAcl) ]
@@ -616,19 +628,19 @@ let renderAclsEditor (props: AclEditorProps) =
                         bButton addText [
                             data_ "button-purpose" addText
                             // floppy disk icon
-                            tryIcon (App.Init.IconSearchType.MuiIcon "Save")
+                            tryIcon (IconSearchType.MuiIcon "Save")
                             // text addText
                             onClick (fun _ -> AclParentMsg.CreateAcl(aclType, pSet) |> props.DispatchParent) []
                         ]
 
                         bButton "Cancel Add Acl" [
-                            tryIcon (App.Init.IconSearchType.MuiIcon "Cancel")
+                            tryIcon (IconSearchType.MuiIcon "Cancel")
 
                         ]
                     | _ ->
                         bButton "Add Acl" [
                             data_ "button-purpose" "Add Acl"
-                            tryIcon (App.Init.IconSearchType.MuiIcon "Add")
+                            tryIcon (IconSearchType.MuiIcon "Add")
                             // text "Add Acl"
                             onClick (fun _ -> Msg.AclSelect None |> dispatch) []
                         ]

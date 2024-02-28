@@ -12,7 +12,7 @@ open App.Adapters.Bulma
 
 module Handlers = App.Adapters.Html.Handlers
 
-open App.Components.Gen.Icons
+open App.Adapters.Icons
 
 open Core
 
@@ -124,15 +124,11 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
             }
             []
 
-    // TODO: name select search
-    printfn "Render IconEditor"
-
     Html.div [
-        Bind.el (store |> Store.map (fun v -> v.NameValue), (fun nv -> tryIcon (App.Init.IconSearchType.MuiIcon nv)))
+        Bind.el (store |> Store.map (fun v -> v.NameValue), (fun nv -> tryIcon (IconSearchType.MuiIcon nv)))
 
         // https://bulma.io/documentation/form/general/#form-addons
-        formField [ text "Search" ] [
-
+        formFieldAddons [] [
             textInput
                 {
                     Titling = "Icon Search"
@@ -141,23 +137,30 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
                     DebounceOverride = None
                 }
                 []
-
             bButton "Search" [
                 // text "Search Icons"
-                tryIcon (App.Init.IconSearchType.MuiIcon "Search")
+                tryIcon (IconSearchType.MuiIcon "Search")
                 onClick (fun _ -> Msg.SearchIcons |> dispatch) List.empty
             ]
         ] []
+
         formField [ text "Icon Name" ] [
             columns2 [] [ nameInput ] [
                 Bind.el (store |> Store.map (fun v -> v.SearchValue), (fun _ -> nameSelect store dispatch))
             ]
         ] []
+
         bButton "Accept" [
             Bind.attr (
                 "disabled",
                 store
-                |> Store.map (fun v -> not (String.isValueString v.NameValue && v.NameValue <> props.PropValue))
+                |> Store.map (fun v ->
+                    not (
+                        // allow clearing of the icon
+                        // empty, or another value string that is not the same as the existing one
+                        (v.NameValue = "" || String.isValueString v.NameValue)
+                        && v.NameValue <> props.PropValue
+                    ))
             )
             text "Accept Icon"
             onClick (fun _ -> IconEditorParentMsg.Accepted store.Value.NameValue |> pDispatch) []

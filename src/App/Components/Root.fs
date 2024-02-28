@@ -12,6 +12,7 @@ open type Feliz.length
 
 open App.Adapters
 open App.Adapters.Schema
+open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Config
@@ -21,7 +22,6 @@ module Handlers = App.Adapters.Html.Handlers
 
 open App.Components.AclEditor
 open App.Components.Gen
-open App.Components.Gen.Icons
 open Sutil.Core
 open App.Adapters.Api.Shared
 open App.Adapters.Api.Schema
@@ -271,11 +271,11 @@ module Commands =
             req
 
     // Resolve a single Acl Ref value
-    let getAclResolved token req =
+    let getAclResolved token (req: AclRefLookup) =
         getResponse
             {
                 Token = token
-                FMsg = FetchRes.AclResolve
+                FMsg = fun v -> FetchRes.AclResolve(req.AclName, v)
                 Title = "AclResolve"
             }
             getAclReferenceDisplay
@@ -805,19 +805,19 @@ module Renderers =
         Html.divc "columns" [
             Html.divc "column is-one-fifth buttonColumn" [
                 if item.Type = Folder then
-                    Html.spanc "icon-text" [ tryIcon (App.Init.IconSearchType.MuiIcon "FolderOpen") ]
+                    Html.spanc "icon-text" [ tryIcon (IconSearchType.MuiIcon "FolderOpen") ]
                     onClick (fun _ -> item.Name |> Msg.PathChange |> dispatch) List.empty
             ]
             Html.divc "column is-one-fifth buttonColumn" [
                 bButton "Edit" [
-                    tryIcon (App.Init.IconSearchType.MuiIcon "Edit")
+                    tryIcon (IconSearchType.MuiIcon "Edit")
                     onClick (fun _ -> item |> Msg.FocusItem |> dispatch) List.empty
                 ]
             ]
             Html.divc "column is-one-fifth iconColumn" [
                 tryIcon (
-                    App.Init.tryFindIcon item.Icon
-                    |> Option.defaultWith (fun () -> App.Init.IconSearchType.FAIcon item.Icon)
+                    tryFindIcon item.Icon
+                    |> Option.defaultWith (fun () -> IconSearchType.FAIcon item.Icon)
                 )
             ]
             Html.divc "column" [

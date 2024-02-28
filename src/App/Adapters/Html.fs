@@ -53,7 +53,6 @@ let columns2 attrs col1 col2 =
 let columns3 col1 col2 col3 =
     Html.divc "columns" [ Html.divc "column" col1; Html.divc "column" col2; Html.divc "column" col3 ]
 
-
 module Handlers =
     let debounceDefault = 400
     // change only fires like on focus lost for text input
@@ -120,7 +119,7 @@ let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> '
 type SelectType<'t> =
     | ObservedSelect of IReadOnlyStore<'t option> * onChange: ('t -> unit)
     | StoredSelect of IStore<'t option>
-// | Static of 't option * onChange: ('t -> unit)
+    | StaticSelect of selected: 't option * valueMap: (string -> 't option) * onChange: ('t -> unit)
 
 type SelectProps<'t> = {
     Values: 't seq
@@ -167,6 +166,8 @@ let selectInput (props: SelectProps<'t>) children =
                     | ValueString selectedRawId -> tryFind selectedRawId
                     | _ -> None)
             ]
+        | StaticSelect(_, valueMap, onChange) ->
+            yield! [ Handlers.onValueChange ignore (valueMap >> Option.iter onChange) ]
     ]
 
     Html.select [
@@ -208,6 +209,15 @@ let selectInput (props: SelectProps<'t>) children =
                                         if props.ValueGetter selected = strId then
                                             Attr.selected true]
                 )
+            | StaticSelect(selected, valueMap, onChange) ->
+                Html.option[Attr.value strId
+                            text <| props.NameGetter item
+
+                            match selected with
+                            | None -> ()
+                            | Some selected ->
+                                if props.ValueGetter selected = strId then
+                                    Attr.selected true]
     ]
 
 module Observable =

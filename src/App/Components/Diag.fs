@@ -10,7 +10,7 @@ open App.Adapters.Html
 open App.Adapters.Api
 
 open App.Components.Gen
-open App.Components.Gen.Icons
+open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Shared
@@ -277,13 +277,11 @@ let view dia =
             Html.ul[Html.li[data_ "icon" "intentionally missing"
                             Bulma.FontAwesome.fa "mo"]
 
-                    Html.li [ Html.divc "icon" [ Html.div [ tryIcon (App.Init.MuiIcon "Link") ] ] ]
-                    Html.li [ Html.divc "icon" [ tryIcon (App.Init.FAIcon "intercom") ] ]
+                    Html.li [ Html.divc "icon" [ Html.div [ tryIcon (MuiIcon "Link") ] ] ]
+                    Html.li [ Html.divc "icon" [ tryIcon (FAIcon "intercom") ] ]
 
                     Html.li [
-                        Html.divc "icon" [
-                            Html.div [ data_ "icon" "fort-awesome"; tryIcon (App.Init.FAIcon "fort-awesome") ]
-                        ]
+                        Html.divc "icon" [ Html.div [ data_ "icon" "fort-awesome"; tryIcon (FAIcon "fort-awesome") ] ]
                     ]]
         ]
         App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
