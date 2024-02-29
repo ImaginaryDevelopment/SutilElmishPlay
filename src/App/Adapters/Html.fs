@@ -177,7 +177,14 @@ let selectInput (props: SelectProps<'t>) children =
             printfn "reselect selectAttrs"
 
             yield! [
-                Bind.attr ("data-store", store |> Store.map (List.map props.ValueGetter >> String.concat "|"))
+                Bind.attr (
+                    "data-store",
+                    store
+                    |> Store.map (fun value ->
+                        let nextValue = value |> List.map props.ValueGetter |> String.concat "|"
+                        printfn "Multi will be '%s' <- %A" nextValue value
+                        nextValue)
+                )
                 Handlers.onValueChange ignore (fun v ->
                     printfn "Multi-Value change: '%s'" v
                     v |> tryFind |> Option.iter onChange)
@@ -187,7 +194,9 @@ let selectInput (props: SelectProps<'t>) children =
     ]
 
     Html.select [
-        Attr.className "select"
+        match props.SelectType with
+        | ObservedMulti _ -> Attr.className "select select-multi"
+        | _ -> Attr.className "select"
         yield! selectAttrs
 
         if props.HasEmpty then
@@ -301,14 +310,19 @@ module Store =
 
         }
 
-    let mapStore title (getter: 't -> 't2, setter: 't2 -> 't) (store: IStore<'t>) =
+    // should this be updated to distinct until changed
+    let mapStore title useEquality (getter: 't -> 't2, setter: 't2 -> 't) (store: IStore<'t>) =
         let mutable name = store.Name + "." + title
 
         { new IStore<'t2> with
             member _.Debugger = store.Debugger
 
             member _.Subscribe x =
-                store.Subscribe(fun value -> getter value |> x.OnNext)
+                if useEquality then
+                    store |> Observable.distinctUntilChanged
+                else
+                    store
+                |> Observable.subscribe (getter >> x.OnNext)
 
             member _.Name
                 with get () = name
@@ -321,8 +335,9 @@ module Store =
         // Update=(fun oldValue -> setter oldValue)
         }
 
-    let chooseStore title (getter, setter) init store =
-        store |> mapStore title (getter >> Option.defaultValue init, Some >> setter)
+    let chooseStore title useEquality (getter, setter) init store =
+        store
+        |> mapStore title useEquality (getter >> Option.defaultValue init, Some >> setter)
 
     let chooseRStore storeOptions getter init store =
         store

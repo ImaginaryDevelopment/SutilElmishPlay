@@ -199,6 +199,12 @@ module Parse =
             | true, v -> Some v
             | false, _ -> None
 
+module Lazy =
+    let get (l: Lazy<_>) = l.Value
+
+    let ifCreated (l: Lazy<_>) =
+        if l.IsValueCreated then Some l.Value else None
+
 module Array =
     // updateAt exists but gives exceptions and doesn't pass the oldItem to the update function
 

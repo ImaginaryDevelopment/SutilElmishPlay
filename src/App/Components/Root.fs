@@ -884,6 +884,7 @@ let renderEditTab appMode store dispatch =
                 store
                 |> Store.chooseStore
                     "RootPathTabItem"
+                    true
                     (MLens.getFocusedItem,
                      fun nextItem -> {
                          store.Value with

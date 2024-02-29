@@ -219,6 +219,7 @@ let renderAclCreator (props: AclCreatorProps) =
                     store
                     |> Store.mapStore
                         "NavEditorNavItem"
+                        true
                         ((fun model -> model.Item), (fun nextItem -> { store.Value with Item = nextItem }))
 
                 let creationItems = renderCreationEditor getError allErrors itemStore vItem

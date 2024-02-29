@@ -421,7 +421,7 @@ let renderEditor (props: NavEditorProps) =
 
     let obsItem =
         store
-        |> Store.mapStore "obsItem" (MLens.getItem, (fun nextItem -> { store.Value with Item = nextItem }))
+        |> Store.mapStore "obsItem" true (MLens.getItem, (fun nextItem -> { store.Value with Item = nextItem }))
 
     match props.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
