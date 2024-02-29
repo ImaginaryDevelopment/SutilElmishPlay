@@ -217,6 +217,13 @@ module Array =
             | None -> Error "Could not find item"
             | Some x -> items |> Array.mapi (fun i item -> if i <> x then item else fUpdate item) |> Ok
 
+module Set =
+    let toggle value set =
+        if set |> Set.contains value then
+            set |> Set.remove value
+        else
+            set |> Set.add value
+
 module Map =
     let upsert key value (m: Map<_, _ list>) =
         m

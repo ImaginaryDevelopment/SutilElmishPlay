@@ -12,8 +12,14 @@ type AclName =
         function
         | AclName name -> name
 
+// AclParameter Id or RefId (we're reusing ref ids for non-reference type acl params it seems)
 [<Erase>]
-type AclRefId = AclRefId of string
+type AclRefId =
+    | AclRefId of string
+
+    static member getText =
+        function
+        | AclRefId name -> name
 
 [<Erase>]
 type NavId = NavId of string

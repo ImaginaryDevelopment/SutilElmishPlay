@@ -118,6 +118,7 @@ let checkbox titling (store: IReadOnlyStore<bool>) children (onChange: bool -> '
 // the existence of a selected attribute always means true it appears
 type SelectType<'t> =
     | ObservedSelect of IReadOnlyStore<'t option> * onChange: ('t option -> unit)
+    | ObservedMulti of IReadOnlyStore<'t list> * onChange: ('t -> unit)
     | StoredSelect of IStore<'t option>
     | StaticSelect of selected: 't option * valueMap: (string -> 't option) * onChange: ('t -> unit)
 
@@ -136,12 +137,16 @@ type SelectProps<'t> = {
 // no designed with multi-select in mind
 // designed without looking at this https://sutil.dev/#examples-select-bindings?SelectBindings.fs
 let selectInput (props: SelectProps<'t>) children =
+    printfn "render selectInput"
+
     let tryFind rawId : 't option =
         props.Values
         |> Seq.tryFind (fun value -> props.ValueGetter value = rawId)
         |> function
             | None ->
-                eprintfn "Selected option not found in values: %s" rawId
+                if not props.HasEmpty then
+                    eprintfn "Selected option not found in values: %s" rawId
+
                 None
             | Some value -> Some value
 
@@ -168,6 +173,17 @@ let selectInput (props: SelectProps<'t>) children =
             ]
         | StaticSelect(_, valueMap, onChange) ->
             yield! [ Handlers.onValueChange ignore (valueMap >> Option.iter onChange) ]
+        | ObservedMulti(store, onChange) ->
+            printfn "reselect selectAttrs"
+
+            yield! [
+                Bind.attr ("data-store", store |> Store.map (List.map props.ValueGetter >> String.concat "|"))
+                Handlers.onValueChange ignore (fun v ->
+                    printfn "Multi-Value change: '%s'" v
+                    v |> tryFind |> Option.iter onChange)
+                Attr.multiple true
+            ]
+
     ]
 
     Html.select [
@@ -176,7 +192,7 @@ let selectInput (props: SelectProps<'t>) children =
 
         if props.HasEmpty then
             Html.option [ text ""; yield! props.OptionChildren None ]
-
+        printfn "rerender select options"
         for item in props.Values do
             let strId = props.ValueGetter item
 
@@ -209,7 +225,17 @@ let selectInput (props: SelectProps<'t>) children =
                                         if props.ValueGetter selected = strId then
                                             Attr.selected true]
                 )
-            | StaticSelect(selected, valueMap, onChange) ->
+            | ObservedMulti(store, _) ->
+                Bind.el (
+                    store,
+                    fun selected ->
+                        Html.option[Attr.value strId
+                                    text <| props.NameGetter item
+
+                                    if selected |> List.map props.ValueGetter |> List.contains strId then
+                                        Attr.selected true]
+                )
+            | StaticSelect(selected, _valueMap, _onChange) ->
                 Html.option[Attr.value strId
                             text <| props.NameGetter item
 

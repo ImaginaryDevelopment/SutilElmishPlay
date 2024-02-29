@@ -101,6 +101,9 @@ module MLens =
     let updateItem f model = { model with Item = f model.Item }
 
 let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
+    printfn "NavUI update: %A"
+    <| BReusable.String.truncateDisplay false 200 (string msg)
+
     match msg with
 
     | AclSearchRequest aclRefValueArgs ->
