@@ -1,8 +1,8 @@
 // cspell: disable
-2024.03.01 11:29:47 -05:00
+2024.03.01 02:51:34 -05:00
 Git:
 master
-8692593 make enter work on ref search, fix icon name field
+4d548a5 live changes are not happening on toggle buttons
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
