@@ -45,6 +45,7 @@ let tButton title buttonClassArg (buttonType: ButtonType) props =
     ]
 
 let bButton title props = tButton title None Button props
+
 let bButtonC title bca props = tButton title (Some bca) Button props
 
 let rButton title props = tButton title None Reset props

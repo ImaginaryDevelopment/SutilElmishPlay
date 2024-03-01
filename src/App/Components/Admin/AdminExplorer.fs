@@ -537,11 +537,19 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         // what if this is a successful create?
         match nextItem, st, model.Items with
         | UpdateFolder(x, items) ->
+            printfn "Folder saved, updating"
+
             items
-            |> Array.updateI x (fun item -> { item with NavItem = nextItem })
+            |> Array.updateI x (fun item ->
+                printfn "Updating folder by index: %s" item.NavItem.Name
+                { item with NavItem = nextItem })
             |> function
-                | Ok nextItems -> MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
-                | Error e -> model |> MLens.addError e, Cmd.none
+                | Ok nextItems ->
+                    printfn "Update kinda done?"
+                    MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
+                | Error e ->
+                    printfn "Update kinda error"
+                    model |> MLens.addError e, Cmd.none
 
         | CreateFolder items ->
             let childStore = Store.make NotRequested
@@ -565,6 +573,7 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
                 | Error e -> model |> MLens.addError e, Cmd.none
 
         | UpdateItem(childStore, (children, expanded), i) ->
+            printfn "AdminExplorer updateItem"
             // update children, use them to update parent store directly (no model change needed)
             children
             |> Array.updateI i (fun _ -> nextItem)

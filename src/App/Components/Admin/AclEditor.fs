@@ -200,7 +200,6 @@ module MLens =
                 if oldValues |> Set.contains aclRefId then
                     oldValues |> Set.remove aclRefId
                 else
-                    printfn "Adding: %A" aclRefId
                     oldValues |> Set.add aclRefId
                 |> ToUpsert)
 
@@ -450,29 +449,34 @@ module Renderers =
         (dispatch: Msg -> unit)
         =
         Html.div [
-            formFieldAddons [] [
-                textInput
-                    {
-                        Titling = "Search"
-                        Value = searchStore
-                        OnChange = (fun v -> searchStore.Update(fun _ -> v))
-                        DebounceOverride = None
-                    }
-                    []
-                bButton "Search" [
-                    // text "Search Icons"
-                    tryIcon (IconSearchType.MuiIcon "Search")
-                    onClick
-                        (fun _ ->
-                            Msg.AclSearchRequest {
-                                AclName = aclType.Name
-                                SearchText = searchStore.Value
-                                Max = None
-                            }
-                            |> dispatch)
-                        List.empty
-                ]
-            ] []
+            Html.form [
+
+                formFieldAddons [] [
+                    textInput
+                        {
+                            Titling = "Search"
+                            Value = searchStore
+                            OnChange = (fun v -> searchStore.Update(fun _ -> v))
+                            DebounceOverride = None
+                        }
+                        [
+
+                        ]
+                    tButton "Search" None Submit [
+                        // text "Search Icons"
+                        tryIcon (IconSearchType.MuiIcon "Search")
+                        onClick
+                            (fun _ ->
+                                Msg.AclSearchRequest {
+                                    AclName = aclType.Name
+                                    SearchText = searchStore.Value
+                                    Max = None
+                                }
+                                |> dispatch)
+                            [ EventModifier.PreventDefault ]
+                    ]
+                ] []
+            ]
             Html.div [
                 Html.ul [
                     for KeyValue(k, v) in
@@ -491,7 +495,6 @@ module Renderers =
                 ]
 
             ]
-
 
         ]
 
