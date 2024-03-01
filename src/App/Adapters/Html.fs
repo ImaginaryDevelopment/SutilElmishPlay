@@ -314,7 +314,7 @@ module Store =
         }
 
     // should this be updated to distinct until changed
-    let mapStore title useEquality (getter: 't -> 't2, setter: 't2 -> 't) (store: IStore<'t>) =
+    let mapStore title useEquality (getter: 't -> 't2, setter: 't2 -> 't * 't2 -> 't) (store: IStore<'t>) =
         let mutable name = store.Name + "." + title
 
         { new IStore<'t2> with
@@ -331,7 +331,13 @@ module Store =
                 with get () = name
                 and set v = name <- v
 
-            member _.Update f = store.Update(getter >> f >> setter)
+            member _.Update f =
+                store.Update(fun oldValue ->
+                    let oldChild = getter oldValue
+                    let nextChild = f oldChild
+                    let next = setter nextChild (oldValue, oldChild)
+                    next)
+
             member _.Value = getter store.Value
             member _.Dispose() = store.Dispose()
 

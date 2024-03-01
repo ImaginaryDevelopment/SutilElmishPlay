@@ -327,25 +327,6 @@ let view token (props: NavUIProps) =
             ]
         ]
 
-        card [
-            CardContentType.Header <| text "ACL"
-            CardContentType.Content [
-                App.Components.AclEditor.renderAclsEditor {
-                    ItemAcls = // : AclData seq
-                        store.Value.Item.AclRefs
-                        |> Map.toSeq
-                        |> Seq.map (fun (k, v) -> { Name = k; Parameters = v })
-                        |> List.ofSeq
-                    AclTypes = props.AclTypes // AclType seq
-                    AclLookupStore = None
-                    DispatchParent = // : Dispatch<AclParentMsg>
-                        function
-                        | _ -> ()
-                }
-
-            ]
-        ]
-
         // TODO: maybe enable LS flag to make this visible to user instead of always
         collapsibleCard None (text "Raw") [
             CardContentType.Content [

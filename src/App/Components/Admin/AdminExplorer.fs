@@ -876,12 +876,10 @@ let view token =
     let selectedItemStore =
         let getter (model: Model) = model.Item
 
-        let setter nextValue =
-            let oldValue = getter store.Value
-
+        let setter nextValue (model: Model, oldValue) =
 
             printfn "Setting selected item: %A -> %A" (getValueDisplay oldValue) (getValueDisplay nextValue)
-            { store.Value with Item = nextValue }
+            { model with Item = nextValue }
 
         store |> Store.mapStore "AESelectedItem" true (getter, setter)
 

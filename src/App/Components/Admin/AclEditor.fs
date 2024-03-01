@@ -102,8 +102,8 @@ module MLens =
         aclState
         |> Map.choose (fun aclType aclState ->
             match aclState.AclOriginalState, aclState.Next with
-            | AclOriginalState.WasNotPresent, StillLazy -> None
-            | AclOriginalState.WasPresent v, StillLazy -> Some(AclMapState.UnchangedPresent, v)
+            | AclOriginalState.WasNotPresent, LazyStill -> None
+            | AclOriginalState.WasPresent v, LazyStill -> Some(AclMapState.UnchangedPresent, v)
             | AclOriginalState.WasNotPresent, LazyValue(StoreValue AclItemState.NoChange) -> None
             | AclOriginalState.WasPresent v, LazyValue(StoreValue AclItemState.NoChange) ->
                 Some(AclMapState.UnchangedPresent, v)
@@ -172,12 +172,13 @@ module MLens =
         |> Option.map (fun v -> v.Value)
         |> Option.bind (function
             | ToUpsert values -> Some values
-            | _ -> None)
-        |> Option.orElseWith (fun () ->
-            aclState.AclOriginalState
-            |> function
-                | WasPresent v -> Some v
-                | _ -> None)
+            | ToRemove -> None
+            | AclItemState.NoChange ->
+                aclState.AclOriginalState
+                |> function
+                    | WasPresent v -> Some v
+                    | _ -> None)
+
 
     // allows upsert and delete
     // adding an acl or updating one or removing
@@ -185,7 +186,9 @@ module MLens =
         let iStore = getParamsStore aclType model
         // (getAclStore aclType store).Value.Update()
         // store to hold item changes for this navItem's acls
-        iStore.Update(fun _ -> next)
+        iStore.Update(fun oldValue ->
+            printfn "Updating a store: '%A' to '%A'" oldValue next
+            next)
 
     // toggle if aclRefId is included in acl's params
     let updateAclParamStore aclRefId (pStore: IStore<_>) =
@@ -213,9 +216,6 @@ type Msg =
     | AclParamResolveRequest of AclRefLookup
     | AclParamResolveResponse of AclName * Result<NavAclResolveResponse, ErrorType>
     | AclSelection of AclName option
-// | AclParamSelection of AclRefId
-// | AclCreateRequest of AclType * Set<string>
-// | AclRemoveRequest of AclType
 
 module Commands =
     let getAclResolved token req =
@@ -232,6 +232,7 @@ module Commands =
         |> Cmd.map (fun v -> Msg.AclParamResolveResponse(req.AclName, v))
 
     // HACK: this does not properly register with global as an inflight deal, nor check if one is already in flight
+    // and neither did any other code in this app apparently
     let searchAclRefValues token req : Cmd<Msg> =
         let f x =
             async {
@@ -335,7 +336,7 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
 
     match props.AclTypes |> Seq.length, model.ItemAcls.Count with
     | tCount, mCount when tCount = mCount -> ()
-    | tCount, mCount -> failwith "Bad Map, types:%i, m:%i" tCount mCount
+    | tCount, mCount -> failwithf "Bad Map, types:%i, m:%i" tCount mCount
 
     model, Cmd.none
 
@@ -375,14 +376,14 @@ module Renderers =
             []
 
 
-    type AclProps = {
+    type AclDisplayProps = {
         AclParams: Set<AclRefId>
         AclType: AclType
         IsSelected: bool
     }
 
     // render a display of the acl for a table-like thing, not an editor
-    let renderAcl (props: AclProps) dispatch =
+    let renderAclDisplay (props: AclDisplayProps) dispatch =
 
         let isActiveRow = props.IsSelected
 
@@ -443,9 +444,7 @@ module Renderers =
     // all reference params at least at this time, are searchable
     let renderReferenceParams
         (aclType: AclType)
-        (searchStore: IStore<string>,
-         searchResultStore: IReadOnlyStore<Map<AclRefId, AclDisplay>>,
-         aclStore: IStore<AclItemState>)
+        (searchStore: IStore<string>, aclStateStore: IReadOnlyStore<AclState>)
         (dispatch: Msg -> unit)
         =
         Html.div [
@@ -484,13 +483,29 @@ module Renderers =
                         |> Map.tryFind aclType.Name
                         |> Option.defaultValue Map.empty do
                         Html.li [
-                            Attr.title <| AclRefId.getText k
-                            text v.DisplayName
-                            onClick
-                                (fun _ ->
-                                    printfn "Search addition selected: %s" <| v.DisplayName
-                                    aclStore |> MLens.updateAclParamStore k)
-                                []
+                            Bind.el (
+                                aclStateStore,
+                                fun p ->
+                                    Html.a[let isSelected =
+                                               match p.AclOriginalState, p.Next with
+                                               | _, LazyValue(StoreValue(ToUpsert v)) -> Some v
+                                               | _, LazyValue(StoreValue ToRemove) -> None
+                                               | WasPresent v, _ -> Some v
+                                               | WasNotPresent, _ -> None
+                                               |> Option.map (Set.contains k)
+                                               |> Option.defaultValue false
+
+
+                                           Attr.title <| AclRefId.getText k
+                                           text v.DisplayName
+
+
+                                           onClick
+                                               (fun _ ->
+                                                   printfn "Search item selected: %s" <| v.DisplayName
+                                                   aclStateStore.Value.Next.Value |> MLens.updateAclParamStore k)
+                                               []]
+                            )
                         ]
                 ]
 
@@ -556,19 +571,17 @@ module Renderers =
 
     type AclInterfaceProps = {
         AclType: AclType
-        AclParams: System.IObservable<Set<AclRefId> option>
-        SearchStore: IReadOnlyStore<Map<AclRefId, AclDisplay>>
+        // AclParams: System.IObservable<Set<AclRefId> option>
         // was this already in the api, or are we doing an upsert?
         Existed: bool
     }
 
-    let renderAclInterface (props: AclInterfaceProps) model dispatch =
+    let renderAclInterface (props: AclInterfaceProps) (store: IStore<Model>) (dispatch: Msg -> unit) =
         printfn "renderAclInterface"
-        let pStore = MLens.getParamsStore props.AclType model
         let sStore = "" |> Store.make
 
         let updateAcl aclChangeType =
-            model |> MLens.updateAcl props.AclType aclChangeType
+            store.Value |> MLens.updateAcl props.AclType aclChangeType
 
         // account for multiples?
         let renderParamSelector (aclType: AclType) =
@@ -582,20 +595,74 @@ module Renderers =
 
                     match aclType.AclParamType with
                     | AclParameterType.None -> Html.div [ Attr.title "No Params" ]
-                    | AclParameterType.Selectable items -> renderSelectableParams aclType items pStore
+                    | AclParameterType.Selectable items ->
+                        // this might need to be the same as the reference one
+                        let getter (model: Model) : AclItemState =
+                            model.ItemAcls |> Map.find aclType |> (fun x -> x.Next.Value.Value)
+
+                        let pStore =
+                            store
+                            |> Store.mapStore
+                                "aclInterfaceStore"
+                                true
+                                (getter,
+                                 (fun v (model, _) ->
+                                     updateAcl v
+                                     model))
+
+                        renderSelectableParams aclType items pStore
                     | AclParameterType.Reference _searchable ->
-                        renderReferenceParams aclType (sStore, props.SearchStore, pStore) dispatch
+                        let pStore =
+                            let getter (model: Model) = model.ItemAcls |> Map.find aclType
+
+                            let setter (aclState: AclState) (model: Model, _: AclState) : Model =
+                                let next: Map<AclType, AclState> =
+                                    model.ItemAcls |> Map.change aclType (fun _o -> Some aclState)
+
+                                { model with ItemAcls = next }
+
+                            store |> Store.mapStore "aclInterfaceStore" true (getter, setter)
+
+                        renderReferenceParams aclType (sStore, pStore) dispatch
             )
 
-        let renderAddButton () =
+        let renderToggleButton () =
             let addText = "Add New Acl"
+            let removeText = "Remove"
 
-            bButton addText [
-                data_ "button-purpose" addText
-                tryIcon (IconSearchType.MuiIcon "Add")
-                // text addText
-                onClick (fun _ -> updateAcl (ToUpsert Set.empty)) []
-            ]
+            Bind.el (
+                store
+                |> Store.map (fun v ->
+                    let current = v |> MLens.getAclState props.AclType |> MLens.getAclParamsFromState
+                    printfn "store toggle: %A" current
+
+                    current),
+                fun pOpt ->
+                    printfn "render toggle: %A" pOpt
+                    let isPresent = Option.isSome pOpt
+                    let text = if isPresent then removeText else addText
+                    // shouldn't this grab the old params if it was previously set to remove, thereby restoring it
+                    let onClickValue =
+                        if isPresent then
+                            ToRemove
+                        else
+                            match store.Value.ItemAcls |> Map.tryFind props.AclType with
+                            // restore the old state
+                            | Some { AclOriginalState = WasPresent _ } -> NoChange
+                            | _ -> ToUpsert Set.empty
+
+                    printfn "onClickValue: %A" onClickValue
+
+                    tButton "Toggle Acl" None ButtonType.Submit [
+                        data_ "button-purpose" text
+                        tryIcon (IconSearchType.MuiIcon <| if isPresent then "Add" else "Remove")
+                        onClick
+                            (fun _ ->
+                                printfn "I've been clicked: %A" onClickValue
+                                onClickValue |> updateAcl)
+                            []
+                    ]
+            )
 
         if props.AclType.AclParamType <> AclParameterType.None then
 
@@ -609,19 +676,7 @@ module Renderers =
                 ]
             ] [ renderParamSelector props.AclType ]
         else
-            Html.div [
-                if props.Existed then
-                    let removeText = "Remove"
-
-                    bButton removeText [
-                        data_ "button-purpose" removeText
-                        tryIcon (IconSearchType.MuiIcon "Remove")
-
-                        onClick (fun _ -> updateAcl (ToRemove)) []
-                    ]
-                else
-                    renderAddButton ()
-            ]
+            Html.div [ renderToggleButton () ]
 
 let render (props: AclEditorProps) =
     let aclTypeMap =
@@ -643,7 +698,7 @@ let render (props: AclEditorProps) =
         data_ "file" "AclEditor"
         data_ "method" "renderAclsEditor"
         // existing acls section
-        collapsibleCard None (text "Existing Acls") [
+        collapsibleCard (Some(Choice2Of2 true)) (text "Existing Acls") [
             CardContentType.Content [
                 Bind.el2 (store |> Store.map MLens.getFocusedAclType) (store |> Store.map (fun v -> v.ItemAcls))
                 <| fun (focusOpt, itemAcls) ->
@@ -664,7 +719,7 @@ let render (props: AclEditorProps) =
                                     match thisAclType with
                                     | None -> Html.div [ text <| AclName.getText aclType.Name ]
                                     | Some aclType ->
-                                        Renderers.renderAcl
+                                        Renderers.renderAclDisplay
                                             {
                                                 AclType = aclType
                                                 AclParams = p
@@ -722,38 +777,14 @@ let render (props: AclEditorProps) =
 
                     let existed = store.Value.ItemAcls |> Map.tryFind aclType |> Option.isSome
 
-                    let pStore: System.IObservable<Set<AclRefId> option> =
-                        let aclState = store.Value |> MLens.getAclState aclType
-
-                        aclState.Next
-                        |> Lazy.get
-                        |> Store.map (function
-                            | AclItemState.NoChange ->
-                                match aclState.AclOriginalState with
-                                | WasNotPresent -> None
-                                | WasPresent v -> Some v
-                            | AclItemState.ToRemove -> None
-                            | AclItemState.ToUpsert v -> Some v)
-
-                    // let pStore = store |> Store.map (MLens.getCurrentParams aclType.Name)
-
                     Renderers.renderAclInterface
                         {
                             AclType = aclType
                             Existed = existed
-                            SearchStore =
-                                App.Global.resolvedAclLookup
-                                |> Store.mapRStore
-                                    {
-                                        UseEquality = true
-                                        DebugTitle = None
-                                    }
-                                    (fun m -> m |> Map.tryFind aclType.Name |> Option.defaultValue Map.empty)
-                            // Reference: AclRefId
-                            // DisplayName: string
-                            AclParams = pStore
+                        // Reference: AclRefId
+                        // DisplayName: string
                         }
-                        store.Value
+                        store
                         dispatch
             )
         ]
