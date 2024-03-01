@@ -317,6 +317,7 @@ let view token (props: NavUIProps) =
             CardContentType.Header(text "Acl Explorer")
             CardContentType.Content [
                 App.Components.Admin.AclEditor.render {
+                    Token = token
                     AclTypes = props.AclTypes // AclType seq
                     ItemAcls = props.Item.AclRefs // NavItemAclRefsMap
                     ResolvedAclStoreOpt = None

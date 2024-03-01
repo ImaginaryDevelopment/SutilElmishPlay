@@ -5,6 +5,8 @@ open BReusable
 open Sutil
 open Sutil.CoreElements
 
+let (|StoreValue|) (x: Sutil.IStore<_>) = x.Value
+
 let data_ (name: string) value = prop.custom ($"data-{name}", value)
 
 let tryRender title f arg : Core.SutilElement =
@@ -195,7 +197,7 @@ let selectInput (props: SelectProps<'t>) children =
 
     Html.select [
         match props.SelectType with
-        | ObservedMulti _ -> Attr.className "select select-multi"
+        | ObservedMulti _ -> Attr.className "select select-multi is-multiple"
         | _ -> Attr.className "select"
         yield! selectAttrs
 

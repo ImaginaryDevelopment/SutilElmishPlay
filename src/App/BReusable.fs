@@ -199,6 +199,9 @@ module Parse =
             | true, v -> Some v
             | false, _ -> None
 
+let (|StillLazy|LazyValue|) (l: Lazy<_>) =
+    if l.IsValueCreated then LazyValue l.Value else StillLazy
+
 module Lazy =
     let get (l: Lazy<_>) = l.Value
 
