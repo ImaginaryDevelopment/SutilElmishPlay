@@ -314,7 +314,7 @@ module Store =
         }
 
     // should this be updated to distinct until changed
-    let mapStore title useEquality (getter: 't -> 't2, setter: 't2 -> 't * 't2 -> 't) (store: IStore<'t>) =
+    let mapStore title useEquality (getter: 't -> 't2) (setter: 't2 -> 't * 't2 -> 't) (store: IStore<'t>) =
         let mutable name = store.Name + "." + title
 
         { new IStore<'t2> with
@@ -344,9 +344,9 @@ module Store =
         // Update=(fun oldValue -> setter oldValue)
         }
 
-    let chooseStore title useEquality (getter, setter) init store =
+    let chooseStore title useEquality getter setter init store =
         store
-        |> mapStore title useEquality (getter >> Option.defaultValue init, Some >> setter)
+        |> mapStore title useEquality (getter >> Option.defaultValue init) (Some >> setter)
 
     let chooseRStore storeOptions getter init store =
         store

@@ -17,22 +17,26 @@ open App.Adapters.Icons
 open Core
 
 type Model = {
-    NameValue: string
+    IconValue: IStore<string>
     SearchValue: string
     LastIsSelect: bool
     SearchClick: System.DateTime option
 }
 
-let init propValue = {
+module MLens =
+    let tryUpdateIconValue (store: IStore<string>) value =
+        if value = "" || String.isValueString value then
+            store.Update(fun _ -> value)
+
+let init iconValue = {
     SearchValue = ""
-    NameValue = propValue |> Option.ofObj |> Option.defaultValue ""
+    IconValue = iconValue
     LastIsSelect = true
     SearchClick = None
 }
 
 type Msg =
     | SearchChange of string
-    | NameChange of string
     | SearchIcons
     | SelectUsed of string
 
@@ -41,7 +45,6 @@ let update (msg: Msg) model =
 
     match msg with
     | SearchChange value -> { model with SearchValue = value }
-    | NameChange value -> { model with NameValue = value }
     | SearchIcons ->
         if model.SearchValue |> String.length > 1 then
             {
@@ -51,15 +54,9 @@ let update (msg: Msg) model =
             }
         else
             model
-    | SelectUsed selectedName -> {
-        model with
-            LastIsSelect = true
-            NameValue =
-                if String.isValueString selectedName then
-                    selectedName
-                else
-                    model.NameValue
-      }
+    | SelectUsed selectedName ->
+        MLens.tryUpdateIconValue model.IconValue selectedName
+        { model with LastIsSelect = true }
 
 type IconEditorParentMsg = Accepted of value: string
 
@@ -92,7 +89,7 @@ let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
                 for o in options do
                     Html.option [
                         Attr.value o
-                        if store.Value.NameValue = o then
+                        if store.Value.IconValue.Value = o then
                             Attr.selected true
                         text o
                     ]
@@ -101,8 +98,7 @@ let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
     | _ -> Html.div []
 
 
-// HACK: this is using 2 different properties because observer doesn't need to update or fire on empty string
-type IconEditorProps = { PropValue: string }
+type IconEditorProps = { ValueStore: IStore<string> }
 
 let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorParentMsg>) =
     let pDispatch msg =
@@ -110,7 +106,7 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
         pDispatch msg
 
     toGlobalWindow "iconEditor_props" props
-    let store, dispatch = props.PropValue |> Store.makeElmishSimple init update ignore
+    let store, dispatch = props.ValueStore |> Store.makeElmishSimple init update ignore
     toGlobalWindow "iconEditor_model" store.Value
 
     let nameInput: SutilElement =
@@ -118,14 +114,14 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
         textInput
             {
                 Titling = "Name Input"
-                Value = store |> Store.map (fun model -> model.NameValue)
-                OnChange = (NameChange >> dispatch)
+                Value = store.Value.IconValue
+                OnChange = MLens.tryUpdateIconValue store.Value.IconValue
                 DebounceOverride = None
             }
             []
 
     Html.div [
-        Bind.el (store |> Store.map (fun v -> v.NameValue), (fun nv -> tryIcon (IconSearchType.MuiIcon nv)))
+        Bind.el (store.Value.IconValue, (fun nv -> tryIcon (IconSearchType.MuiIcon nv)))
 
         // https://bulma.io/documentation/form/general/#form-addons
         formFieldAddons [] [
@@ -150,20 +146,5 @@ let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorPar
             ]
         ] []
 
-        bButton "Accept" [
-            Bind.attr (
-                "disabled",
-                store
-                |> Store.map (fun v ->
-                    not (
-                        // allow clearing of the icon
-                        // empty, or another value string that is not the same as the existing one
-                        (v.NameValue = "" || String.isValueString v.NameValue)
-                        && v.NameValue <> props.PropValue
-                    ))
-            )
-            text "Accept Icon"
-            onClick (fun _ -> IconEditorParentMsg.Accepted store.Value.NameValue |> pDispatch) []
-        ]
 
     ]

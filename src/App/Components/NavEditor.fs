@@ -421,7 +421,7 @@ let renderEditor (props: NavEditorProps) =
 
     let obsItem =
         store
-        |> Store.mapStore "obsItem" true (MLens.getItem, (fun nextItem (model, _) -> { model with Item = nextItem }))
+        |> Store.mapStore "obsItem" true MLens.getItem (fun nextItem (model, _) -> { model with Item = nextItem })
 
     match props.EditorMode with
     | EditorMode.Standalone _ -> toGlobalWindow "navEditor_model" store.Value
@@ -474,7 +474,15 @@ let renderEditor (props: NavEditorProps) =
                                 DebugTitle = None
                             }
                             (fun tab -> tab = EditorTabs.IconTab)
-                    Value = IconEditor.renderIconEditor { PropValue = store.Value.Item.Icon } (IconMsg >> dispatch)
+                    Value =
+                        let iconValueStore =
+                            store
+                            |> Store.mapStore "iconValueStore" true (fun v -> v.Item.Icon) (fun iconValue (model, _) -> {
+                                model with
+                                    Item = { model.Item with Icon = iconValue }
+                            })
+
+                        IconEditor.renderIconEditor { ValueStore = iconValueStore } (IconMsg >> dispatch)
                 }
                 {
                     Name = "Acls"

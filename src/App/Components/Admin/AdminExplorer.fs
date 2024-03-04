@@ -881,7 +881,7 @@ let view token =
             printfn "Setting selected item: %A -> %A" (getValueDisplay oldValue) (getValueDisplay nextValue)
             { model with Item = nextValue }
 
-        store |> Store.mapStore "AESelectedItem" true (getter, setter)
+        store |> Store.mapStore "AESelectedItem" true getter setter
 
     let dispose =
         selectedItemStore.Subscribe(fun value -> printfn "SelectedItemChanged to: %A" (getValueDisplay value))
@@ -999,8 +999,8 @@ let view token =
                                 )
 
                             ]
-
                 )
+
                 // begin 3rd column/editor/creator
                 let willRenderStore =
                     selectedItemStore
@@ -1024,17 +1024,6 @@ let view token =
 
                     Bind.classNames obs
 
-
-                //     Bind.attr (
-                //         "class",
-                //         willRenderStore
-                //         |> Store.map (
-                //             function
-                //             | true -> [ "column"; "is-6"; yield! always; "active" ]
-                //             | false -> always
-                //             >> String.concat " "
-                //         )
-                //     )
 
                 Html.div [
                     // Attr.className "column is-3"

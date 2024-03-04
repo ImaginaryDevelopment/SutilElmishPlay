@@ -306,7 +306,14 @@ let view token (props: NavUIProps) =
         card [
             CardContentType.Header(text "Icon")
             CardContentType.Content [
-                App.Components.IconEditor.renderIconEditor { PropValue = item.Icon } (function
+                let iconValueStore =
+                    store
+                    |> Store.mapStore "iconValueStore" true (fun v -> v.Item.Icon) (fun iconValue (model, _) -> {
+                        model with
+                            Item = { model.Item with Icon = iconValue }
+                    })
+
+                App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore } (function
                     | App.Components.IconEditor.Accepted nextIcon ->
                         store.Update(MLens.updateItem (fun oldItem -> { oldItem with Icon = nextIcon })))
 

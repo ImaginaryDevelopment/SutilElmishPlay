@@ -81,6 +81,7 @@ type Model = {
     ResolvedAclStore: IStore<ResolvedAclLookup>
     // should be exhaustive of all acl names
     ItemAcls: Map<AclType, AclState>
+    SearchIsInFlight: bool
     // option because we might not be editing/creating
     // all edits should be stored here, not on the map
     FocusedAclType: AclType option
@@ -255,7 +256,10 @@ let update token (aclTypes: Map<AclName, AclType>) msg model : Model * Cmd<Msg> 
         Cmd.none
     | Msg.AclSearchRequest x ->
         let cmd = Commands.searchAclRefValues token x
-        model, cmd
+        { model with SearchIsInFlight = true }, cmd
+    | Msg.AclSearchResponse(Error e) ->
+        eprintfn "AclSearchResponse: %A" e
+        { model with SearchIsInFlight = false }, Cmd.none
 
     | Msg.AclSearchResponse(Ok aclSearchResult) ->
         aclSearchResult.Data.Results
@@ -266,16 +270,7 @@ let update token (aclTypes: Map<AclName, AclType>) msg model : Model * Cmd<Msg> 
         |> fun x -> (x.Search, x.Results |> List.ofArray)
         |> App.Global.AclSearchResponse.addValue aclSearchResult.AclName
 
-        model, Cmd.none
-    // | Msg.AclParamSelection aclRefId ->
-    //     // should this change both focused acl and the map?
-    //     match model |> MLens.getFocusedAclType with
-    //     | None ->
-    //         eprintfn "AclParam selected without a focused item"
-    //         model, Cmd.none
-    //     | Some fa ->
-    //         model |> MLens.updateAclParam fa aclRefId
-    //         model, Cmd.none
+        { model with SearchIsInFlight = false }, Cmd.none
 
     | Msg.AclSelection(Some aclName) ->
         {
@@ -306,6 +301,7 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
         ResolvedAclStore =
             props.ResolvedAclStoreOpt
             |> Option.defaultWith (fun () -> Map.empty |> Store.make)
+        SearchIsInFlight = false
         // aclState:
         // Original: Set<AclRefId> option
         // Next: Lazy<IStore<Set<AclRefId>>>
@@ -444,40 +440,49 @@ module Renderers =
     // all reference params at least at this time, are searchable
     let renderReferenceParams
         (aclType: AclType)
-        (searchStore: IStore<string>, aclStateStore: IReadOnlyStore<AclState>)
+        (searchStore: IStore<string>, searchInFlight: System.IObservable<bool>, aclStateStore: IReadOnlyStore<AclState>)
         (dispatch: Msg -> unit)
         =
         Html.div [
             Html.form [
 
-                formFieldAddons [] [
-                    textInput
-                        {
-                            Titling = "Search"
-                            Value = searchStore
-                            OnChange = (fun v -> searchStore.Update(fun _ -> v))
-                            DebounceOverride = None
-                        }
-                        [
+                Bind.el (
+                    searchInFlight,
+                    fun isInFlight ->
+                        formFieldAddons [] [
+                            textInput
+                                {
+                                    Titling = "Search"
+                                    Value = searchStore
+                                    OnChange = (fun v -> searchStore.Update(fun _ -> v))
+                                    DebounceOverride = None
+                                }
+                                [
+                                    if isInFlight then
+                                        Attr.disabled true
 
-                        ]
-                    tButton "Search" None Submit [
-                        // text "Search Icons"
-                        tryIcon (IconSearchType.MuiIcon "Search")
-                        onClick
-                            (fun _ ->
-                                match searchStore.Value with
-                                | ValueString v ->
-                                    Msg.AclSearchRequest {
-                                        AclName = aclType.Name
-                                        SearchText = String.trim v
-                                        Max = None
-                                    }
-                                    |> dispatch
-                                | _ -> eprintfn "Search attempt with no value")
-                            [ EventModifier.PreventDefault ]
-                    ]
-                ] []
+                                ]
+                            tButton "Search" None Submit [
+                                // text "Search Icons"
+                                tryIcon (IconSearchType.MuiIcon "Search")
+                                if isInFlight then
+                                    Attr.disabled true
+                                else
+                                    onClick
+                                        (fun _ ->
+                                            match searchStore.Value with
+                                            | ValueString v ->
+                                                Msg.AclSearchRequest {
+                                                    AclName = aclType.Name
+                                                    SearchText = String.trim v
+                                                    Max = None
+                                                }
+                                                |> dispatch
+                                            | _ -> eprintfn "Search attempt with no value")
+                                        [ EventModifier.PreventDefault ]
+                            ]
+                        ] []
+                )
             ]
             Html.div [
                 Html.ul [
@@ -626,9 +631,12 @@ module Renderers =
 
                                 { model with ItemAcls = next }
 
-                            store |> Store.mapStore "aclInterfaceStore" true (getter, setter)
+                            store |> Store.mapStore "aclInterfaceStore" true getter setter
 
-                        renderReferenceParams aclType (sStore, pStore) dispatch
+                        renderReferenceParams
+                            aclType
+                            (sStore, store |> Store.map (fun model -> model.SearchIsInFlight), pStore)
+                            dispatch
             )
 
         let renderToggleButton () =
