@@ -35,7 +35,7 @@ type private Msg =
     | AclSearchResponse of Result<AclSearchResult, ErrorType>
     | AclParamResolveRequest of AclRefLookup
     | AclParamResolveResponse of AclName * Result<NavAclResolveResponse, ErrorType>
-    | AclToggle of AclType option
+    | AclToggle of AclType
     | AclParamSelection of AclRefId
 
 module private Commands =
@@ -68,11 +68,13 @@ module private Commands =
         |> Cmd.map Msg.AclSearchResponse
 
 let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: Model) : Model * Cmd<Msg> =
-    printfn "AdminAclEditor update: %A"
+    printfn "AclTypeEditor update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
     | Msg.AclToggle x ->
+        printfn "Toggling %A" x
+
         aclParams.Update (function
             | None -> Some Set.empty
             | Some _ -> None)
@@ -124,6 +126,11 @@ module private Renderers =
     }
     // all reference params at least at this time, are searchable
     let renderReferenceParams (props: ReferenceParamsProps) (dispatch: Msg -> unit) =
+        props.CurrentParamsStore.Value
+        |> function
+            | None -> printfn "Render ref p with None"
+            | Some s -> Set.count s |> printfn "Render ref p with %i"
+
         Html.div [
             Html.form [
 
@@ -199,7 +206,7 @@ module private Renderers =
                                    lookupMap
                                    |> Store.map (
                                        Map.tryFind ari
-                                       >> Option.map _.DisplayName
+                                       >> Option.map (fun v -> v.DisplayName)
                                        >> Option.defaultValue (AclRefId.getText ari)
                                    )
 
@@ -226,14 +233,6 @@ module private Renderers =
                         }
                         (Map.tryFind props.AclType.Name >> Option.defaultValue Map.empty)
 
-                let ralLookup =
-                    App.Global.resolvedAclLookup
-                    |> Store.mapRStore
-                        {
-                            UseEquality = true
-                            DebugTitle = None
-                        }
-                        (Map.tryFind props.AclType.Name >> Option.defaultValue Map.empty)
 
                 columns2 [] [
                     Html.h2 [ text "Has" ]
@@ -242,12 +241,19 @@ module private Renderers =
                         props.CurrentParamsStore,
                         fun currentParams ->
 
+
+
                             match currentParams with
-                            | None -> Html.div []
+                            | None ->
+                                printfn "Render Has with None"
+                                Html.div []
                             | Some p ->
-                                Html.div [
+                                Set.count p |> printfn "Render Has with: %i"
+
+                                Html.ul [
+                                    // TODO: this needs to be sorted by observable results
                                     for aclRefId in p do
-                                        renderAclParams (currentParams, ralLookup) (Choice1Of2 aclRefId)
+                                        Html.li [ renderAclParams (currentParams, rapRStore) (Choice1Of2 aclRefId) ]
                                 ]
                     )
 
@@ -257,7 +263,7 @@ module private Renderers =
                     // unselected items - based on the lookup of this acl name, or based on the search results? uh oh
                     Bind.el2 props.CurrentParamsStore props.SearchResults (fun (currentParams, searchResults) ->
                         let cp = currentParams |> Option.defaultValue Set.empty
-                        let lookupMap = ralLookup
+                        let lookupMap = rapRStore
 
                         Html.ul [
                             for ad in searchResults |> List.filter (fun ad -> cp |> Set.contains ad.Reference |> not) do
@@ -348,10 +354,6 @@ let renderAclTypeEditor (props: AclTypeEditorProps) =
     let store, dispatch =
         props |> Store.makeElmish init (update props.Token props.AclParams) ignore
 
-    let updateAcl aclType =
-        // store.Value |> MLens.updateAcl props.AclType aclChangeType
-        Msg.AclToggle aclType |> dispatch
-
     // account for multiples?
     let renderParamSelector (aclType: AclType) =
         // selector if not searchable
@@ -404,17 +406,16 @@ let renderAclTypeEditor (props: AclTypeEditorProps) =
             let isPresent = Option.isSome pOpt
             let text, icon = if isPresent then removeText, "Remove" else addText, "Add"
             // shouldn't this grab the old params if it was previously set to remove, thereby restoring it
-            let onClickValue = if isPresent then None else Some props.AclType
 
-            printfn "onClickValue: %A" onClickValue
+            // printfn "onClickValue: %A" onClickValue
 
             tButton "Toggle Acl" None ButtonType.Submit [
                 data_ "button-purpose" text
                 tryIcon (IconSearchType.MuiIcon icon)
                 onClick
                     (fun _ ->
-                        printfn "I've been clicked: %A" onClickValue
-                        onClickValue |> updateAcl)
+                        printfn "I've been clicked for toggle: %A" props.AclType.Name
+                        props.AclType |> Msg.AclToggle |> dispatch)
                     []
             ])
 

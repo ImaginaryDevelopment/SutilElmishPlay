@@ -953,7 +953,6 @@ let view token =
                         function
                         | None -> Html.div [ text "Loading..." ]
                         | Some(Ok items) ->
-                            printfn "Render view left column"
 
                             viewLeftNav items selectedItemStore dispatch
 
@@ -976,7 +975,6 @@ let view token =
                         match parent with
                         | None -> emptyDiv
                         | Some parent ->
-                            printfn "Render children"
 
                             Html.div [
                                 Attr.classes [ "column"; if hasItem then " is-9" else " is-9" ]
