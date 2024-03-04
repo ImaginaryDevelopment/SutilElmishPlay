@@ -284,6 +284,12 @@ type StoreOptions = {
     DebugTitle: string option
 }
 
+type PropertyPair<'t, 't2> = {
+    Getter: 't -> 't2
+    // next value -> (parent,oldValue) -> nextParent
+    Setter: 't2 -> 't * 't2 -> 't
+}
+
 module Store =
     let mapRStore storeOptions (getter: 't -> 't2) (store: IReadOnlyStore<'t>) =
         // let mutable value = getter store.Value
@@ -314,7 +320,7 @@ module Store =
         }
 
     // should this be updated to distinct until changed
-    let mapStore title useEquality (getter: 't -> 't2) (setter: 't2 -> 't * 't2 -> 't) (store: IStore<'t>) =
+    let mapStore title useEquality (propertyPair: PropertyPair<'t, 't2>) (store: IStore<'t>) =
         let mutable name = store.Name + "." + title
 
         { new IStore<'t2> with
@@ -325,7 +331,7 @@ module Store =
                     store |> Observable.distinctUntilChanged
                 else
                     store
-                |> Observable.subscribe (getter >> x.OnNext)
+                |> Observable.subscribe (propertyPair.Getter >> x.OnNext)
 
             member _.Name
                 with get () = name
@@ -333,21 +339,22 @@ module Store =
 
             member _.Update f =
                 store.Update(fun oldValue ->
-                    let oldChild = getter oldValue
+                    let oldChild = propertyPair.Getter oldValue
                     let nextChild = f oldChild
-                    let next = setter nextChild (oldValue, oldChild)
+                    let next = propertyPair.Setter nextChild (oldValue, oldChild)
                     next)
 
-            member _.Value = getter store.Value
+            member _.Value = propertyPair.Getter store.Value
             member _.Dispose() = store.Dispose()
 
         // Update=(fun oldValue -> setter oldValue)
         }
 
-    let chooseStore title useEquality getter setter init store =
-        store
-        |> mapStore title useEquality (getter >> Option.defaultValue init) (Some >> setter)
+// let chooseStore title useEquality propertyPair init store =
+//     let pp = {Getter=propertyPair.Getter >> Option.defaultValue init; Setter= Some >> propertyPair.Setter}
+//     store
+//     |> mapStore title useEquality (getter >> Option.defaultValue init) (Some >> setter)
 
-    let chooseRStore storeOptions getter init store =
-        store
-        |> mapRStore storeOptions (fun parent -> getter parent |> Option.defaultValue init)
+// let chooseRStore storeOptions getter init store =
+//     store
+//     |> mapRStore storeOptions (fun parent -> getter parent |> Option.defaultValue init)

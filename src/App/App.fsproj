@@ -24,6 +24,7 @@
     <Compile Include="Components/IconEditor.fs" />
     <Compile Include="Components/NavShared.fs" />
     <Compile Include="Components/Diag.fs" />
+    <Compile Include="Components/Admin/AclTypeEditor.fs" />
     <Compile Include="Components/Admin/AclEditor.fs" />
     <Compile Include="Components/Admin/NavUI.fs" />
     <Compile Include="Components/Admin/AdminExplorer.fs" />

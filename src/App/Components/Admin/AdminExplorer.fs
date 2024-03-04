@@ -891,7 +891,8 @@ let view token =
             printfn "Setting selected item: %A -> %A" (getValueDisplay oldValue) (getValueDisplay nextValue)
             { model with Item = nextValue }
 
-        store |> Store.mapStore "AESelectedItem" true getter setter
+        store
+        |> Store.mapStore "AESelectedItem" true { Getter = getter; Setter = setter }
 
     let dispose =
         selectedItemStore.Subscribe(fun value -> printfn "SelectedItemChanged to: %A" (getValueDisplay value))

@@ -22,6 +22,7 @@ type SaveResult = SaveType * NavItem
 type Model = {
     // NavItem: NavItem
 
+    // a copy of the item from props used for saving
     Item: NavItem
     Acls: (AclData * AclType) list
     SaveStatus: RemoteData<SaveResult>
@@ -308,10 +309,14 @@ let view token (props: NavUIProps) =
             CardContentType.Content [
                 let iconValueStore =
                     store
-                    |> Store.mapStore "iconValueStore" true (fun v -> v.Item.Icon) (fun iconValue (model, _) -> {
-                        model with
-                            Item = { model.Item with Icon = iconValue }
-                    })
+                    |> Store.mapStore "iconValueStore" true {
+                        Getter = fun v -> v.Item.Icon
+                        Setter =
+                            fun iconValue (model, _) -> {
+                                model with
+                                    Item = { model.Item with Icon = iconValue }
+                            }
+                    }
 
                 App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore } (function
                     | App.Components.IconEditor.Accepted nextIcon ->
@@ -323,12 +328,25 @@ let view token (props: NavUIProps) =
         card [
             CardContentType.Header(text "Acl Explorer")
             CardContentType.Content [
+                let iaStore =
+                    store
+                    |> Store.mapStore "iaStore" true {
+                        Getter = (fun model -> model.Item.AclRefs |> Map.map (fun _ -> Set.map AclRefId))
+                        Setter =
+                            (fun ar (model, _) -> {
+                                model with
+                                    Item = {
+                                        model.Item with
+                                            AclRefs = ar |> Map.map (fun _ -> Set.map AclRefId.getText)
+                                    }
+                            })
+                    }
+
                 App.Components.Admin.AclEditor.render {
                     Token = token
                     AclTypes = props.AclTypes // AclType seq
-                    ItemAcls = props.Item.AclRefs // NavItemAclRefsMap
+                    ItemAcls = iaStore
                     ResolvedAclStoreOpt = None
-
                 }
 
             ]
