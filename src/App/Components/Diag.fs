@@ -30,6 +30,24 @@ type Model = {
     AclParamSearchInput: AclRefValueArgs
 }
 
+let dummyData: NavItem[] =
+    Array.ofList [
+        {
+            Id = NavId "1"
+            Path = "Path"
+            Parent = "Parent"
+            Type = Link
+            Name = "Name"
+            Description = "Description"
+            Enabled = false
+            Icon = "user"
+            Weight = 0
+            Url = "url"
+            HasUrlKey = false
+            AclRefs = Map.empty
+        }
+    ]
+
 [<RequireQualifiedAccess>]
 module private MLens =
     let getAppMode x = x.AppMode
@@ -103,7 +121,7 @@ let updateNavRoot, viewNavRoot =
                 | ConfigType.Auth token ->
                     App.Adapters.Api.Mapped.NavItems.getNavRoot token ()
                     |> Async.map (Result.mapError Choice2Of2)
-                | ConfigType.Demo -> Async.ofValue (Ok Root.dummyData)
+                | ConfigType.Demo -> Async.ofValue (Ok dummyData)
         }
 
     let view =

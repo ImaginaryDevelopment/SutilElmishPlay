@@ -214,7 +214,7 @@ module Array =
     let updateI i fUpdate items =
         if i < 0 then
             Error "Bad index"
-        elif i >= i then
+        elif i >= Array.length items then
             Error "Index out of bounds"
         else
             items |> Array.mapi (fun x item -> if i <> x then item else fUpdate item) |> Ok

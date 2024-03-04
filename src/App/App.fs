@@ -190,14 +190,6 @@ let view () =
                             | Demo -> App.Components.Admin.Explorer.Samples.view ())
                 }
                 {
-                    Label = "Admin"
-                    Value = 1
-                    Component =
-                        mustAuthEl "AdminTab" model (function
-                            | Auth(ai, token) -> App.Components.Root.view (Auth token.accessToken)
-                            | Demo -> App.Components.Root.view Demo)
-                }
-                {
                     Label = "Diag"
                     Value = 2
                     Component =

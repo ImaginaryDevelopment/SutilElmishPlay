@@ -532,9 +532,11 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     match msg with
     | Msg.AclTypeResponse(Ok v) -> { model with AclTypes = v }, Cmd.none
     | Msg.AclTypeResponse(Error e) -> model |> MLens.addChcError "AclTypeResponse Error" e |> justModel
-    | Msg.Saved(st, nextItem) ->
+    | Msg.Saved(st: SaveType, nextItem) ->
         // assume folders are root, and links are children
         // what if this is a successful create?
+        printfn "Save complete, attempting explorer update"
+
         match nextItem, st, model.Items with
         | UpdateFolder(x, items) ->
             printfn "Folder saved, updating"
@@ -573,18 +575,24 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
                 | Error e -> model |> MLens.addError e, Cmd.none
 
         | UpdateItem(childStore, (children, expanded), i) ->
-            printfn "AdminExplorer updateItem"
+            printfn "AdminExplorer updateItem: %i(%i) %A-%s" i children.Length nextItem.Id nextItem.Icon
             // update children, use them to update parent store directly (no model change needed)
             children
-            |> Array.updateI i (fun _ -> nextItem)
+            |> Array.updateI i (fun oldValue ->
+                printfn "UpdateItem: %i from %A-%s to %A-%s" i oldValue.Id oldValue.Icon nextItem.Id nextItem.Icon
+                nextItem)
             |> function
                 | Ok nextItems ->
+                    // this isn't updating the explorer somehow, try updating the model below
                     MLens.updateChildStore childStore (nextItems, expanded)
+
+                    // {model with ItemAcls = model.ItemAcls |> Array.updateI }
                     model |> MLens.unselectItem, Cmd.none
-                | Error e -> model |> MLens.addError e, Cmd.none
+                | Error e ->
+                    eprintfn "Error updating item in explorer: %A" e
+                    model |> MLens.addError e, Cmd.none
 
         | InvalidSave e -> model |> MLens.addError e, Cmd.none
-
 
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
