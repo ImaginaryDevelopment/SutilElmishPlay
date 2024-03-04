@@ -485,37 +485,76 @@ module Renderers =
                 )
             ]
             Html.div [
-                Html.ul [
-                    for KeyValue(k, v) in
-                        App.Global.resolvedAclLookup.Value
-                        |> Map.tryFind aclType.Name
-                        |> Option.defaultValue Map.empty do
-                        Html.li [
-                            Bind.el (
-                                aclStateStore,
-                                fun p ->
-                                    Html.a[let isSelected =
-                                               match p.AclOriginalState, p.Next with
-                                               | _, Some(ToUpsert v) -> Some v
-                                               | _, Some ToRemove -> None
-                                               | WasPresent v, _ -> Some v
-                                               | WasNotPresent, _ -> None
-                                               |> Option.map (Set.contains k)
-                                               |> Option.defaultValue false
+                let renderAcl (aclState: AclState, lookupMap: Map<AclRefId, AclDisplay>) aclRefId =
+                    let currentParams =
+                        match aclState.AclOriginalState, aclState.Next with
+                        | _, Some(ToUpsert v) -> Some v
+                        | _, Some ToRemove -> None
+                        | WasPresent v, _ -> Some v
+                        | WasNotPresent, _ -> None
 
+                    let isSelected =
+                        currentParams |> Option.map (Set.contains aclRefId) |> Option.defaultValue false
 
-                                           Attr.title <| AclRefId.getText k
-                                           text v.DisplayName
-                                           Attr.className (if isSelected then "is-active" else "")
+                    let aclDisplayOpt =
+                        lookupMap |> Map.tryFind aclRefId |> Option.map (fun v -> v.DisplayName)
 
+                    let aclDisplay =
+                        aclDisplayOpt |> Option.defaultWith (fun () -> AclRefId.getText aclRefId)
 
-                                           onClick
-                                               (fun _ ->
-                                                   printfn "Search item selected: %s" <| v.DisplayName
-                                                   Msg.AclParamSelection(aclType, p, k) |> dispatch)
-                                               []]
-                            )
-                        ]
+                    Html.a[Attr.title <| AclRefId.getText aclRefId
+                           text aclDisplay
+                           Attr.className (if isSelected then "is-active" else "has-text-danger")
+
+                           onClick
+                               (fun _ ->
+                                   printfn "Search item selected: %s" aclDisplay
+                                   Msg.AclParamSelection(aclType, aclState, aclRefId) |> dispatch)
+                               []]
+
+                let ralLookup =
+                    App.Global.resolvedAclLookup
+                    |> Store.map (Map.tryFind aclType.Name >> Option.defaultValue Map.empty)
+
+                columns2 [] [
+                    Html.h2 [ text "Has" ]
+                    // selected items
+                    Bind.el2 aclStateStore ralLookup (fun (aclState, lookupMap) ->
+                        let currentParams =
+                            match aclState.AclOriginalState, aclState.Next with
+                            | _, Some(ToUpsert v) -> Some v
+                            | _, Some ToRemove -> None
+                            | WasPresent v, _ -> Some v
+                            | WasNotPresent, _ -> None
+
+                        match currentParams with
+                        | None -> Html.div []
+                        | Some p ->
+                            Html.div [
+                                for aclRefId in p do
+                                    renderAcl (aclState, lookupMap) aclRefId
+                            ])
+
+                ] [
+                    Html.h2 [ text "Available" ]
+                    // HACK: this is looking at all search results, not just current search results
+                    // unselected items - based on the lookup of this acl name, or based on the search results? uh oh
+                    Bind.el2 aclStateStore ralLookup (fun (aclState, lookupMap) ->
+                        let currentParams =
+                            match aclState.AclOriginalState, aclState.Next with
+                            | _, Some(ToUpsert v) -> Some v
+                            | _, Some ToRemove -> None
+                            | WasPresent v, _ -> Some v
+                            | WasNotPresent, _ -> None
+
+                        Html.ul [
+                            for KeyValue(k, v) in
+                                lookupMap
+                                |> Map.filter (fun aclRefId _ ->
+                                    currentParams |> Option.defaultValue Set.empty |> Set.contains aclRefId |> not) do
+                                Html.li [ renderAcl (aclState, lookupMap) k ]
+                        ])
+
                 ]
 
             ]

@@ -601,12 +601,14 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
                 Item = Some(SelectedItemState.ChildSelected(parent, NavItem.CreateEmpty <| Some parent.NavItem.Path))
         },
         Cmd.none
+
     | Msg.StartNewRequested(None) ->
         {
             model with
                 Item = Some(FolderSelected(NewFolder(NavItem.CreateEmpty None)))
         },
         Cmd.none
+
     | Msg.DeleteRequested(Choice1Of2 { NavItem = ni })
     | Msg.DeleteRequested(Choice2Of2 ni) -> model, Cmd.deleteItem model.Token ni
     | Msg.RootResponse(Ok v) ->
