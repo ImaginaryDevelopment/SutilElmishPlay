@@ -33,25 +33,10 @@ type Model = {
 type private Msg =
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResponse of Result<AclSearchResult, ErrorType>
-    | AclParamResolveRequest of AclRefLookup
-    | AclParamResolveResponse of AclName * Result<NavAclResolveResponse, ErrorType>
     | AclToggle of AclType
     | AclParamSelection of AclRefId
 
 module private Commands =
-    let getAclResolved token req =
-        let f x =
-            async {
-                let! resp = Api.Shared.getAclReferenceDisplay token x
-
-                match resp with
-                | Ok v -> return Ok v
-                | Error e -> return Error e
-            }
-
-        Cmd.OfAsync.either f req id (fun ex -> Choice2Of2 ex |> Error)
-        |> Cmd.map (fun v -> Msg.AclParamResolveResponse(req.AclName, v))
-
     // HACK: this does not properly register with global as an inflight deal, nor check if one is already in flight
     // and neither did any other code in this app apparently
     let searchAclRefValues token req : Cmd<Msg> =
@@ -80,6 +65,7 @@ let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: M
             | Some _ -> None)
 
         model, Cmd.none
+
     | Msg.AclParamSelection(aclRefId) ->
         aclParams.Update (function
             | None -> Some(Set.singleton aclRefId)
@@ -93,9 +79,11 @@ let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: M
                     p |> Set.add aclRefId |> Some)
 
         model, Cmd.none
+
     | Msg.AclSearchRequest x ->
         let cmd = Commands.searchAclRefValues token x
         { model with SearchIsInFlight = true }, cmd
+
     | Msg.AclSearchResponse(Error e) ->
         eprintfn "AclSearchResponse: %A" e
         { model with SearchIsInFlight = false }, Cmd.none
@@ -148,7 +136,6 @@ module private Renderers =
                                 [
                                     if isInFlight then
                                         Attr.disabled true
-
                                 ]
                             tButton "Search" None Submit [
                                 // text "Search Icons"
@@ -172,12 +159,17 @@ module private Renderers =
                         ] []
                 )
             ]
+
             Html.div [
                 let renderAclParams
-                    (aclState: Set<AclRefId> option, lookupMap: IReadOnlyStore<Map<AclRefId, AclDisplay>>)
+                    (currentParams: Set<AclRefId> option, lookupMap: IReadOnlyStore<Map<AclRefId, AclDisplay>>)
                     (aclRefIdentifier: Choice<AclRefId, AclDisplay>)
                     =
-                    let currentParams = aclState
+                    currentParams
+                    |> Option.defaultValue Set.empty
+                    |> Set.count
+                    |> printfn "render AclParams-%i params- '%A'"
+                    |> fun f -> f aclRefIdentifier
 
                     let aclRefId =
                         aclRefIdentifier
@@ -202,13 +194,21 @@ module private Renderers =
                            match aclRefIdentifier with
                            | Choice2Of2 ad -> text ad.DisplayName
                            | Choice1Of2 ari ->
+                               printfn "Creating deferred display for %A" ari
+
                                let textObs =
                                    lookupMap
-                                   |> Store.map (
-                                       Map.tryFind ari
-                                       >> Option.map (fun v -> v.DisplayName)
-                                       >> Option.defaultValue (AclRefId.getText ari)
-                                   )
+                                   |> Store.map (fun lm ->
+                                       //    printfn "textObs: %i" lm.Count
+
+                                       let next =
+                                           lm
+                                           |> Map.tryFind ari
+                                           |> Option.map (fun v -> v.DisplayName)
+                                           |> Option.defaultValue (AclRefId.getText ari)
+
+                                       //    printfn "Value changed: %A - %s" ari next
+                                       next)
 
                                Bind.fragment textObs text
 
@@ -228,10 +228,13 @@ module private Renderers =
                     App.Global.resolvedAclLookup
                     |> Store.mapRStore
                         {
-                            UseEquality = true
+                            UseEquality = false
                             DebugTitle = None
                         }
-                        (Map.tryFind props.AclType.Name >> Option.defaultValue Map.empty)
+                        (fun v ->
+                            let next = v |> Map.tryFind props.AclType.Name |> Option.defaultValue Map.empty
+                            // printfn "rapRStore update %i - %A: %i" v.Count props.AclType.Name next.Count
+                            next)
 
 
                 columns2 [] [
@@ -242,13 +245,12 @@ module private Renderers =
                         fun currentParams ->
 
 
-
                             match currentParams with
                             | None ->
-                                printfn "Render Has with None"
+                                // printfn "Render Has with None"
                                 Html.div []
                             | Some p ->
-                                Set.count p |> printfn "Render Has with: %i"
+                                // Set.count p |> printfn "Render Has with: %i"
 
                                 Html.ul [
                                     // TODO: this needs to be sorted by observable results
@@ -358,43 +360,35 @@ let renderAclTypeEditor (props: AclTypeEditorProps) =
     let renderParamSelector (aclType: AclType) =
         // selector if not searchable
         // search and selector if searchable
-        Bind.el (
-            App.Global.resolvedAclLookup
-            |> Store.map (Map.tryFind aclType.Name >> Option.defaultValue Map.empty),
-            fun resolvedAclLookup ->
-                printfn "renderParamSelector"
+        printfn "renderParamSelector"
 
-                match aclType.AclParamType with
-                | AclParameterType.None -> Html.div [ Attr.title "No Params" ]
-                | AclParameterType.Selectable items ->
-                    // this might need to be the same as the reference one
+        match aclType.AclParamType with
+        | AclParameterType.None -> Html.div [ Attr.title "No Params" ]
+        | AclParameterType.Selectable items ->
+            // this might need to be the same as the reference one
 
-                    Renderers.renderSelectableParams aclType items props.AclParams dispatch
-                | AclParameterType.Reference _searchable ->
-                    let srRStore =
-                        store
-                        |> Store.mapRStore
-                            {
-                                UseEquality = true
-                                DebugTitle = None
-                            }
-                            (fun model -> model.SearchResults)
+            Renderers.renderSelectableParams aclType items props.AclParams dispatch
+        | AclParameterType.Reference _searchable ->
+            let srRStore =
+                store
+                |> Store.mapRStore
+                    {
+                        UseEquality = true
+                        DebugTitle = None
+                    }
+                    (fun model -> model.SearchResults)
 
-                    let sfObs = store |> Store.map (fun model -> model.SearchIsInFlight)
+            let sfObs = store |> Store.map (fun model -> model.SearchIsInFlight)
 
-                    Renderers.renderReferenceParams
-                        {
-                            SearchInFlight = sfObs
-                            AclType = aclType
-                            SearchStore = sStore
-                            SearchResults = srRStore
-                            CurrentParamsStore = props.AclParams
-                        }
-                        dispatch
-        // aclType
-        // (sStore, store |> Store.map (fun model -> model.SearchIsInFlight), props.AclParams)
-        // dispatch
-        )
+            Renderers.renderReferenceParams
+                {
+                    SearchInFlight = sfObs
+                    AclType = aclType
+                    SearchStore = sStore
+                    SearchResults = srRStore
+                    CurrentParamsStore = props.AclParams
+                }
+                dispatch
 
     // toggle the acl itself, not a param
     let renderToggleButton () =

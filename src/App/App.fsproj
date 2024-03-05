@@ -20,7 +20,6 @@
     <Compile Include="Init.fs" />
     <Compile Include="Global.fs" />
     <Compile Include="Components/Gen.fs" />
-    <Compile Include="Components/AclEditor.fs" />
     <Compile Include="Components/IconEditor.fs" />
     <Compile Include="Components/NavShared.fs" />
     <Compile Include="Components/Diag.fs" />

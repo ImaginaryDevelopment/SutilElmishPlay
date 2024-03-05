@@ -162,7 +162,7 @@ let getAclReferenceDisplay
         AclType = aclType
         AclRefId = AclRefId aclRefId
     }
-    =
+    : Async<Result<_, Choice<string[], exn>>> =
     match aclType with
     | AclParameterType.Reference _ ->
         fetchJson<NavAclResolveResponse>
@@ -174,17 +174,31 @@ let getAclReferenceDisplay
             }
             List.empty
         |> Async.map (
-            Result.map (fun narResp ->
-                if narResp.Errors |> Array.isEmpty |> not then
-                    narResp.Errors
-                    |> Array.iter (fun e ->
+            Result.mapError (fun x -> Choice2Of2 x)
+            >> Result.bind (fun narResp ->
+                // account for one or both properties being empty
+                let resolved, errors =
+                    narResp.Resolved, narResp.Errors |> Option.defaultValue Array.empty |> List.ofArray
+
+                if errors |> List.isEmpty |> not then
+                    errors
+                    |> Seq.iter (fun e ->
                         eprintfn $"Resolve '%s{aclName}' error: '%A{e.AdditionalInfo}'"
                         Core.log e)
 
-                narResp.Resolved
-                |> Array.iter (fun r -> printfn $"Resolved %s{aclName} - '%s{r.DisplayName}' from '%A{r.Reference}'")
+                resolved
+                |> Option.iter (fun r -> printfn $"Resolved %s{aclName} - '%s{r.DisplayName}' from '%A{r.Reference}'")
 
-                narResp)
+                let result =
+                    match resolved with
+                    | None ->
+                        errors
+                        |> Seq.map (fun v -> v.Error.Message)
+                        |> Array.ofSeq
+                        |> Choice1Of2
+                        |> Error
+                    | Some r -> Ok r
+
+                result)
         )
-        |> Async.map (Result.mapError Choice2Of2)
     | _ -> Async.ofValue (Error <| Choice1Of2 [| "Type is not a reference type" |])

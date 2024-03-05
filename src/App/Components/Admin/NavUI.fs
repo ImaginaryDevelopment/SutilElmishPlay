@@ -24,7 +24,7 @@ type Model = {
 
     // a copy of the item from props used for saving
     Item: NavItem
-    Acls: (AclData * AclType) list
+    // Acls: (AclData * AclType) list
     SaveStatus: RemoteData<SaveResult>
 }
 
@@ -39,6 +39,7 @@ module Style =
         [
             rule ".fill" [ Css.width (percent 100); Css.height (percent 100) ]
             rule ".card" [ Css.marginBottom (px 10) ]
+            rule ".save-button" [ Css.displayInlineBlock; Css.paddingLeft (px 10) ]
         // rule ".full-overlay" [
         ]
 
@@ -47,7 +48,6 @@ module Style =
 type Msg =
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResolve of Result<AclSearchResult, exn>
-    | AclParamResolveRequest of AclRefLookup
     | SaveRequest
     | SaveResponse of Result<SaveResult, ErrorType>
 
@@ -92,7 +92,7 @@ let init token item () =
 
     {
         Item = item
-        Acls = List.empty
+        // Acls = List.empty
         SaveStatus = NotRequested
     // Focus = FocusType.Creator NameFocus
     },
@@ -113,6 +113,9 @@ let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model
         model, cmd
 
     | SaveRequest -> { model with SaveStatus = InFlight }, Commands.save token model.Item
+    | SaveResponse(Error e) ->
+        eprintfn "Failed save: %A" e
+        model, Cmd.none
     | SaveResponse(Ok sr) ->
         onSave sr
         model, Cmd.none
@@ -181,8 +184,6 @@ let view token (props: NavUIProps) =
     let store, dispatch =
         () |> Store.makeElmish (init token item) (update token props.Saved) ignore
 
-    let resolvedAcls = List.empty |> Store.make
-
     // AclTypes: IReadOnlyStore<AclType seq>
     // consider letting a parent manage this
 
@@ -227,10 +228,13 @@ let view token (props: NavUIProps) =
                     |> tryIcon
             )
             text store.Value.Item.Name
-            bButton "Save" [
-                tryIcon (IconSearchType.MuiIcon "Save")
-                // text "Save"
-                onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+            Html.divc "save-button" [
+
+                bButton "Save" [
+                    tryIcon (IconSearchType.MuiIcon "Save")
+                    // text "Save"
+                    onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+                ]
             ]
         ]
 

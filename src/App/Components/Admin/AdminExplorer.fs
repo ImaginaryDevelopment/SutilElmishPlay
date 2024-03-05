@@ -532,6 +532,12 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     match msg with
     | Msg.AclTypeResponse(Ok v) -> { model with AclTypes = v }, Cmd.none
     | Msg.AclTypeResponse(Error e) -> model |> MLens.addChcError "AclTypeResponse Error" e |> justModel
+    | Msg.DeleteResponse(Error e) ->
+        eprintfn "Failed to delete: %A" e
+        model, Cmd.none
+    | Msg.DeleteResponse(Ok v) ->
+        // reload root?
+        model, Cmd.getRootItems model.Token
     | Msg.Saved(st: SaveType, nextItem) ->
         // assume folders are root, and links are children
         // what if this is a successful create?

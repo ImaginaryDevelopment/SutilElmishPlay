@@ -9,36 +9,53 @@ let resolvedAclLookup: IStore<ResolvedAclLookup> = Store.make Map.empty
 // let aclSearchResult: IStore<
 
 module ResolvedAclLookup =
+    // Map<AclName, Map<AclRefId, AclDisplay>>
+    let printRalDiagnostics title (m: ResolvedAclLookup) =
+        use _ = Core.logGroup (Some title)
+        printfn "%s: Map" title
+
+        m
+        |> Map.keys
+        |> Seq.iter (fun k -> printfn "%s: %i" (AclName.getText k) <| Map.count m[k])
+
     // does not check if the value changed, fires notification anyhow
-    let addValue aclName aclRefId display : unit =
-        let nextValue: ResolvedAclLookup =
-            let m =
-                resolvedAclLookup.Value
+    let addValue aclName (display: AclDisplay) : unit =
+        resolvedAclLookup.Update(fun m ->
+            printRalDiagnostics "RBeforeAdd" m
+
+            let nextValue =
+                m
                 |> Map.change
                     aclName
                     ((function
                      | None -> Map.empty
                      | Some m -> m)
-                     >> Map.change aclRefId (function
+                     >> Map.change display.Reference (function
                          | Some display -> Some display
                          | None -> Some display)
                      >> Some)
 
-            m
+            printRalDiagnostics "RAfterAdd" nextValue
+            nextValue)
 
-        nextValue |> Store.set resolvedAclLookup
 
     // does not check if the value changed, fires notification anyhow
     let addValues aclName pairs : unit =
-        resolvedAclLookup.Value
-        |> Map.change
-            aclName
-            (Option.defaultValue Map.empty
-             >> fun m ->
-                 (m, pairs)
-                 ||> Seq.fold (fun m (aclRefId, display) -> m |> Map.add aclRefId display)
-                 |> Some)
-        |> Store.set resolvedAclLookup
+        resolvedAclLookup.Update(fun m ->
+            printRalDiagnostics "RBeforeAdd" m
+
+            let next =
+                m
+                |> Map.change
+                    aclName
+                    (Option.defaultValue Map.empty
+                     >> fun m ->
+                         (m, pairs)
+                         ||> Seq.fold (fun m (aclRefId, display) -> m |> Map.add aclRefId display)
+                         |> Some)
+
+            printRalDiagnostics "RAfterAdd" next
+            next)
 
 // allows one active search per acl name
 let aclSearchResponse: IStore<Map<AclName, string * AclDisplay list>> =

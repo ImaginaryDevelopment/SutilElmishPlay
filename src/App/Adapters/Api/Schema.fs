@@ -154,10 +154,10 @@ type NavAclResolveErrorResponse = {
     Error: NavAclResolveSubError
 }
 
+
 type NavAclResolveResponse = {
-    Resolved: AclDisplay[]
-    // ?
-    Errors: NavAclResolveErrorResponse[]
+    Resolved: AclDisplay option
+    Errors: NavAclResolveErrorResponse[] option
 }
 // api types that we want to restrict to mapped interactions outside of the api adapter layer
 module Raw =
@@ -169,6 +169,7 @@ module Raw =
     } with
 
         member x.AclName = AclName x.Name
+
 
     type ApiAcl = {
         Name: string // AclName: Allow-By-Group, Allow-By-User, etc...

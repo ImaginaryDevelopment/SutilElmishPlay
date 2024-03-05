@@ -22,6 +22,11 @@ open Core
 
 module Handlers = App.Adapters.Html.Handlers
 
+let diagnoseAclEditor = false
+
+let dPrintfn txt =
+    if diagnoseAclEditor then printfn "%s" txt else ()
+
 module Styling =
     open Sutil.Styling
     open type Feliz.length
@@ -49,38 +54,6 @@ module Styling =
 
     let withCss = withStyle css
 
-
-// dimensions:
-// acl is present
-// has params
-// slated changes
-// proper map would be AclName/AclType, AclType * Set option * AclExistState
-
-// type AclOriginalState =
-//     | WasNotPresent
-//     | WasPresent of Set<AclRefId>
-
-// type AclItemState =
-//     | ToUpsert of Set<AclRefId>
-//     | ToRemove
-
-// // states the display grid is concerned with
-// //
-// type AclMapState =
-//     | UnchangedPresent
-//     | Changed
-//     | Removing
-
-// type AclState = {
-//     AclOriginalState: AclOriginalState
-//     // option so we can reset pending changes
-//     Next: AclItemState option
-// }
-
-// should be exhaustive of all acl names
-// type ItemAclStore = IStore<Map<AclType, AclState>>
-
-// type ItemAclTypeStore = IStore<Map<AclRefId, AclDisplay>
 type Model = {
     ResolvedAclStore: IStore<ResolvedAclLookup>
     SearchIsInFlight: bool
@@ -94,35 +67,56 @@ type Model = {
 module MLens =
     let getErrors model = model.ErrorQueue
     let getFocusedAclType model = model.FocusedAclType
-// let makeAclStateNext value : Lazy<IStore<AclItemState>> = Lazy(fun _ -> Store.make value)
+    let setFocusedAclType fat model = { model with FocusedAclType = Some fat }
+    let clearFocusedAclType model = { model with FocusedAclType = None }
 
-// let getAclExistMap (aclState: Map<AclType, AclState>) : Map<AclType, AclMapState * Set<AclRefId>> =
-//     aclState
-//     |> Map.choose (fun aclType aclState ->
-//         match aclState.AclOriginalState, aclState.Next with
-//         | AclOriginalState.WasNotPresent, None -> None
-//         | AclOriginalState.WasPresent v, None -> Some(AclMapState.UnchangedPresent, v)
-//         | AclOriginalState.WasPresent v, Some AclItemState.ToRemove -> Some(AclMapState.Removing, v)
-//         // this case should not happen
-//         | AclOriginalState.WasNotPresent, Some ToRemove -> None
-//         | _, Some(ToUpsert v) -> Some(AclMapState.Changed, v)
-//         |> Option.map (fun x -> aclType, x))
+    let getUnresolvedParams (aclType: AclType) p =
+        if Set.count p > 0 then
+            match App.Global.resolvedAclLookup.Value |> Map.tryFind aclType.Name with
+            | Some m ->
+                let pUnresolved = p |> Set.filter (fun v -> m |> Map.containsKey v |> not)
+                dPrintfn $"Filtered %i{p.Count} to %i{pUnresolved.Count} unresolved"
+                if pUnresolved.Count > 0 then Some pUnresolved else None
+            | None ->
+                dPrintfn
+                    $"ResolvedAcls found for %A{aclType.Name} - %i{Set.count p}(%i{App.Global.resolvedAclLookup.Value.Count})"
 
-// let getAclParamsFromState (aclState: AclState) =
-//     aclState.Next
-//     |> function
-//         | Some(ToUpsert values) -> Some values
-//         | Some ToRemove -> None
-//         | None ->
-//             aclState.AclOriginalState
-//             |> function
-//                 | WasPresent v -> Some v
-//                 | _ -> None
+                Some p
+        else
+            None
+
 
 
 type Msg =
     | AclTypeSelection of AclType option
     | AclRemove of AclType
+    // | AclParamsResolveRequest of AclType * AclRefId list
+    | AclParamResolveResponse of AclName * Result<AclDisplay, ErrorType>
+
+module Commands =
+    let getAclResolved token req =
+        let f x =
+            async {
+                let! resp = Api.Shared.getAclReferenceDisplay token x
+
+                match resp with
+                | Ok v -> return Ok v
+                | Error e -> return Error e
+            }
+
+        Cmd.OfAsync.either f req id (fun ex -> Choice2Of2 ex |> Error)
+        |> Cmd.map (fun v -> Msg.AclParamResolveResponse(req.AclName, v))
+
+    let getAclsResolved token (aclType: AclType) refIds =
+        (List.empty, refIds)
+        ||> Seq.fold (fun commands refId ->
+            getAclResolved token {
+                AclName = aclType.Name
+                AclType = aclType.AclParamType
+                AclRefId = refId
+            }
+            :: commands)
+        |> Cmd.batch
 
 type AclEditorProps = {
     Token: string
@@ -131,6 +125,28 @@ type AclEditorProps = {
     ItemAcls: IStore<Map<AclName, Set<AclRefId>>>
     ResolvedAclStoreOpt: IStore<ResolvedAclLookup> option
 }
+
+let handleUnresolvedParamsIfFound token (aclType: AclType) (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) =
+    // scrape out params that are already present in the lookup
+    // TODO: don't send out requests for things already in flight?
+    let pUnresolvedOpt =
+        let existingP = itemAcls.Value
+        dPrintfn $"Found %i{existingP.Count} existing acls"
+
+        existingP
+        |> Map.tryFind aclType.Name
+        |> Option.bind (fun v ->
+            dPrintfn $"Found %i{v.Count} existing params"
+            v |> MLens.getUnresolvedParams aclType)
+
+    dPrintfn $"Are there unresolved params? %b{Option.isSome pUnresolvedOpt}"
+
+    match pUnresolvedOpt with
+    | Some pUnresolved ->
+        printfn "Attempting to resolve %i params" pUnresolved.Count
+        let cmd: Cmd<Msg> = Commands.getAclsResolved token aclType pUnresolved
+        cmd
+    | _ -> Cmd.none
 
 let init (props: AclEditorProps) : Model * Cmd<Msg> =
     let focusedAclTypeOpt =
@@ -143,49 +159,60 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
         | Some(acl, _) -> props.AclTypes |> Seq.tryFind (fun aT -> aT.Name = acl)
         | _ -> None
 
+    let cmd =
+        focusedAclTypeOpt
+        |> Option.map (fun aclType -> handleUnresolvedParamsIfFound props.Token aclType props.ItemAcls)
+        |> Option.defaultValue Cmd.none
+
     let model = {
         ResolvedAclStore =
             props.ResolvedAclStoreOpt
             |> Option.defaultWith (fun () -> Map.empty |> Store.make)
         SearchIsInFlight = false
-        // aclState:
-        // Original: Set<AclRefId> option
-        // Next: Lazy<IStore<Set<AclRefId>>>
-        // Map<AclType, AclState option>
-        // ItemAcls =
-        //     let m =
-        //         props.AclTypes
-        //         |> Seq.map (fun aclType ->
-        //             let values =
-        //                 props.ItemAcls.Value
-        //                 |> Map.tryFind aclType.Name
-        //                 |> Option.map (Set.map AclRefId)
-        //                 |> Option.map (fun p -> {
-        //                     AclOriginalState = WasPresent p
-        //                     Next = None
-        //                 })
-        //                 |> Option.defaultValue {
-        //                     AclOriginalState = WasNotPresent
-        //                     Next = None
-        //                 }
-
-        //             aclType, values)
-        //         |> Map.ofSeq
-
-        // m
         FocusedAclType = focusedAclTypeOpt
         ErrorQueue = List.empty
     }
 
-    // match props.AclTypes |> Seq.length, props.ItemAcls.Value.Count with
-    // | tCount, mCount when tCount = mCount -> ()
-    // | tCount, mCount -> failwithf "Bad Map, types:%i, m:%i" tCount mCount
+    model, cmd
 
-    model, Cmd.none
 
-let private update token (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) msg model =
+let private update token (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) msg model : Model * Cmd<Msg> =
+    printfn "AclEditor update: %A"
+    <| BReusable.String.truncateDisplay false 200 (string msg)
+
     match msg with
-    | Msg.AclTypeSelection x -> { model with FocusedAclType = x }, Cmd.none
+    | Msg.AclParamResolveResponse(aclName, Error e) ->
+        eprintfn "%A - %A" aclName e
+        model, Cmd.none
+    | Msg.AclTypeSelection aclTypeOpt ->
+        // scrape out params that are already present in the lookup
+        // TODO: don't send out requests for things already in flight?
+        let pUnresolvedOpt =
+            aclTypeOpt
+            |> Option.bind (fun aclType ->
+                let existingP = itemAcls.Value
+                dPrintfn $"Found %i{existingP.Count} existing acls"
+
+                existingP
+                |> Map.tryFind aclType.Name
+                |> Option.bind (fun v ->
+                    dPrintfn "Found %i{v.Count} existing params"
+                    v |> MLens.getUnresolvedParams aclType))
+
+        dPrintfn $"Are there unresolved params? %b{Option.isSome pUnresolvedOpt}"
+
+        match aclTypeOpt with
+        | None -> model |> MLens.clearFocusedAclType, Cmd.none
+        | Some aclType -> model |> MLens.setFocusedAclType aclType, handleUnresolvedParamsIfFound token aclType itemAcls
+
+
+    | Msg.AclParamResolveResponse(aclName, Ok aclDisplay) ->
+        printfn "AclParamResolveResponse: %A-%A '%s'" aclName aclDisplay.Reference aclDisplay.DisplayName
+        // error printing is already done
+        App.Global.ResolvedAclLookup.addValue aclName aclDisplay
+
+        model, Cmd.none
+
     | Msg.AclRemove aclType ->
         itemAcls.Update(Map.change aclType.Name (fun _ -> None))
         model, Cmd.none
@@ -263,7 +290,7 @@ module Renderers =
             CardContentType.Content [
                 Bind.el2 (store |> Store.map MLens.getFocusedAclType) props.ItemAcls
                 <| fun (focusOpt, itemAcls) ->
-                    printfn "Render existing with %i items" <| Map.count itemAcls
+                    dPrintfn "Render existing with %i{Map.count itemAcls} items"
 
                     Html.div [
                         if Map.count itemAcls < 1 then
@@ -295,7 +322,6 @@ module Renderers =
             ]
         ]
 
-
 let render (props: AclEditorProps) =
 
     let store, dispatch =
@@ -306,7 +332,7 @@ let render (props: AclEditorProps) =
 
     updateModel ()
 
-    printfn "render AclEditor"
+    dPrintfn "render AclEditor"
 
     Html.divc "fill" [
         disposeOnUnmount [ store ]
