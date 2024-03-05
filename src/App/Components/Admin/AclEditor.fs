@@ -323,6 +323,7 @@ module Renderers =
         ]
 
 let render (props: AclEditorProps) =
+    toGlobalWindow "aclEditor_props" props
 
     let store, dispatch =
         props |> Store.makeElmish init (update props.Token props.ItemAcls) ignore

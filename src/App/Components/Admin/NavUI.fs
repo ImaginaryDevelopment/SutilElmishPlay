@@ -33,6 +33,8 @@ module Style =
     open type Feliz.length
     open type Feliz.borderStyle
 
+    let mainRenderContainer = "nav-ui-editor"
+
     // https://github.com/BulmaTemplates/bulma-templates/blob/master/css/admin.css
     let css =
 
@@ -40,29 +42,17 @@ module Style =
             rule ".fill" [ Css.width (percent 100); Css.height (percent 100) ]
             rule ".card" [ Css.marginBottom (px 10) ]
             rule ".save-button" [ Css.displayInlineBlock; Css.paddingLeft (px 10) ]
+            rule $"#{mainRenderContainer}>h1>span" [ Css.marginRight (px 10) ]
         // rule ".full-overlay" [
         ]
 
     let withCss = withStyle css
 
 type Msg =
-    | AclSearchRequest of AclRefValueArgs
-    | AclSearchResolve of Result<AclSearchResult, exn>
     | SaveRequest
     | SaveResponse of Result<SaveResult, ErrorType>
 
 module Commands =
-    let runAclSearch token aclRefValueArgs : Cmd<Msg> =
-        let f x =
-            async {
-                let! resp = searchAclRefValues token x
-
-                match resp with
-                | Ok v -> return Ok v
-                | Error e -> return Error(e)
-            }
-
-        Cmd.OfAsync.either f aclRefValueArgs id Error |> Cmd.map Msg.AclSearchResolve
 
     let save token navItem : Cmd<Msg> =
         let f x =
@@ -88,8 +78,7 @@ module Commands =
 
 
 // does this need to fire off resolves for ACLs?
-let init token item () =
-
+let init item () =
     {
         Item = item
         // Acls = List.empty
@@ -106,12 +95,6 @@ let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
-
-    | AclSearchRequest aclRefValueArgs ->
-        let cmd = Commands.runAclSearch token aclRefValueArgs
-
-        model, cmd
-
     | SaveRequest -> { model with SaveStatus = InFlight }, Commands.save token model.Item
     | SaveResponse(Error e) ->
         eprintfn "Failed save: %A" e
@@ -178,11 +161,13 @@ let view token (props: NavUIProps) =
         match props with
         | CreateRootFolder ni -> ni, true, false
         | EditFolder ni -> ni, false, false
-        | CreateChild(_, ni) -> ni, true, true
-        | EditChild(_, ni) -> ni, false, true
+        | CreateChild(_parent, ni) -> { ni with Type = Link }, true, true
+        | EditChild(_parent, ni) -> { ni with Type = Link }, false, true
+
+    printfn "NavUI: type: %A, isCreate:%b, hasParent:%b" item.Type isCreate hasParent
 
     let store, dispatch =
-        () |> Store.makeElmish (init token item) (update token props.Saved) ignore
+        () |> Store.makeElmish (init item) (update token props.Saved) ignore
 
     // AclTypes: IReadOnlyStore<AclType seq>
     // consider letting a parent manage this
@@ -214,6 +199,9 @@ let view token (props: NavUIProps) =
             elems
 
     Html.divc "container fill" [
+        Attr.id Style.mainRenderContainer
+        disposeOnUnmount [ vStore; store ]
+
         Html.h1 [
             Attr.className "title"
 

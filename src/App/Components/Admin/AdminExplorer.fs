@@ -602,6 +602,8 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
+        printfn "Starting new child under '%s'" parent.NavItem.Name
+
         {
             model with
                 Item = Some(SelectedItemState.ChildSelected(parent, NavItem.CreateEmpty <| Some parent.NavItem.Path))
@@ -766,8 +768,12 @@ let renderNavItem props =
             | ValueString icon -> navItem.Icon |> IconSearchType.MuiIcon |> tryIcon
             | _ -> Html.spanc "icon" []
             Html.span [ text navItem.Name ]
-            if isActive then
-                Attr.className "is-active"
+            match isActive, navItem.Enabled with
+            | false, false -> Attr.classes [ "has-background-grey-lighter" ]
+            | false, true -> ()
+            | true, true -> Attr.classes [ "is-active" ]
+            | true, false -> Attr.classes [ "is-active"; "has-background-grey-lighter" ]
+
             onClick (fun _ -> activate ()) []
 
         ]
@@ -779,7 +785,20 @@ let renderNavItem props =
 let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemType>) (dispatch: Msg -> unit) =
     printfn "Render viewLeftNav"
     // could this be a navId or a LazyNavItem?
-    let store: IStore<LazyNavItem option> = None |> Store.make
+    let store: IStore<LazyNavItem option> =
+        selectedItemStore
+        |> Store.mapStore "leftNavSelect" true {
+            Getter =
+                Option.bind (function
+                    | FolderSelected(Existing(lni, _)) -> Some lni
+                    | _ -> None)
+            Setter =
+                (fun next (oldParent, oldChild) ->
+                    match next, oldParent with
+                    // clearing all selection if they clear the select
+                    | None, _ -> None
+                    | Some lni, _ -> FolderSelected(Existing(lni, true)) |> Some)
+        }
 
     Html.aside [
         Attr.id "admin-explorer-left-nav"
@@ -798,7 +817,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
                     NameGetter = fun lni -> lni.NavItem.Name
                     OptionChildren = fun _ -> List.empty
                 }
-                [ Html.option [ text "" ] ]
+                []
 
         ] [
             bButton "Add Item" [
