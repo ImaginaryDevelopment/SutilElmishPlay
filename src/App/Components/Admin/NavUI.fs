@@ -313,24 +313,25 @@ let view token (props: NavUIProps) =
 
         ] []
 
-        card [
-            CardContentType.Header(text "Icon")
-            CardContentType.Content [
-                let iconValueStore =
-                    store
-                    |> Store.mapStore "iconValueStore" true {
-                        Getter = fun v -> v.Item.Icon
-                        Setter =
-                            fun iconValue (model, _) -> {
-                                model with
-                                    Item = { model.Item with Icon = iconValue }
-                            }
-                    }
+        if props.AllowIcon then
+            card [
+                CardContentType.Header(text "Icon")
+                CardContentType.Content [
+                    let iconValueStore =
+                        store
+                        |> Store.mapStore "iconValueStore" true {
+                            Getter = fun v -> v.Item.Icon
+                            Setter =
+                                fun iconValue (model, _) -> {
+                                    model with
+                                        Item = { model.Item with Icon = iconValue }
+                                }
+                        }
 
-                App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore }
+                    App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore }
 
+                ]
             ]
-        ]
 
         card [
             CardContentType.Header(text "Acl Explorer")

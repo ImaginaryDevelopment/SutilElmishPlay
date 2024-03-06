@@ -1062,14 +1062,19 @@ let view token =
                 Html.div [
                     // Attr.className "column is-3"
                     flyoverClassAttr
-                    let renderEditor item editType =
+                    let renderEditor (item: NavItem) editType =
+                        let barred = "/Root/Blended Learning"
+                        printfn "Item.Parent: %s" item.Parent
+
                         Html.sectionc "hero is-info welcome is-small" [
                             Html.divc "hero-body" [
                                 NavUI.view token {
                                     Item = item
                                     EditType = editType
                                     AclTypes = store.Value.AclTypes
-                                    AllowIcon = true // String.equalsI item.Parent ""
+                                    // if it has an icon already allow editing, otherwise allow icons if they aren't an area we don't want icons
+                                    AllowIcon =
+                                        item.Icon |> String.isValueString || (String.equalsI item.Parent barred |> not)
                                     Saved = (fun nextItem -> Msg.Saved nextItem |> dispatch)
                                 }
 
