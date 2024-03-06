@@ -6,7 +6,8 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 let log x = Browser.Dom.console.log (x)
-let warn x = Browser.Dom.console.warn(x)
+let warn x = Browser.Dom.console.warn (x)
+let promptConfirm (x: string) = Browser.Dom.window.confirm (x)
 
 let logGroup nameOpt =
     match nameOpt with

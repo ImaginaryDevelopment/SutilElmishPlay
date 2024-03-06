@@ -5,7 +5,7 @@
   <ItemGroup>
     <Compile Include="BReusable.fs" />
     <Compile Include="Schema.fs" />
-    <Compile Include="Adapters/Js.fs" />
+    <Compile Include="Adapters/JsCore.fs" />
     <Compile Include="Adapters/Mui.generated.fs" />
     <Compile Include="Adapters/Html.fs" />
     <Compile Include="Adapters/Icons.fs" />

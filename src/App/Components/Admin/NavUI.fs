@@ -40,7 +40,8 @@ module Style =
         [
             rule ".fill" [ Css.width (percent 100); Css.height (percent 100) ]
             rule ".card" [ Css.marginBottom (px 10) ]
-            rule ".save-button" [ Css.displayInlineBlock; Css.paddingLeft (px 10) ]
+            // rule ".save-button" [ Css.displayInlineBlock; Css.paddingLeft (px 10) ]
+            rule ".field.has-addons" [ Css.displayInlineFlex ]
             rule $"#{mainRenderContainer}>h1>span" [ Css.marginRight (px 10) ]
         // rule ".full-overlay" [
         ]
@@ -139,6 +140,7 @@ type NavUIProps = {
     EditType: EditType
     AclTypes: AclType[]
     Saved: SaveType * NavItem -> unit
+    Delete: unit -> unit
 }
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
@@ -230,16 +232,27 @@ let view token (props: NavUIProps) =
                     |> IconSearchType.MuiIcon
                     |> tryIcon
             )
-            Bind.el (store |> Store.map getItemTitling, (fun t -> Html.span[text t]))
+            Bind.el (itemTitling, (fun t -> Html.span[text t]))
             // text (store.Value.Item.Name |> Option.ofValueString |> Option.defaultValue itemTitling)
-            Html.divc "save-button" [
+            formFieldAddons [] [
 
-                bButton "Save" [
-                    tryIcon (IconSearchType.MuiIcon "Save")
-                    // text "Save"
-                    onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+                Html.spanc "save-button" [
+
+                    bButton "Save" [
+                        tryIcon (IconSearchType.MuiIcon "Save")
+                        // text "Save"
+                        onClick (fun _ -> Msg.SaveRequest |> dispatch) List.empty
+                    ]
                 ]
-            ]
+                Html.spanc "delete-button" [
+
+                    bButton "Delete Item" [
+                        "Delete" |> IconSearchType.MuiIcon |> tryIcon
+                        onClick (fun _ -> props.Delete()) []
+
+                    ]
+                ]
+            ] []
         ]
 
         formField [ text "Name" ] [

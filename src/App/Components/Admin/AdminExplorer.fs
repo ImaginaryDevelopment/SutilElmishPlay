@@ -296,6 +296,8 @@ module Style =
                 Css.padding (px 20)
                 Css.custom ("white-space", "normal")
                 Css.height (px 75)
+                Css.overflowAuto
+
                 // dynamically added
                 yield! [
                     Css.alignItemsCenter
@@ -375,16 +377,20 @@ module MLens =
             Items = Some(Ok nextItems)
     }
 
+    let unselectItemState oldState =
+        match oldState with
+        | FolderSelected(NewFolder _) -> None
+        | FolderSelected(Existing(folder, true)) -> Some(FolderSelected(Existing(folder, false)))
+        | FolderSelected(Existing(_, false)) -> None
+        | ChildSelected(parent, _) -> (parent, false) |> Existing |> FolderSelected |> Some
+
     let unselectItem model =
         match model.Item with
         | None -> model
-        | Some(FolderSelected(NewFolder _)) -> { model with Item = None }
-        | Some(FolderSelected(Existing(folder, true))) -> {
+        | Some v -> {
             model with
-                Item = Some(FolderSelected(Existing(folder, false)))
+                Item = unselectItemState v
           }
-        | Some(FolderSelected(Existing(_, false))) -> { model with Item = None }
-        | Some(ChildSelected _) -> { model with Item = None }
 
     let hasChildId childId (lni: LazyNavItem) =
         lni.ChildStore.Value
@@ -535,9 +541,11 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
     | Msg.DeleteResponse(Error e) ->
         eprintfn "Failed to delete: %A" e
         model, Cmd.none
+
     | Msg.DeleteResponse(Ok v) ->
         // reload root?
         model, Cmd.getRootItems model.Token
+
     | Msg.Saved(st: SaveType, nextItem) ->
         // assume folders are root, and links are children
         // what if this is a successful create?
@@ -618,7 +626,9 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         Cmd.none
 
     | Msg.DeleteRequested(Choice1Of2 { NavItem = ni })
-    | Msg.DeleteRequested(Choice2Of2 ni) -> model, Cmd.deleteItem model.Token ni
+    | Msg.DeleteRequested(Choice2Of2 ni) ->
+        // TODO: this won't delete folders currently
+        MLens.unselectItem model, Cmd.deleteItem model.Token ni
     | Msg.RootResponse(Ok v) ->
 
         let nextItems =
@@ -804,7 +814,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
     Html.aside [
         Attr.id "admin-explorer-left-nav"
         Attr.className "menu is-hidden-mobile"
-        Html.divc "bordered" [
+        Html.div [
             formFieldAddons [] [
                 selectInput
                     {
@@ -832,17 +842,6 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
 
                         )
                         []
-                ]
-                bButton "Delete Item" [
-                    "Delete" |> IconSearchType.MuiIcon |> tryIcon
-                    onClick
-                        (fun _ ->
-
-                            match store.Value with
-                            | None -> ()
-                            | Some lni -> Msg.DeleteRequested(Choice1Of2 lni) |> dispatch)
-                        []
-
                 ]
 
             ] []
@@ -962,17 +961,12 @@ let view token =
                                 // leave folder selected but turn off editing if editing is on
                                 onClick
                                     (fun _ ->
+                                        // TODO: figure out if there are changes
+                                        if Core.promptConfirm "Abandon changes?" then
 
-                                        let next =
-                                            match selectedItem with
-                                            | SelectedItemState.FolderSelected(Existing(fs, true)) ->
-                                                printfn "Unselecting folder"
-                                                FolderSelected(Existing(fs, false)) |> Some
-                                            | SelectedItemState.ChildSelected(lni, child) ->
-                                                FolderSelected(Existing(lni, false)) |> Some
-                                            | _ -> None
+                                            let next = MLens.unselectItemState selectedItem
 
-                                        selectedItemStore.Update(fun _ -> next))
+                                            selectedItemStore.Update(fun _ -> next))
                                     []
                             ]
                     )
@@ -1065,20 +1059,36 @@ let view token =
                 Html.div [
                     // Attr.className "column is-3"
                     flyoverClassAttr
-                    let renderEditor (item: NavItem) editType =
+                    // lniOpt should NOT be item's parent, but the item container
+                    let renderEditor (item: Choice<LazyNavItem, NavItem>) editType =
                         let barred = "/Root/Blended Learning"
-                        printfn "Item.Parent: %s" item.Parent
+
+                        let navItem =
+                            match item with
+                            | Choice1Of2 lni -> lni.NavItem
+                            | Choice2Of2 ni -> ni
+
+                        printfn "Item.Parent: %s" navItem.Parent
 
                         Html.sectionc "hero is-info welcome is-small" [
                             Html.divc "hero-body" [
                                 NavUI.view token {
-                                    Item = item
+                                    Item = navItem
                                     EditType = editType
                                     AclTypes = store.Value.AclTypes
                                     // if it has an icon already allow editing, otherwise allow icons if they aren't an area we don't want icons
                                     AllowIcon =
-                                        item.Icon |> String.isValueString || (String.equalsI item.Parent barred |> not)
+                                        navItem.Icon |> String.isValueString
+                                        || (String.equalsI navItem.Parent barred |> not)
                                     Saved = (fun nextItem -> Msg.Saved nextItem |> dispatch)
+                                    Delete =
+                                        (fun () ->
+                                            // can't delete a new item
+                                            if navItem.Id <> NavId "" then
+                                                item |> Msg.DeleteRequested |> dispatch
+                                            // empty item, just deselect
+                                            else
+                                                selectedItemStore.Update(fun _ -> None))
                                 }
 
                             ]
@@ -1090,10 +1100,11 @@ let view token =
                             match selectedItem with
                             | None
                             | Some(FolderSelected(Existing(_, false))) -> Html.div []
-                            | Some(FolderSelected(NewFolder ni)) -> renderEditor ni NavUI.EditType.Parent
+                            | Some(FolderSelected(NewFolder ni)) -> renderEditor (Choice2Of2 ni) NavUI.EditType.Parent
                             | Some(FolderSelected(Existing(lni, true))) ->
-                                renderEditor lni.NavItem NavUI.EditType.Parent
-                            | Some(ChildSelected(lni, ni)) -> renderEditor ni <| NavUI.EditType.Child lni.NavItem
+                                renderEditor (Choice1Of2 lni) NavUI.EditType.Parent
+                            | Some(ChildSelected(lni, ni)) ->
+                                renderEditor (Choice2Of2 ni) <| NavUI.EditType.Child lni.NavItem
                     )
                 ]
             ]
