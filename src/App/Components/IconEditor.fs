@@ -5,7 +5,6 @@ open BReusable
 open Sutil
 open Sutil.CoreElements
 
-open App.Init
 open App.Adapters
 open App.Adapters.Html
 open App.Adapters.Bulma
@@ -19,7 +18,6 @@ open Core
 type Model = {
     IconValue: IStore<string>
     SearchValue: string
-    LastIsSelect: bool
     SearchClick: System.DateTime option
 }
 
@@ -31,7 +29,6 @@ module MLens =
 let init iconValue = {
     SearchValue = ""
     IconValue = iconValue
-    LastIsSelect = true
     SearchClick = None
 }
 
@@ -49,14 +46,13 @@ let update (msg: Msg) model =
         if model.SearchValue |> String.length > 1 then
             {
                 model with
-                    LastIsSelect = false
                     SearchClick = Some System.DateTime.Now
             }
         else
             model
     | SelectUsed selectedName ->
         MLens.tryUpdateIconValue model.IconValue selectedName
-        { model with LastIsSelect = true }
+        model
 
 type IconEditorParentMsg = Accepted of value: string
 
@@ -67,17 +63,10 @@ let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
             printfn "Rerender select : %s" searchPath
 
             let options =
-                if store.Value.LastIsSelect then
-                    let toLower = System.Char.ToLowerInvariant
+                let sv = store.Value.SearchValue.ToLowerInvariant()
 
-                    // not sure why this doesn't work with iconPath
-                    let first = toLower searchPath[0]
-                    Mui.all.Keys |> Seq.filter (fun k -> toLower k.[0] = first)
-                else
-                    let sv = store.Value.SearchValue.ToLowerInvariant()
-
-                    Mui.all.Keys
-                    |> Seq.filter (fun k -> not <| isNull k && k.ToLowerInvariant().Contains(sv))
+                Mui.all.Keys
+                |> Seq.filter (fun k -> not <| isNull k && k.ToLowerInvariant().Contains(sv))
                 |> List.ofSeq
 
             Html.select [
@@ -100,10 +89,7 @@ let nameSelect (store: IReadOnlyStore<Model>) dispatch : SutilElement =
 
 type IconEditorProps = { ValueStore: IStore<string> }
 
-let renderIconEditor (props: IconEditorProps) (pDispatch: Dispatch<IconEditorParentMsg>) =
-    let pDispatch msg =
-        printfn "IconEditor Parent msg: %A" msg
-        pDispatch msg
+let renderIconEditor (props: IconEditorProps) =
 
     toGlobalWindow "iconEditor_props" props
     let store, dispatch = props.ValueStore |> Store.makeElmishSimple init update ignore

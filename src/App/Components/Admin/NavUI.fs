@@ -11,7 +11,6 @@ open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
 open App.Adapters.Api.Schema
-open App.Adapters.Api.Shared
 
 open App.Components.Gen
 open App.Adapters.Api.Mapped
@@ -90,6 +89,7 @@ let init item () =
 module MLens =
     let updateItem f model = { model with Item = f model.Item }
 
+
 let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
     printfn "NavUI update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
@@ -135,6 +135,7 @@ type EditType =
 // should we be keeping resolved ACLs past the lifetime of this item editor?
 type NavUIProps = {
     Item: NavItem
+    AllowIcon: bool
     EditType: EditType
     AclTypes: AclType[]
     Saved: SaveType * NavItem -> unit
@@ -198,9 +199,23 @@ let view token (props: NavUIProps) =
             let elems = RenderHelpers.getError (snd vStore.Value) None
             elems
 
+    let getItemTitling (model: Model) =
+        match model.Item.Name with
+        | ValueString name ->
+            if model.Item.Type = NavItemType.Folder then
+                name
+            else
+                $"%s{model.Item.Parent}/{name}"
+        | _ ->
+            if model.Item.Type = NavItemType.Folder then
+                "New folder name"
+            else
+                $"%s{model.Item.Parent}: new link"
+
     Html.divc "container fill" [
         Attr.id Style.mainRenderContainer
         disposeOnUnmount [ vStore; store ]
+        let itemTitling = store |> Store.map (getItemTitling)
 
         Html.h1 [
             Attr.className "title"
@@ -215,7 +230,8 @@ let view token (props: NavUIProps) =
                     |> IconSearchType.MuiIcon
                     |> tryIcon
             )
-            text store.Value.Item.Name
+            Bind.el (store |> Store.map getItemTitling, (fun t -> Html.span[text t]))
+            // text (store.Value.Item.Name |> Option.ofValueString |> Option.defaultValue itemTitling)
             Html.divc "save-button" [
 
                 bButton "Save" [
@@ -229,7 +245,7 @@ let view token (props: NavUIProps) =
         formField [ text "Name" ] [
             textInput
                 {
-                    Titling = "NavUI.Name"
+                    Titling = getItemTitling store.Value
                     Value = store |> Store.map (fun v -> v.Item.Name)
                     OnChange =
                         (fun value ->
@@ -243,6 +259,7 @@ let view token (props: NavUIProps) =
 
         ]
         <| renderErrors "Name"
+
         let enabledTitle = nameof item.Enabled
         let urlTitle = nameof item.Url
 
@@ -310,9 +327,7 @@ let view token (props: NavUIProps) =
                             }
                     }
 
-                App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore } (function
-                    | App.Components.IconEditor.Accepted nextIcon ->
-                        store.Update(MLens.updateItem (fun oldItem -> { oldItem with Icon = nextIcon })))
+                App.Components.IconEditor.renderIconEditor { ValueStore = iconValueStore }
 
             ]
         ]

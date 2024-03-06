@@ -1069,6 +1069,7 @@ let view token =
                                     Item = item
                                     EditType = editType
                                     AclTypes = store.Value.AclTypes
+                                    AllowIcon = true // String.equalsI item.Parent ""
                                     Saved = (fun nextItem -> Msg.Saved nextItem |> dispatch)
                                 }
 
