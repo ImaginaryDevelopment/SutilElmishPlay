@@ -1,8 +1,8 @@
 // cspell: disable
-2024.03.06 12:34:43 -05:00
+2024.03.06 02:11:47 -05:00
 Git:
 master
-a41ce7e move toggle button up, change select styling globally
+30bdf85 fix deselection, add confirm for nav away without save
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
