@@ -33,7 +33,6 @@ type Model = {
 type private Msg =
     | AclSearchRequest of AclRefValueArgs
     | AclSearchResponse of Result<AclSearchResult, ErrorType>
-    | AclToggle of AclType
     | AclParamSelection of AclRefId
 
 module private Commands =
@@ -57,15 +56,6 @@ let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: M
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
-    | Msg.AclToggle x ->
-        printfn "Toggling %A" x
-
-        aclParams.Update (function
-            | None -> Some Set.empty
-            | Some _ -> None)
-
-        model, Cmd.none
-
     | Msg.AclParamSelection(aclRefId) ->
         aclParams.Update (function
             | None -> Some(Set.singleton aclRefId)
@@ -390,29 +380,6 @@ let renderAclTypeEditor (props: AclTypeEditorProps) =
                 }
                 dispatch
 
-    // toggle the acl itself, not a param
-    let renderToggleButton () =
-        let addText = "Add New Acl"
-        let removeText = "Remove"
-
-        Bind.el2 (store |> Store.map (fun v -> v.ResolvedAclStore)) (props.AclParams) (fun (itemAcls, pOpt) ->
-            printfn "render toggle: %A" pOpt
-            let isPresent = Option.isSome pOpt
-            let text, icon = if isPresent then removeText, "Remove" else addText, "Add"
-            // shouldn't this grab the old params if it was previously set to remove, thereby restoring it
-
-            // printfn "onClickValue: %A" onClickValue
-
-            tButton "Toggle Acl" None ButtonType.Submit [
-                data_ "button-purpose" text
-                tryIcon (IconSearchType.MuiIcon icon)
-                onClick
-                    (fun _ ->
-                        printfn "I've been clicked for toggle: %A" props.AclType.Name
-                        props.AclType |> Msg.AclToggle |> dispatch)
-                    []
-            ])
-
     Html.div [
         disposeOnUnmount [ store ]
         if props.AclType.AclParamType <> AclParameterType.None then
@@ -427,8 +394,7 @@ let renderAclTypeEditor (props: AclTypeEditorProps) =
                 ]
                 renderParamSelector props.AclType
 
-                renderToggleButton ()
             ]
         else
-            Html.div [ renderToggleButton () ]
+            Html.div []
     ]

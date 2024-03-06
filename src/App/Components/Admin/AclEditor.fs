@@ -35,6 +35,7 @@ module Styling =
     let css = [
         // rule "span.info" Gen.CssRules.titleIndicator
         rule "h2" [ Css.borderBottom (px 1, solid, "black") ]
+        // rule ".field.has-addons .control select" [ Css.minHeight (px 40) ]
 
         // not working
         // rule ".panel-block>*" [
@@ -92,6 +93,8 @@ type Msg =
     | AclRemove of AclType
     // | AclParamsResolveRequest of AclType * AclRefId list
     | AclParamResolveResponse of AclName * Result<AclDisplay, ErrorType>
+// | AclToggle of AclType
+
 
 module Commands =
     let getAclResolved token req =
@@ -149,15 +152,7 @@ let handleUnresolvedParamsIfFound token (aclType: AclType) (itemAcls: IStore<Map
     | _ -> Cmd.none
 
 let init (props: AclEditorProps) : Model * Cmd<Msg> =
-    let focusedAclTypeOpt =
-        let firstAcl =
-            props.ItemAcls.Value
-            |> Map.tryFindKey (fun _ _ -> true)
-            |> Option.map (fun k -> k, props.ItemAcls.Value[k])
-
-        match firstAcl with
-        | Some(acl, _) -> props.AclTypes |> Seq.tryFind (fun aT -> aT.Name = acl)
-        | _ -> None
+    let focusedAclTypeOpt = None
 
     let cmd =
         focusedAclTypeOpt
@@ -335,6 +330,48 @@ let render (props: AclEditorProps) =
 
     dPrintfn "render AclEditor"
 
+    let makeIAStore (aclType: AclType) =
+        // we're trying to map a Map<AclName,Set<_>> to Map<AclName,Set<_> option>
+        let getter m : Option<Set<AclRefId>> = m |> Map.tryFind aclType.Name
+
+        let setter (next: Option<Set<AclRefId>>) (oldParent, _) : Map<AclName, Set<AclRefId>> =
+            oldParent |> Map.change aclType.Name (fun _ -> next)
+
+        let iaStore: IStore<Set<AclRefId> option> =
+            props.ItemAcls
+            |> Store.mapStore "ItemAcls" true { Getter = getter; Setter = setter }
+
+        iaStore
+
+
+    // toggle the acl itself, not a param
+    let renderToggleButton aclType store dispatch =
+        let iaStore = makeIAStore aclType
+        let addText = "Add New Acl"
+        let removeText = "Remove"
+
+        let onToggle () =
+            printfn "Toggling %A" aclType.Name
+
+
+            iaStore.Update (function
+                | None -> Some Set.empty
+                | Some _ -> None)
+
+        Bind.el2 (store |> Store.map (fun v -> v.ResolvedAclStore)) iaStore (fun (itemAcls, pOpt) ->
+            printfn "render toggle: %A" pOpt
+            let isPresent = Option.isSome pOpt
+            let text, icon = if isPresent then removeText, "Remove" else addText, "Add"
+            // shouldn't this grab the old params if it was previously set to remove, thereby restoring it
+
+            // printfn "onClickValue: %A" onClickValue
+
+            tButton "Toggle Acl" None ButtonType.Submit [
+                data_ "button-purpose" text
+                tryIcon (IconSearchType.MuiIcon icon)
+                onClick (fun _ -> onToggle ()) []
+            ])
+
     Html.divc "fill" [
         disposeOnUnmount [ store ]
         store |> Store.map MLens.getErrors |> Gen.ErrorHandling.renderErrorDisplay
@@ -345,36 +382,46 @@ let render (props: AclEditorProps) =
         // type selector and params manipulation
         Html.divc "card" [
             // type selector
-            selectInput
-                {
-                    Values = props.AclTypes
-                    HasEmpty = true
-                    ValueGetter =
-                        function
-                        | { Name = AclName n } -> n
-                    NameGetter =
-                        function
-                        | { Name = AclName n } -> n
-                    OptionChildren = fun child -> []
-                    SelectType =
-                        let rStore =
-                            store
-                            |> Store.mapRStore
-                                {
-                                    UseEquality = true
-                                    DebugTitle = None
-                                }
-                                (MLens.getFocusedAclType)
+            text "Acl Type"
+            formFieldAddons [] [
+                selectInput
+                    {
+                        Values = props.AclTypes
+                        HasEmpty = true
+                        ValueGetter =
+                            function
+                            | { Name = AclName n } -> n
+                        NameGetter =
+                            function
+                            | { Name = AclName n } -> n
+                        OptionChildren = fun child -> []
+                        SelectType =
+                            let rStore =
+                                store
+                                |> Store.mapRStore
+                                    {
+                                        UseEquality = true
+                                        DebugTitle = None
+                                    }
+                                    (MLens.getFocusedAclType)
 
-                        ObservedSelect(
-                            rStore,
-                            // Option.ofValueString
-                            // >> Option.bind (fun aclName ->
-                            //     props.AclTypes |> Seq.tryFind (fun a -> a.Name = AclName aclName)),
-                            Msg.AclTypeSelection >> dispatch
-                        )
-                }
-                [ data_ "purpose" "aclTypeSelector" ]
+                            ObservedSelect(
+                                rStore,
+                                // Option.ofValueString
+                                // >> Option.bind (fun aclName ->
+                                //     props.AclTypes |> Seq.tryFind (fun a -> a.Name = AclName aclName)),
+                                Msg.AclTypeSelection >> dispatch
+                            )
+                    }
+                    [ data_ "purpose" "aclTypeSelector" ]
+                Bind.el (
+                    store |> Store.map (MLens.getFocusedAclType) |> Observable.distinctUntilChanged,
+                    fun aclTypeOpt ->
+                        match aclTypeOpt with
+                        | None -> Html.div []
+                        | Some aclType -> renderToggleButton aclType store dispatch
+                )
+            ] []
 
             // acl editor/creator
             Bind.el (
@@ -382,15 +429,8 @@ let render (props: AclEditorProps) =
                 function
                 | None -> Html.div []
                 | Some aclType ->
-                    // we're trying to map a Map<AclName,Set<_>> to Map<AclName,Set<_> option>
-                    let getter m : Option<Set<AclRefId>> = m |> Map.tryFind aclType.Name
 
-                    let setter (next: Option<Set<AclRefId>>) (oldParent, _) : Map<AclName, Set<AclRefId>> =
-                        oldParent |> Map.change aclType.Name (fun _ -> next)
-
-                    let iaStore: IStore<Set<AclRefId> option> =
-                        props.ItemAcls
-                        |> Store.mapStore "ItemAcls" true { Getter = getter; Setter = setter }
+                    let iaStore: IStore<Set<AclRefId> option> = makeIAStore aclType
 
                     renderAclTypeEditor {
                         AclType = aclType

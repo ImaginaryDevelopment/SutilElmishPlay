@@ -23,6 +23,7 @@ module Css =
         rule "span.info" CssRules.titleIndicator
         rule ":global(.tabContainer)" [ Css.width (percent 100); Css.backgroundColor ("black") ]
         rule ".fill" [ Css.width (percent 100) ]
+        rule "select.select" [ Css.minHeight (px 40); Css.marginRight 0 ]
 
 
         rule "div.iconColumn" [ Css.height (em 1.0); Css.width (em 1.0); Css.flexShrink 0 ]

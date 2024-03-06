@@ -763,6 +763,7 @@ let renderNavItem props =
                 || lniOpt |> Option.map (MLens.hasChildId navItem.Id) |> Option.defaultValue false)
             |> Option.defaultValue false
 
+
         bButton "Select Item" [
             match navItem.Icon with
             | ValueString icon -> navItem.Icon |> IconSearchType.MuiIcon |> tryIcon
@@ -803,47 +804,49 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
     Html.aside [
         Attr.id "admin-explorer-left-nav"
         Attr.className "menu is-hidden-mobile"
-        columns2 [ Attr.className "bordered" ] [
-            selectInput
-                {
-                    Values = items
-                    HasEmpty = true
-                    SelectType = StoredSelect store
-                    ValueGetter =
-                        fun lni ->
-                            lni.NavItem.Id
-                            |> function
-                                | NavId x -> x
-                    NameGetter = fun lni -> lni.NavItem.Name
-                    OptionChildren = fun _ -> List.empty
-                }
-                []
-
-        ] [
-            bButton "Add Item" [
-                "Add" |> IconSearchType.MuiIcon |> tryIcon
-                onClick
-                    (fun _ ->
-                        // let selectedItem = getSelectedItem selectedItemStore.Value
-                        match store.Value with
-                        | Some lni -> Msg.StartNewRequested(Some lni) |> dispatch
-                        // | Some _ -> eprintfn "addItem selector Value was empty"
-                        | None -> Msg.StartNewRequested None |> dispatch
-
-                    )
+        Html.divc "bordered" [
+            formFieldAddons [] [
+                selectInput
+                    {
+                        Values = items
+                        HasEmpty = true
+                        SelectType = StoredSelect store
+                        ValueGetter =
+                            fun lni ->
+                                lni.NavItem.Id
+                                |> function
+                                    | NavId x -> x
+                        NameGetter = fun lni -> lni.NavItem.Name
+                        OptionChildren = fun _ -> List.empty
+                    }
                     []
-            ]
-            bButton "Delete Item" [
-                "Delete" |> IconSearchType.MuiIcon |> tryIcon
-                onClick
-                    (fun _ ->
+                bButton "Add Item" [
+                    "Add" |> IconSearchType.MuiIcon |> tryIcon
+                    onClick
+                        (fun _ ->
+                            // let selectedItem = getSelectedItem selectedItemStore.Value
+                            match store.Value with
+                            | Some lni -> Msg.StartNewRequested(Some lni) |> dispatch
+                            // | Some _ -> eprintfn "addItem selector Value was empty"
+                            | None -> Msg.StartNewRequested None |> dispatch
 
-                        match store.Value with
-                        | None -> ()
-                        | Some lni -> Msg.DeleteRequested(Choice1Of2 lni) |> dispatch)
-                    []
+                        )
+                        []
+                ]
+                bButton "Delete Item" [
+                    "Delete" |> IconSearchType.MuiIcon |> tryIcon
+                    onClick
+                        (fun _ ->
 
-            ]
+                            match store.Value with
+                            | None -> ()
+                            | Some lni -> Msg.DeleteRequested(Choice1Of2 lni) |> dispatch)
+                        []
+
+                ]
+
+            ] []
+
         ]
         yield!
             items
