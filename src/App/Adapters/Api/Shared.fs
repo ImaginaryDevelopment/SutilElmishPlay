@@ -171,6 +171,21 @@ let getFolderAdmins token (NavId navId) =
         }
         List.empty
 
+let setFolderAdmins token (NavId navId, aclRefs) =
+    let url = $"/api/Navigation/AdminPicker?Folder={navId}"
+
+    fetchJson<unit> "setFolderAdmins" {
+        Token = token
+        RelPath = url
+        Arg =
+            Some {
+                QueryValues =
+                    Some
+                    // TODO: get proper param name, and proper separator
+                    <| Map [ "AclRefs", aclRefs |> Seq.map AclRefId.getText |> String.concat "," ]
+            }
+    }
+
 type AclRefLookup = {
     AclName: AclName
     AclType: AclParameterType

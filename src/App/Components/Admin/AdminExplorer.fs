@@ -627,8 +627,10 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         MLens.unselectItem model, Cmd.deleteItem model.Token ni
     | Msg.RootResponse(Ok v) ->
 
+        // TODO: filter on user is imp or is in managers list? or is that on the backend
         let nextItems =
             v
+            // |> Array.filter (fun navItem -> isNull navItem.Managers || props.user)
             |> Array.map (fun navItem ->
                 let childStore = Store.make NotRequested
 
@@ -894,8 +896,9 @@ let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
         )
     ]
 
-let view token =
+let view token (ai: App.Adapters.Msal.AuthenticationResult) =
     printfn "AdminExplorer"
+    Core.log ai
     let store, dispatch = token |> Store.makeElmish init update ignore
     toGlobalWindow "adminExplorer_model" store.Value
 

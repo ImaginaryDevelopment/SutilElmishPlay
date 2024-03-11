@@ -158,7 +158,8 @@ let init () : Model * Cmd<Message> =
     cmd
 
 let update (msg: Message) (model: Model) : Model * Cmd<Message> =
-    printfn "AdminExplorer msg update"
+    printfn "App msg update: %A"
+    <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
     | AuthFinished x ->
@@ -187,7 +188,7 @@ let view () =
                     Value = 0
                     Component =
                         mustAuthEl "ExplorerTab" model (function
-                            | Auth(ai, token) -> App.Components.Admin.Explorer.view token.accessToken
+                            | Auth(ai, token) -> App.Components.Admin.Explorer.view token.accessToken ai
                             | Demo -> App.Components.Admin.Explorer.Samples.view ())
                 }
                 {
