@@ -83,13 +83,10 @@ let getMyInfo token : Async<Result<App.Adapters.Api.Schema.MyInfoResponse, exn>>
         }
         List.empty
 
-
 [<RequireQualifiedAccess>]
 type NavItemCreateType =
     | Link of parentPath: string
     | Folder
-
-
 
 // for selecting parameters for a new acl
 // server has its own max: 16
@@ -127,6 +124,7 @@ type NavAclInquiry = {
 
 // for doing a lookup of the parameters in an existing acl for display
 // do we need an acl resolve for a aclName-AclParameter reference
+// TODO: this is a perf optimization exposed that we aren't using
 let getNavAclResolve
     token
     {
@@ -141,6 +139,7 @@ let getNavAclResolve
             "NavAclResolveResponse"
             {
                 Token = token
+                // TODO: this does not properly encode the url params
                 RelPath = $"/api/Navigation/Acls?Acl=%s{aclName}&Resolve=%s{navId}"
                 Arg = None
             }
@@ -148,6 +147,32 @@ let getNavAclResolve
         |> Async.map (Result.map (fun narResp -> AclName aclName, narResp))
         |> Async.map (Result.mapError Choice2Of2)
     | _ -> Async.ofValue (Error <| Choice1Of2 "Type is not a reference type")
+
+let getAdmins token (AclRefId aclRefId) =
+    // TODO: this does not properly encode the url params
+    let url = $"/api/Navigation/AdminPicker?Search={aclRefId}"
+
+    fetchJson<unit>
+        "adminPicker"
+        {
+            Token = token
+            RelPath = url
+            Arg = None
+        }
+        List.empty
+
+// TODO: this does not properly encode the url params
+let getFolderAdmins token (NavId navId) =
+    let url = $"/api/Navigation/AdminPicker?Folder={navId}"
+
+    fetchJson<unit>
+        "getFolderAdmins"
+        {
+            Token = token
+            RelPath = url
+            Arg = None
+        }
+        List.empty
 
 type AclRefLookup = {
     AclName: AclName
@@ -163,6 +188,7 @@ let getAclReferenceDisplay
         AclRefId = AclRefId aclRefId
     }
     : Async<Result<_, Choice<string[], exn>>> =
+
     match aclType with
     | AclParameterType.Reference _ ->
         fetchJson<NavAclResolveResponse>

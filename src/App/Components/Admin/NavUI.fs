@@ -217,7 +217,7 @@ let view token (props: NavUIProps) =
     Html.divc "container fill" [
         Attr.id Style.mainRenderContainer
         disposeOnUnmount [ vStore; store ]
-        let itemTitling = store |> Store.map (getItemTitling)
+        let itemTitling = store |> Store.map getItemTitling
 
         Html.h1 [
             Attr.className "title"
@@ -233,7 +233,6 @@ let view token (props: NavUIProps) =
                     |> tryIcon
             )
             Bind.el (itemTitling, (fun t -> Html.span [ text t ]))
-            // text (store.Value.Item.Name |> Option.ofValueString |> Option.defaultValue itemTitling)
             formFieldAddons [] [
 
                 Html.spanc "save-button" [
@@ -282,7 +281,6 @@ let view token (props: NavUIProps) =
             Html.inputc "checkbox" [
                 type' "checkbox"
                 Attr.name enabledTitle
-                // Attr.isChecked store.Value
                 Bind.attr ("checked", value = eStore)
                 Attr.title enabledTitle
                 Handlers.onValueChange ignore (fun _ ->

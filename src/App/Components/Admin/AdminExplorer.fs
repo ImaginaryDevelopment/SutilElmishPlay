@@ -123,7 +123,6 @@ module Samples =
                             liA None "Add a member"
                             liA None "Remove a member"
                         ]
-
                     ]
                     liA None "Invitations"
                     liA None "Cloud Storage Environment Settings"
