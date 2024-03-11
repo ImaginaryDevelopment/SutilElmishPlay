@@ -24,9 +24,20 @@ type AclRefId =
 [<Erase>]
 type NavId = NavId of string
 
+module NavIds =
+    let isValid (NavId x) =
+        System.String.IsNullOrWhiteSpace x |> not
+
+[<Erase>]
+type AclReferenceType =
+    | Group
+    | User
+
 type AclDisplay = {
     Reference: AclRefId
     DisplayName: string
+    // group or user
+    Type: AclReferenceType
 }
 
 type SaveType =

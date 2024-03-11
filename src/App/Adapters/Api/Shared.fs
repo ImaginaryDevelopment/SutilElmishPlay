@@ -118,25 +118,23 @@ let searchAclRefValues token (arv: AclRefValueArgs) =
 // request to resolve a NavId's Acl Ref parameters
 type NavAclInquiry = {
     AclName: AclName
+    AclParameterType: AclParameterType
     NavId: NavId
-    AclType: AclParameterType
 }
 
 // for doing a lookup of the parameters in an existing acl for display
-// do we need an acl resolve for a aclName-AclParameter reference
-// TODO: this is a perf optimization exposed that we aren't using
 let getNavAclResolve
     token
     {
         AclName = AclName aclName
+        AclParameterType = apt
         NavId = NavId navId
-        AclType = aclType
     }
     =
-    match aclType with
+    match apt with
     | AclParameterType.Reference _ ->
-        fetchJson<NavAclResolveResponse>
-            "NavAclResolveResponse"
+        fetchJson<NavAclsResolveResponse>
+            "NavAclsResolveResponse"
             {
                 Token = token
                 // TODO: this does not properly encode the url params
@@ -144,9 +142,8 @@ let getNavAclResolve
                 Arg = None
             }
             List.empty
-        |> Async.map (Result.map (fun narResp -> AclName aclName, narResp))
-        |> Async.map (Result.mapError Choice2Of2)
-    | _ -> Async.ofValue (Error <| Choice1Of2 "Type is not a reference type")
+        |> Ok
+    | _ -> Error "Type is not a reference type"
 
 let getAdmins token (AclRefId aclRefId) =
     // TODO: this does not properly encode the url params

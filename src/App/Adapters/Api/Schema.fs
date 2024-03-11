@@ -55,6 +55,7 @@ type NavItem = {
     Enabled: bool
     Url: string
     HasUrlKey: bool
+    Managers: string[]
     // this is poorly named if not all Acls are reference types
     // can't use Map<AclName, AclRefId>, could be param, or ref param
     [<CompiledName("Acls")>]
@@ -111,6 +112,7 @@ type NavItem = {
         Icon = "City"
         Weight = 0
         Enabled = false
+        Managers = Array.empty
     }
 
     static member GetName(navItem: NavItem) =
@@ -167,8 +169,14 @@ type NavAclResolveErrorResponse = {
 }
 
 
+// for bulk resolve, could be both some resolved and some errors
 type NavAclResolveResponse = {
     Resolved: AclDisplay option
+    Errors: NavAclResolveErrorResponse[] option
+}
+
+type NavAclsResolveResponse = {
+    Resolved: AclDisplay[]
     Errors: NavAclResolveErrorResponse[] option
 }
 // api types that we want to restrict to mapped interactions outside of the api adapter layer
@@ -214,7 +222,7 @@ module Raw =
         Parent: string
         Type: string
         Name: string
-        DisplayName: string
+        DisplayName: string option
         Description: string
         Icon: string
         Weight: int
@@ -223,6 +231,7 @@ module Raw =
         HasUrlKey: bool
         // [<CompiledName("Acls")>]
         Acls: ApiAclRef[]
+        Managers: string[]
     } with
 
         member x.AclNames = x.Acls |> Seq.map (fun acl -> acl.Name)

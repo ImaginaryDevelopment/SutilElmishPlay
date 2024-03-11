@@ -40,7 +40,8 @@ module ResolvedAclLookup =
 
 
     // does not check if the value changed, fires notification anyhow
-    let addValues aclName pairs : unit =
+    let addValues aclName displays : unit =
+
         resolvedAclLookup.Update(fun m ->
             printRalDiagnostics "RBeforeAdd" m
 
@@ -50,8 +51,8 @@ module ResolvedAclLookup =
                     aclName
                     (Option.defaultValue Map.empty
                      >> fun m ->
-                         (m, pairs)
-                         ||> Seq.fold (fun m (aclRefId, display) -> m |> Map.add aclRefId display)
+                         (m, displays)
+                         ||> Seq.fold (fun m (display: AclDisplay) -> m |> Map.add display.Reference display)
                          |> Some)
 
             printRalDiagnostics "RAfterAdd" next

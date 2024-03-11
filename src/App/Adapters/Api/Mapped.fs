@@ -75,13 +75,14 @@ module NavItemAdapters =
                 NavItemType.TryParse x.Type
                 |> Option.getOrFail (sprintf "Could not parse '%s'" x.Type)
             Name = x.Name
-            DisplayName = x.DisplayName
+            DisplayName = x.DisplayName |> Option.bind Option.ofValueString |> Option.defaultValue ""
             Description = x.Description
             Icon = x.Icon
             Weight = x.Weight
             Enabled = x.Enabled |> Option.defaultValue false
             Url = x.Url
             HasUrlKey = x.HasUrlKey
+            Managers = x.Managers
             AclRefs =
                 x.Acls
                 |> Seq.map (fun acl -> acl.AclName, acl.Parameters |> Set.ofArray)
@@ -109,11 +110,12 @@ module NavItemAdapters =
             Parent = item.Parent
             Type = string item.Type
             Name = item.Name |> Option.ofValueString |> Option.defaultValue item.DisplayName
-            DisplayName = item.DisplayName
+            DisplayName = item.DisplayName |> Option.ofValueString
             Icon = item.Icon
             Weight = item.Weight
             Enabled = item.Enabled |> Some
             Url = item.Url
+            Managers = item.Managers
             HasUrlKey = item.HasUrlKey
         }
 

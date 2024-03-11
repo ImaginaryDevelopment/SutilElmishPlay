@@ -365,6 +365,7 @@ let view token (props: NavUIProps) =
                     Token = token
                     AclTypes = props.AclTypes // AclType seq
                     ItemAcls = iaStore
+                    NavId = item.Id
                     ResolvedAclStoreOpt = None
                 }
 

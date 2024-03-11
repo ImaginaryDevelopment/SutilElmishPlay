@@ -228,34 +228,40 @@ let selectInput (props: SelectProps<'t>) children =
                 Bind.el (
                     store,
                     fun selected ->
-                        Html.option[Attr.value strId
-                                    text <| props.NameGetter item
-
-                                    match selected with
-                                    | None -> ()
-                                    | Some selected ->
-                                        if props.ValueGetter selected = strId then
-                                            Attr.selected true]
-                )
-            | ObservedMulti(store, _) ->
-                Bind.el (
-                    store,
-                    fun selected ->
-                        Html.option[Attr.value strId
-                                    text <| props.NameGetter item
-
-                                    if selected |> List.map props.ValueGetter |> List.contains strId then
-                                        Attr.selected true]
-                )
-            | StaticSelect(selected, _valueMap, _onChange) ->
-                Html.option[Attr.value strId
+                        Html.option [
+                            Attr.value strId
                             text <| props.NameGetter item
 
                             match selected with
                             | None -> ()
                             | Some selected ->
                                 if props.ValueGetter selected = strId then
-                                    Attr.selected true]
+                                    Attr.selected true
+                        ]
+                )
+            | ObservedMulti(store, _) ->
+                Bind.el (
+                    store,
+                    fun selected ->
+                        Html.option [
+                            Attr.value strId
+                            text <| props.NameGetter item
+
+                            if selected |> List.map props.ValueGetter |> List.contains strId then
+                                Attr.selected true
+                        ]
+                )
+            | StaticSelect(selected, _valueMap, _onChange) ->
+                Html.option [
+                    Attr.value strId
+                    text <| props.NameGetter item
+
+                    match selected with
+                    | None -> ()
+                    | Some selected ->
+                        if props.ValueGetter selected = strId then
+                            Attr.selected true
+                ]
     ]
 
 module Observable =

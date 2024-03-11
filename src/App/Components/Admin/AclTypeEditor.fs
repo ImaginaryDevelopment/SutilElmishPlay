@@ -80,7 +80,6 @@ let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: M
 
     | Msg.AclSearchResponse(Ok aclSearchResult) ->
         aclSearchResult.Data.Results
-        |> Seq.map (fun ad -> ad.Reference, ad)
         |> App.Global.ResolvedAclLookup.addValues aclSearchResult.AclName
 
         aclSearchResult.Data

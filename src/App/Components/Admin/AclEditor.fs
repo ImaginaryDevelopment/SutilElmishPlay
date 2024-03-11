@@ -87,28 +87,36 @@ module MLens =
             None
 
 
-
 type Msg =
-    | AclTypeSelection of AclType option
+    | AclTypeSelection of (NavId * AclType) option
     | AclRemove of AclType
-    // | AclParamsResolveRequest of AclType * AclRefId list
     | AclParamResolveResponse of AclName * Result<AclDisplay, ErrorType>
-// | AclToggle of AclType
+    | AclBulkResolveResponse of AclName * Result<NavAclsResolveResponse, ErrorType>
 
 
 module Commands =
     let getAclResolved token req =
-        let f x =
-            async {
-                let! resp = Api.Shared.getAclReferenceDisplay token x
 
-                match resp with
-                | Ok v -> return Ok v
-                | Error e -> return Error e
-            }
+        let f = Api.Shared.getAclReferenceDisplay token
 
         Cmd.OfAsync.either f req id (fun ex -> Choice2Of2 ex |> Error)
         |> Cmd.map (fun v -> Msg.AclParamResolveResponse(req.AclName, v))
+
+    // bulk resolve all refIds on this existing navItem+aclName combo
+    // this should only be searchable reference acl types
+    let resolveAclsForExistingType token req : Cmd<Msg> =
+        // TODO: return command none if the aclType is not a searchable reference
+        match Api.Shared.getNavAclResolve token req with
+        | Ok t ->
+            Cmd.OfAsync.either (fun () -> t) () id Error
+            |> Cmd.map (fun v ->
+                let mapped = v |> Result.mapError (fun v -> Choice2Of2 v)
+                Msg.AclBulkResolveResponse(req.AclName, mapped))
+        | Error e ->
+            eprintfn "%A" e
+
+            Msg.AclBulkResolveResponse(req.AclName, Array.singleton e |> Choice1Of2 |> Error)
+            |> Cmd.ofMsg
 
     let getAclsResolved token (aclType: AclType) refIds =
         (List.empty, refIds)
@@ -123,16 +131,17 @@ module Commands =
 
 type AclEditorProps = {
     Token: string
+    NavId: NavId
     AclTypes: AclType seq
     // not exhaustive, hence Set instead of Set option
     ItemAcls: IStore<Map<AclName, Set<AclRefId>>>
     ResolvedAclStoreOpt: IStore<ResolvedAclLookup> option
 }
 
-let handleUnresolvedParamsIfFound token (aclType: AclType) (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) =
+let handleUnresolvedParamsIfFound token navId (aclType: AclType) (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) =
     // scrape out params that are already present in the lookup
     // TODO: don't send out requests for things already in flight?
-    let pUnresolvedOpt =
+    let pUnresolved =
         let existingP = itemAcls.Value
         dPrintfn $"Found %i{existingP.Count} existing acls"
 
@@ -141,22 +150,37 @@ let handleUnresolvedParamsIfFound token (aclType: AclType) (itemAcls: IStore<Map
         |> Option.bind (fun v ->
             dPrintfn $"Found %i{v.Count} existing params"
             v |> MLens.getUnresolvedParams aclType)
+        |> Option.defaultValue Set.empty
 
-    dPrintfn $"Are there unresolved params? %b{Option.isSome pUnresolvedOpt}"
+    let hasUnresolved = Set.count pUnresolved > 0
+    dPrintfn $"Are there unresolved params? %b{hasUnresolved}"
 
-    match pUnresolvedOpt with
-    | Some pUnresolved ->
-        printfn "Attempting to resolve %i params" pUnresolved.Count
-        let cmd: Cmd<Msg> = Commands.getAclsResolved token aclType pUnresolved
-        cmd
-    | _ -> Cmd.none
+    if hasUnresolved then
+
+        if NavIds.isValid navId then
+            let cmd: Cmd<Msg> =
+                Commands.resolveAclsForExistingType token {
+                    AclName = aclType.Name
+                    AclParameterType = aclType.AclParamType
+                    NavId = navId
+                }
+
+            cmd
+        else
+            // this should probably never happen, how would we be getting a new nav item with existing searchable reference params
+
+            printfn "Attempting to resolve %i params" pUnresolved.Count
+            let cmd: Cmd<Msg> = Commands.getAclsResolved token aclType pUnresolved
+            cmd
+    else
+        Cmd.none
 
 let init (props: AclEditorProps) : Model * Cmd<Msg> =
     let focusedAclTypeOpt = None
 
     let cmd =
         focusedAclTypeOpt
-        |> Option.map (fun aclType -> handleUnresolvedParamsIfFound props.Token aclType props.ItemAcls)
+        |> Option.map (fun aclType -> handleUnresolvedParamsIfFound props.Token props.NavId aclType props.ItemAcls)
         |> Option.defaultValue Cmd.none
 
     let model = {
@@ -179,33 +203,25 @@ let private update token (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) msg mod
     | Msg.AclParamResolveResponse(aclName, Error e) ->
         eprintfn "%A - %A" aclName e
         model, Cmd.none
-    | Msg.AclTypeSelection aclTypeOpt ->
-        // scrape out params that are already present in the lookup
-        // TODO: don't send out requests for things already in flight?
-        let pUnresolvedOpt =
-            aclTypeOpt
-            |> Option.bind (fun aclType ->
-                let existingP = itemAcls.Value
-                dPrintfn $"Found %i{existingP.Count} existing acls"
 
-                existingP
-                |> Map.tryFind aclType.Name
-                |> Option.bind (fun v ->
-                    dPrintfn "Found %i{v.Count} existing params"
-                    v |> MLens.getUnresolvedParams aclType))
+    | Msg.AclTypeSelection None -> model |> MLens.clearFocusedAclType, Cmd.none
 
-        dPrintfn $"Are there unresolved params? %b{Option.isSome pUnresolvedOpt}"
-
-        match aclTypeOpt with
-        | None -> model |> MLens.clearFocusedAclType, Cmd.none
-        | Some aclType -> model |> MLens.setFocusedAclType aclType, handleUnresolvedParamsIfFound token aclType itemAcls
-
+    | Msg.AclTypeSelection(Some(navId, aclType)) ->
+        let next = model |> MLens.setFocusedAclType aclType
+        next, handleUnresolvedParamsIfFound token navId aclType itemAcls
 
     | Msg.AclParamResolveResponse(aclName, Ok aclDisplay) ->
         printfn "AclParamResolveResponse: %A-%A '%s'" aclName aclDisplay.Reference aclDisplay.DisplayName
         // error printing is already done
         App.Global.ResolvedAclLookup.addValue aclName aclDisplay
 
+        model, Cmd.none
+    | Msg.AclBulkResolveResponse(aclName, Ok v) ->
+        App.Global.ResolvedAclLookup.addValues aclName v.Resolved
+        model, Cmd.none
+    | Msg.AclBulkResolveResponse(aclName, Error e) ->
+        Core.log e
+        eprintfn "Failed to bulk resolve: %A" aclName
         model, Cmd.none
 
     | Msg.AclRemove aclType ->
@@ -217,6 +233,7 @@ module Renderers =
     type AclDisplayProps = {
         AclParams: Set<AclRefId>
         AclType: AclType
+        NavId: NavId
         IsSelected: bool
     }
 
@@ -255,7 +272,7 @@ module Renderers =
             Html.divc "column is-one-fifth buttonColumn" [
                 if isConfigurable then
                     tButton "Edit Acl" isActiveRow true isActiveRow (IconSearchType.MuiIcon "Edit") (fun _ ->
-                        props.AclType |> Some |> Msg.AclTypeSelection |> dispatch)
+                        Some(props.NavId, props.AclType) |> Msg.AclTypeSelection |> dispatch)
             ]
             Html.divc "column is-one-fifth buttonColumn" [
                 tButton "Delete" isActiveRow false false (MuiIcon "Delete") (fun _ ->
@@ -305,6 +322,7 @@ module Renderers =
                                             {
                                                 AclType = aclType
                                                 AclParams = p
+                                                NavId = props.NavId
                                                 IsSelected =
                                                     focusOpt
                                                     |> Option.map (fun focus -> focus.Name = aclType.Name)
@@ -410,7 +428,9 @@ let render (props: AclEditorProps) =
                                 // Option.ofValueString
                                 // >> Option.bind (fun aclName ->
                                 //     props.AclTypes |> Seq.tryFind (fun a -> a.Name = AclName aclName)),
-                                Msg.AclTypeSelection >> dispatch
+                                (Option.map (fun aclType -> props.NavId, aclType)
+                                 >> Msg.AclTypeSelection
+                                 >> dispatch)
                             )
                     }
                     [ data_ "purpose" "aclTypeSelector" ]
