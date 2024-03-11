@@ -269,10 +269,7 @@ module Style =
             rule "#middle-child" [
                 Css.displayGrid
                 Css.width (percent 100)
-                Css.gridTemplateColumns[fr 1
-                                        fr 1
-                                        fr 1
-                                        fr 1]
+                Css.gridTemplateColumns [ fr 1; fr 1; fr 1; fr 1 ]
                 // from body
                 yield! [
                     Css.fontWeight 400
@@ -557,7 +554,7 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
             items
             |> Array.updateI x (fun item ->
-                printfn "Updating folder by index: %s" item.NavItem.Name
+                printfn "Updating folder by index: %s" <| NavItem.GetName item.NavItem
                 { item with NavItem = nextItem })
             |> function
                 | Ok nextItems ->
@@ -610,7 +607,7 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
-        printfn "Starting new child under '%s'" parent.NavItem.Name
+        printfn "Starting new child under '%s'" <| NavItem.GetName parent.NavItem
 
         {
             model with
@@ -778,7 +775,7 @@ let renderNavItem props =
             match navItem.Icon with
             | ValueString icon -> navItem.Icon |> IconSearchType.MuiIcon |> tryIcon
             | _ -> Html.spanc "icon" []
-            Html.span [ text navItem.Name ]
+            Html.span [ text <| NavItem.GetName navItem ]
             match isActive, navItem.Enabled with
             | false, false -> Attr.classes [ "has-background-grey-lighter" ]
             | false, true -> ()
@@ -826,7 +823,7 @@ let viewLeftNav (items: LazyNavItem[]) (selectedItemStore: IStore<SelectedItemTy
                                 lni.NavItem.Id
                                 |> function
                                     | NavId x -> x
-                        NameGetter = fun lni -> lni.NavItem.Name
+                        NameGetter = fun lni -> NavItem.GetName lni.NavItem
                         OptionChildren = fun _ -> List.empty
                     }
                     []
@@ -873,7 +870,7 @@ let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
                     | Some(FolderSelected(Existing(lni, enabled))) ->
                         Html.li [
                             Html.a [
-                                text lni.NavItem.Name
+                                text <| NavItem.GetName lni.NavItem
                                 onClick
                                     (fun _ ->
                                         selectedItemStore.Update(fun _ ->
@@ -881,11 +878,11 @@ let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
                                     []
                             ]
                         ]
-                    | Some(FolderSelected(NewFolder ni)) -> liA (Some "is-active") ni.Name
+                    | Some(FolderSelected(NewFolder ni)) -> liA (Some "is-active") <| NavItem.GetName ni
                     | Some(ChildSelected(lni, ni)) ->
                         Html.li [
                             Html.a [
-                                text lni.NavItem.Name
+                                text <| NavItem.GetName lni.NavItem
                                 onClick
                                     (fun _ ->
                                         selectedItemStore.Update(fun _ -> Some(FolderSelected(Existing(lni, false)))))
@@ -893,7 +890,7 @@ let viewBreadCrumbs (selectedItemStore: IStore<SelectedItemType>) =
                             ]
                         ]
 
-                        liA None ni.Name
+                        liA None <| NavItem.GetName ni
                 ]
         )
     ]
@@ -906,9 +903,11 @@ let view token =
     let getValueDisplay =
         function
         | None -> "null"
-        | Some(FolderSelected(Existing(lni, editing))) -> $"FolderSelected(lni:%A{lni.NavItem.Name}, %A{editing})"
-        | Some(FolderSelected(NewFolder ni)) -> $"FolderSelected(ni:%A{ni.Name})"
-        | Some(ChildSelected(lni, ni)) -> $"ChildSelected(lni:%s{lni.NavItem.Name}, ni:%s{ni.Name})"
+        | Some(FolderSelected(Existing(lni, editing))) ->
+            $"FolderSelected(lni:%A{NavItem.GetName lni.NavItem}, %A{editing})"
+        | Some(FolderSelected(NewFolder ni)) -> $"FolderSelected(ni:%A{NavItem.GetName ni})"
+        | Some(ChildSelected(lni, ni)) ->
+            $"ChildSelected(lni:%s{NavItem.GetName lni.NavItem}, ni:%s{NavItem.GetName ni})"
 
     let selectedItemStore =
         let getter (model: Model) = model.Item

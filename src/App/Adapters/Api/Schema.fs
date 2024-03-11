@@ -48,6 +48,7 @@ type NavItem = {
     Parent: string
     Type: NavItemType
     Name: string
+    DisplayName: string
     Description: string
     Icon: string
     Weight: int
@@ -103,6 +104,7 @@ type NavItem = {
         Description = null
         Path = null
         Name = ""
+        DisplayName = ""
         Url = ""
         HasUrlKey = false
         AclRefs = Map.empty
@@ -110,6 +112,16 @@ type NavItem = {
         Weight = 0
         Enabled = false
     }
+
+    static member GetName(navItem: NavItem) =
+        navItem.Name |> Option.ofValueString |> Option.defaultValue navItem.DisplayName
+
+    static member SetName value (navItem: NavItem) =
+        if navItem.Id = NavId "" then
+            { navItem with Name = value }
+        else
+            { navItem with DisplayName = value }
+
 
 // I think the compiled name was needed for serialization/deserialization, it assumed camel case without it
 [<RequireQualifiedAccess; StringEnum>]
@@ -202,6 +214,7 @@ module Raw =
         Parent: string
         Type: string
         Name: string
+        DisplayName: string
         Description: string
         Icon: string
         Weight: int

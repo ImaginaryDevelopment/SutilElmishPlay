@@ -38,6 +38,7 @@ let dummyData: NavItem[] =
             Parent = "Parent"
             Type = Link
             Name = "Name"
+            DisplayName = "NewName"
             Description = "Description"
             Enabled = false
             Icon = "user"
@@ -292,15 +293,16 @@ let view dia =
         // ]
         Html.divc "box" [
 
-            Html.ul[Html.li[data_ "icon" "intentionally missing"
-                            Bulma.FontAwesome.fa "mo"]
+            Html.ul [
+                Html.li [ data_ "icon" "intentionally missing"; Bulma.FontAwesome.fa "mo" ]
 
-                    Html.li [ Html.divc "icon" [ Html.div [ tryIcon (MuiIcon "Link") ] ] ]
-                    Html.li [ Html.divc "icon" [ tryIcon (FAIcon "intercom") ] ]
+                Html.li [ Html.divc "icon" [ Html.div [ tryIcon (MuiIcon "Link") ] ] ]
+                Html.li [ Html.divc "icon" [ tryIcon (FAIcon "intercom") ] ]
 
-                    Html.li [
-                        Html.divc "icon" [ Html.div [ data_ "icon" "fort-awesome"; tryIcon (FAIcon "fort-awesome") ] ]
-                    ]]
+                Html.li [
+                    Html.divc "icon" [ Html.div [ data_ "icon" "fort-awesome"; tryIcon (FAIcon "fort-awesome") ] ]
+                ]
+            ]
         ]
         App.Components.Gen.Tabs.view (Choice2Of2 tabStore)
     ]

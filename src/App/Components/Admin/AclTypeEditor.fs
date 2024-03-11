@@ -179,37 +179,39 @@ module private Renderers =
                     // let aclDisplay =
                     //     aclDisplayOpt |> Option.defaultWith (fun () -> AclRefId.getText aclRefId)
 
-                    Html.a[Attr.title <| AclRefId.getText aclRefId
+                    Html.a [
+                        Attr.title <| AclRefId.getText aclRefId
 
-                           match aclRefIdentifier with
-                           | Choice2Of2 ad -> text ad.DisplayName
-                           | Choice1Of2 ari ->
-                               printfn "Creating deferred display for %A" ari
+                        match aclRefIdentifier with
+                        | Choice2Of2 ad -> text ad.DisplayName
+                        | Choice1Of2 ari ->
+                            printfn "Creating deferred display for %A" ari
 
-                               let textObs =
-                                   lookupMap
-                                   |> Store.map (fun lm ->
-                                       //    printfn "textObs: %i" lm.Count
+                            let textObs =
+                                lookupMap
+                                |> Store.map (fun lm ->
+                                    //    printfn "textObs: %i" lm.Count
 
-                                       let next =
-                                           lm
-                                           |> Map.tryFind ari
-                                           |> Option.map (fun v -> v.DisplayName)
-                                           |> Option.defaultValue (AclRefId.getText ari)
+                                    let next =
+                                        lm
+                                        |> Map.tryFind ari
+                                        |> Option.map (fun v -> v.DisplayName)
+                                        |> Option.defaultValue (AclRefId.getText ari)
 
-                                       //    printfn "Value changed: %A - %s" ari next
-                                       next)
+                                    //    printfn "Value changed: %A - %s" ari next
+                                    next)
 
-                               Bind.fragment textObs text
+                            Bind.fragment textObs text
 
-                           Attr.className (if isSelected then "is-active" else "has-text-danger")
+                        Attr.className (if isSelected then "is-active" else "has-text-danger")
 
-                           onClick
-                               (fun _ ->
-                                   // would be nice to map the display here, but eh...
-                                   printfn "Search item selected: %s" <| AclRefId.getText aclRefId
-                                   Msg.AclParamSelection(aclRefId) |> dispatch)
-                               []]
+                        onClick
+                            (fun _ ->
+                                // would be nice to map the display here, but eh...
+                                printfn "Search item selected: %s" <| AclRefId.getText aclRefId
+                                Msg.AclParamSelection(aclRefId) |> dispatch)
+                            []
+                    ]
 
                 // let ralLookup =
                 //     App.Global.resolvedAclLookup

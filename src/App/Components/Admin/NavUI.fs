@@ -202,7 +202,7 @@ let view token (props: NavUIProps) =
             elems
 
     let getItemTitling (model: Model) =
-        match model.Item.Name with
+        match NavItem.GetName model.Item with
         | ValueString name ->
             if model.Item.Type = NavItemType.Folder then
                 name
@@ -232,7 +232,7 @@ let view token (props: NavUIProps) =
                     |> IconSearchType.MuiIcon
                     |> tryIcon
             )
-            Bind.el (itemTitling, (fun t -> Html.span[text t]))
+            Bind.el (itemTitling, (fun t -> Html.span [ text t ]))
             // text (store.Value.Item.Name |> Option.ofValueString |> Option.defaultValue itemTitling)
             formFieldAddons [] [
 
@@ -259,12 +259,12 @@ let view token (props: NavUIProps) =
             textInput
                 {
                     Titling = getItemTitling store.Value
-                    Value = store |> Store.map (fun v -> v.Item.Name)
+                    Value = store |> Store.map (fun v -> NavItem.GetName v.Item)
                     OnChange =
                         (fun value ->
                             store.Update(fun old -> {
                                 old with
-                                    Item = { old.Item with Name = value }
+                                    Item = old.Item |> NavItem.SetName value
                             }))
                     DebounceOverride = None
                 }

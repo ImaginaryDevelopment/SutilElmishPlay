@@ -75,6 +75,7 @@ module NavItemAdapters =
                 NavItemType.TryParse x.Type
                 |> Option.getOrFail (sprintf "Could not parse '%s'" x.Type)
             Name = x.Name
+            DisplayName = x.DisplayName
             Description = x.Description
             Icon = x.Icon
             Weight = x.Weight
@@ -107,7 +108,8 @@ module NavItemAdapters =
             Path = item.Path |> ensureStartsWithRoot
             Parent = item.Parent
             Type = string item.Type
-            Name = item.Name
+            Name = item.Name |> Option.ofValueString |> Option.defaultValue item.DisplayName
+            DisplayName = item.DisplayName
             Icon = item.Icon
             Weight = item.Weight
             Enabled = item.Enabled |> Some

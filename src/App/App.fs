@@ -220,7 +220,7 @@ let view () =
                     | MsalMode.Popup -> Html.div [ text "Authorizing via popup..." ]
                     | MsalMode.Redirect -> Html.div [ text "Checking authorization..." ]
                 | Some(Ok(auth, token)), _ -> Html.div [ text $"Welcome {auth.account.name}" ]
-                | Some(Error exn), _ -> Html.div[text "Failed auth"]
+                | Some(Error exn), _ -> Html.div [ text "Failed auth"]
         )
         mustAuthEl "tabStore" model (fun _ -> Html.div [ App.Components.Gen.Tabs.view (Choice2Of2 tabStore) ])
 
