@@ -67,27 +67,30 @@ module NavItemAdapters =
 
     let ofApiNavItem (x: ApiNavItem) : NavItem =
 
-        let mapped: NavItem = {
-            Id = NavId x.Id
-            Path = x.Path
-            Parent = x.Parent
-            Type =
-                NavItemType.TryParse x.Type
-                |> Option.getOrFail (sprintf "Could not parse '%s'" x.Type)
-            Name = x.Name
-            DisplayName = x.DisplayName |> Option.bind Option.ofValueString |> Option.defaultValue ""
-            Description = x.Description
-            Icon = x.Icon
-            Weight = x.Weight
-            Enabled = x.Enabled |> Option.defaultValue false
-            Url = x.Url
-            HasUrlKey = x.HasUrlKey
-            Managers = x.Managers
-            AclRefs =
-                x.Acls
-                |> Seq.map (fun acl -> acl.AclName, acl.Parameters |> Set.ofArray)
-                |> Map.ofSeq
-        }
+        let mapped: NavItem =
+            {
+                Id = NavId x.Id
+                Path = x.Path
+                Parent = x.Parent
+                Type =
+                    NavItemType.TryParse x.Type
+                    |> Option.getOrFail (sprintf "Could not parse '%s'" x.Type)
+                Name = x.Name
+                DisplayName = x.DisplayName |> Option.bind Option.ofValueString |> Option.defaultValue ""
+                Description = x.Description
+                Icon = x.Icon
+                Weight = x.Weight
+                Enabled = x.Enabled |> Option.defaultValue false
+                Url = x.Url
+                HasUrlKey = x.HasUrlKey
+                Managers = x.Managers
+                Hash = null
+                AclRefs =
+                    x.Acls
+                    |> Seq.map (fun acl -> acl.AclName, acl.Parameters |> Set.ofArray)
+                    |> Map.ofSeq
+            }
+            |> NavItem.SetHash
 
         mapped
 

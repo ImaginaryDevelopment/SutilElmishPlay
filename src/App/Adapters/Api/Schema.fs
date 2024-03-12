@@ -56,11 +56,22 @@ type NavItem = {
     Url: string
     HasUrlKey: bool
     Managers: string[]
+    Hash: string
     // this is poorly named if not all Acls are reference types
     // can't use Map<AclName, AclRefId>, could be param, or ref param
     [<CompiledName("Acls")>]
     AclRefs: NavItemAclRefsMap
 } with
+
+    static member CalcHash(x: NavItem) =
+        let text = Core.serialize { x with Hash = null }
+        let result = text.GetHashCode() |> string
+        printfn "Calc Hash: %s(%i) -> %s" x.Name x.Weight result // 1435617536
+        result
+
+    static member SetHash(x: NavItem) =
+        let nextHash = NavItem.CalcHash x
+        { x with Hash = nextHash }
     // value could be a literal value, or a reference
     static member TryChangeAclNameParam aclName (f: Set<_> -> Set<_>) (x: NavItem) =
         x.AclRefs
@@ -110,6 +121,7 @@ type NavItem = {
         HasUrlKey = false
         AclRefs = Map.empty
         Icon = "City"
+        Hash = null
         Weight = 0
         Enabled = false
         Managers = Array.empty

@@ -7,6 +7,7 @@ open App.Adapters.Api.Schema
 
 let resolvedAclLookup: IStore<ResolvedAclLookup> = Store.make Map.empty
 // let aclSearchResult: IStore<
+let mutable selectedItem: NavItem option = None
 
 module ResolvedAclLookup =
     // Map<AclName, Map<AclRefId, AclDisplay>>

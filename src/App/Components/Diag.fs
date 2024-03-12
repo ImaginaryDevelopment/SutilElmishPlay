@@ -43,6 +43,7 @@ let dummyData: NavItem[] =
             Enabled = false
             Icon = "user"
             Weight = 0
+            Hash = "hello hash"
             Url = "url"
             HasUrlKey = false
             AclRefs = Map.empty

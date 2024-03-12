@@ -373,6 +373,14 @@ module MLens =
             Items = Some(Ok nextItems)
     }
 
+    let getEditingItem =
+        function
+        | FolderSelected(Existing(folder, true)) -> Some(Choice1Of2 folder)
+        | FolderSelected(NewFolder lni) -> Some(Choice2Of2 lni)
+        | ChildSelected(_, child) -> Some(Choice2Of2 child)
+        | _ -> None
+
+
     let unselectItemState oldState =
         match oldState with
         | FolderSelected(NewFolder _) -> None
@@ -962,12 +970,27 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                                 // leave folder selected but turn off editing if editing is on
                                 onClick
                                     (fun _ ->
-                                        // TODO: figure out if there are changes
-                                        if Core.promptConfirm "Abandon changes?" then
-
+                                        let activate () =
                                             let next = MLens.unselectItemState selectedItem
 
-                                            selectedItemStore.Update(fun _ -> next))
+                                            selectedItemStore.Update(fun _ -> next)
+
+                                        let confirmActivate () =
+                                            if Core.promptConfirm "Abandon changes?" then
+                                                activate ()
+
+                                        App.Global.selectedItem
+                                        |> function
+                                            | None ->
+                                                printfn "No Selected item found"
+                                                activate ()
+                                            | Some ni ->
+                                                if ni.Hash <> NavItem.CalcHash ni then
+                                                    confirmActivate ()
+                                                else
+                                                    printfn "No Changes found"
+                                                    activate ())
+
                                     []
                             ]
                     )

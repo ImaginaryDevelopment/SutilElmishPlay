@@ -172,6 +172,8 @@ let view token (props: NavUIProps) =
     let store, dispatch =
         () |> Store.makeElmish (init item) (update token props.Saved) ignore
 
+    let unsubscribe = store.Subscribe(fun v -> App.Global.selectedItem <- Some v.Item)
+
     // AclTypes: IReadOnlyStore<AclType seq>
     // consider letting a parent manage this
 
@@ -216,7 +218,7 @@ let view token (props: NavUIProps) =
 
     Html.divc "container fill" [
         Attr.id Style.mainRenderContainer
-        disposeOnUnmount [ vStore; store ]
+        disposeOnUnmount [ unsubscribe; vStore; store ]
         let itemTitling = store |> Store.map getItemTitling
 
         Html.h1 [
