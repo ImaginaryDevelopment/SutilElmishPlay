@@ -128,7 +128,11 @@ type NavItem = {
     }
 
     static member GetName(navItem: NavItem) =
-        navItem.Name |> Option.ofValueString |> Option.defaultValue navItem.DisplayName
+
+        navItem.DisplayName
+        |> Option.ofValueString
+        |> Option.orElseWith (fun _ -> Option.ofValueString navItem.Name)
+        |> Option.defaultValue ""
 
     static member SetName value (navItem: NavItem) =
         if navItem.Id = NavId "" then
