@@ -744,7 +744,6 @@ let renderNavItem props =
                         | Some(FolderSelected(NewFolder lni)) -> FolderSelected(NewFolder lni)
                         | Some x -> x
 
-                    printfn "selected ok: %A" nextSelection
                     nextSelection |> Some)
             | NotRequested -> Msg.PathRequested lni |> props.Dispatch
             | InFlight -> eprintfn "In Flight item click"
