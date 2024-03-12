@@ -960,7 +960,7 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                         function
                         | Some(FolderSelected(Existing(_, false)))
                         | None ->
-                            printfn "Overlay render hide"
+                            // printfn "Overlay render hide"
                             Html.div [ Attr.id "overlay"; Attr.styleAppend [ Css.visibilityHidden ] ]
                         // TODO: add left side props editor display
                         | Some selectedItem ->

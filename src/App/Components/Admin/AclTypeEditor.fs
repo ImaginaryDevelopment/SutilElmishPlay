@@ -102,10 +102,10 @@ module Renderers =
         (aclRefIdentifier: Choice<AclRefId, AclDisplay>)
         onAclClick
         =
-        currentParams
-        |> Set.count
-        |> printfn "render AclParams-%i params- '%A'"
-        |> fun f -> f aclRefIdentifier
+        // currentParams
+        // |> Set.count
+        // |> printfn "render AclParams-%i params- '%A'"
+        // |> fun f -> f aclRefIdentifier
 
         let aclRefId =
             aclRefIdentifier
@@ -130,7 +130,7 @@ module Renderers =
             match aclRefIdentifier with
             | Choice2Of2 ad -> text ad.DisplayName
             | Choice1Of2 ari ->
-                printfn "Creating deferred display for %A" ari
+                // printfn "Creating deferred display for %A" ari
 
                 let textObs =
                     lookupMap
@@ -169,7 +169,7 @@ module Renderers =
     }
     // all reference params at least at this time, are searchable
     let renderReferenceParams (props: ReferenceParamsProps) =
-        props.CurrentParamsStore.Value |> Set.count |> printfn "Render ref p with %i"
+        // props.CurrentParamsStore.Value |> Set.count |> printfn "Render ref p with %i"
 
         Html.div [
             Html.form [
@@ -226,7 +226,7 @@ module Renderers =
 
 
                 columns2 [] [
-                    Html.h2 [ text "Has" ]
+                    Html.h2c "col-header" [ text "Has" ]
                     // selected items
                     Bind.el (
                         props.CurrentParamsStore,
@@ -251,7 +251,7 @@ module Renderers =
                     )
 
                 ] [
-                    Html.h2 [ text "Available" ]
+                    Html.h2c "col-header" [ text "Available" ]
                     // HACK: this is looking at all search results, not just current search results
                     // unselected items - based on the lookup of this acl name, or based on the search results? uh oh
                     Bind.el2 props.CurrentParamsStore props.SearchResults (fun (currentParams, searchResults) ->

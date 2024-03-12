@@ -141,7 +141,6 @@ module MLens =
         |> Map.ofSeqGroups
         |> Map.iter (fun aclType values -> App.Global.ResolvedAclLookup.addValues aclType.Name values)
 
-
 let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
     printfn "NavUI update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
@@ -205,65 +204,19 @@ module RenderHelpers =
 
             App.Global.makeTypesUnsafeRStore aclTypes
 
-        AclTypeEditor.Renderers.renderReferenceParams {
-            OnSearch = Msg.SearchRequest >> dispatch
-            OnClick = Msg.ManagerSelection >> dispatch
-            SearchStore = sStore // IStore<string>
-            ResolveStore = rapRStore
-            SearchResults = mgrSearchResultsRStore //  IReadOnlyStore<AclDisplay list>
-            SearchInFlight = store |> Store.map (fun v -> v.SearchIsInFlight) // System.IObservable<bool>
-            CurrentParamsStore = mStore
-        }
-        // collapsibleCard (Some(Choice2Of2 true)) (text "Managers") [
-
-        //     CardContentType.Content [
-        //         Html.divc "fill" [
-        //             columns2 [] [
-        //                 Html.h2 [ text "Has" ]
-        //                 // selected items
-        //                 Bind.el (
-        //                     mStore,
-        //                     fun p ->
-
-        //                         // Set.count p |> printfn "Render Has with: %i"
-
-        //                         Html.ul [
-        //                             // TODO: this needs to be sorted by observable results
-        //                             for aclRefId in p do
-        //                                 Html.li [
-        //                                     AclTypeEditor.renderAclParams
-        //                                         (p, rapRStore)
-        //                                         (Choice1Of2 aclRefId)
-        //                                         onAclClick
-        //                                 ]
-        //                         ]
-        //                 )
-
-        //             ] [
-        //                 Html.h2 [ text "Available" ]
-        //                 // HACK: this is looking at all search results, not just current search results
-        //                 // unselected items - based on the lookup of this acl name, or based on the search results? uh oh
-        //                 Bind.el2 mStore mgrSearchResultsRStore (fun (currentParams, searchResults) ->
-        //                     let cp = currentParams
-        //                     let lookupMap = rapRStore
-
-        //                     Html.ul [
-        //                         for ad in
-        //                             searchResults |> List.filter (fun ad -> cp |> Set.contains ad.Reference |> not) do
-        //                             Html.li [
-        //                                 AclTypeEditor.renderAclParams
-        //                                     (currentParams, lookupMap)
-        //                                     (Choice2Of2 ad)
-        //                                     onAclClick
-        //                             ]
-        //                     ])
-
-        //             ]
-
-
-        //         ]
-        //     ]
-        // ]
+        collapsibleCard (Some(Choice2Of2 true)) (text "Managers") [
+            CardContentType.Content [
+                AclTypeEditor.Renderers.renderReferenceParams {
+                    OnSearch = Msg.SearchRequest >> dispatch
+                    OnClick = Msg.ManagerSelection >> dispatch
+                    SearchStore = sStore // IStore<string>
+                    ResolveStore = rapRStore
+                    SearchResults = mgrSearchResultsRStore //  IReadOnlyStore<AclDisplay list>
+                    SearchInFlight = store |> Store.map (fun v -> v.SearchIsInFlight) // System.IObservable<bool>
+                    CurrentParamsStore = mStore
+                }
+            ]
+        ]
         |> fun x -> x
 
 // None,None => Create new root folder
