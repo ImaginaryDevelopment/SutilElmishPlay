@@ -119,6 +119,11 @@ module NavItemAdapters =
             Enabled = item.Enabled |> Some
             Url = item.Url
             Managers = item.Managers |> Set.toSeq |> Seq.map AclRefId.getText |> Array.ofSeq
+            // |> Array.append [|
+            //     "38416a1f-08e9-4af3-9b93-5c2218cfe744"
+            //     "667f9b93-0aec-4dec-9f55-586d53caaf1e"
+            //     "6bb58394-2f69-67b9-9d5d-9b4d11dcd338" //bad
+            // |]
             HasUrlKey = item.HasUrlKey
         }
 

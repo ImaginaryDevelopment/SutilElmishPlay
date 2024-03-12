@@ -66,7 +66,6 @@ type NavItem = {
     static member CalcHash(x: NavItem) =
         let text = Core.serialize { x with Hash = null }
         let result = text.GetHashCode() |> string
-        printfn "Calc Hash: %s(%i) -> %s" x.Name x.Weight result // 1435617536
         result
 
     static member SetHash(x: NavItem) =
@@ -195,6 +194,13 @@ type NavAclsResolveResponse = {
     Resolved: AclDisplay[]
     Errors: NavAclResolveErrorResponse[] option
 }
+
+type AdminPickerBulkResolveResponse = {
+    Managers: AclRefId[]
+    Resolved: AclDisplay[]
+    Errors: NavAclResolveErrorResponse[] option
+}
+
 // api types that we want to restrict to mapped interactions outside of the api adapter layer
 module Raw =
 

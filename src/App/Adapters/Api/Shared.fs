@@ -149,7 +149,7 @@ let searchAdmin token text =
     // TODO: this does not properly encode the url params
     let url = $"/api/Navigation/AdminPicker"
 
-    fetchJson<AclSearchResult>
+    fetchJson<ApiAclSearchResponse>
         "adminPicker"
         {
             Token = token
@@ -165,7 +165,7 @@ let searchAdmin token text =
 let getFolderAdmins token (NavId navId) =
     let url = $"/api/Navigation/AdminPicker?Folder={navId}"
 
-    fetchJson<unit>
+    fetchJson<AdminPickerBulkResolveResponse>
         "getFolderAdmins"
         {
             Token = token
@@ -173,6 +173,16 @@ let getFolderAdmins token (NavId navId) =
             Arg = None
         }
         List.empty
+    |> Async.map (
+        Result.map (fun v ->
+            v.Errors
+            |> Option.iter (fun e ->
+                if Array.isEmpty e |> not then
+                    eprintfn "Errors in bulk resolve"
+                    Core.log e)
+
+            v)
+    )
 
 
 type AclRefLookup = {

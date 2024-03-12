@@ -8,6 +8,9 @@ open App.Adapters.Html
 
 let resolvedAclLookup: IStore<ResolvedAclLookup> = Store.make Map.empty
 
+let isGroup = (=) (AclName "Allow-By-Group")
+let isUser = (=) (AclName "Allow-By-User")
+
 let makeTypeRStore (aclType: AclType) =
     resolvedAclLookup
     |> Store.mapRStore (fun v ->

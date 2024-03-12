@@ -28,10 +28,10 @@ module NavIds =
     let isValid (NavId x) =
         System.String.IsNullOrWhiteSpace x |> not
 
-[<Erase>]
+[<Erase; StringEnum>]
 type AclReferenceType =
-    | Group
-    | User
+    | [<CompiledName("Group")>] Group
+    | [<CompiledName("User")>] User
 
 type AclDisplay = {
     Reference: AclRefId

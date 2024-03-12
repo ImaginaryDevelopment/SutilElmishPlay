@@ -53,7 +53,8 @@ module Style =
 type Msg =
     | SaveRequest
     | SaveResponse of Result<SaveResult, ErrorType>
-    | SearchAdminResponse of Result<AclSearchResult, ErrorType>
+    | SearchAdminResponse of Result<ApiAclSearchResponse, ErrorType>
+    | BulkAdminResponse of Result<AdminPickerBulkResolveResponse, ErrorType>
     | SearchRequest of string
     | ManagerSelection of AclRefId
 
@@ -88,10 +89,13 @@ module Commands =
         Cmd.OfAsync.either f text id Error
         |> Cmd.map (Result.mapError Choice2Of2 >> Msg.SearchAdminResponse)
 
+    let bulkResolveAdmin token navId =
+        let f = App.Adapters.Api.Shared.getFolderAdmins token
 
+        Cmd.OfAsync.either f navId id Error
+        |> Cmd.map (Result.mapError Choice2Of2 >> Msg.BulkAdminResponse)
 
-// does this need to fire off resolves for ACLs?
-let init item () =
+let init token item () =
     let model = {
         Item = item
         SearchIsInFlight = false
@@ -103,8 +107,7 @@ let init item () =
 
     let cmd =
         if Set.isEmpty item.Managers |> not then
-            // TODO: fire off a resolve
-            Cmd.none
+            Commands.bulkResolveAdmin token item.Id
         else
             Cmd.none
 
@@ -113,8 +116,33 @@ let init item () =
 module MLens =
     let updateItem f model = { model with Item = f model.Item }
 
+    let updateManager aclRefId model =
+        model
+        |> updateItem (fun x -> {
+            x with
+                Managers = x.Managers |> Set.toggle aclRefId
+        })
 
-let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
+    let onManagerResolves (aclTypes: AclType seq) (aclDisplays: AclDisplay seq) =
+        aclDisplays
+        |> Seq.choose (fun v ->
+            if v.Type = AclReferenceType.User then
+                aclTypes
+                |> Seq.tryFind (fun aclType -> aclType.Name |> App.Global.isGroup)
+                |> Option.map (fun aclType -> aclType, v)
+            elif v.Type = AclReferenceType.Group then
+                aclTypes
+                |> Seq.tryFind (fun aclType -> aclType.Name |> App.Global.isGroup)
+                |> Option.map (fun aclType -> aclType, v)
+            else
+                Core.log v
+                eprintfn "Unrecognized search result: %A" v
+                None)
+        |> Map.ofSeqGroups
+        |> Map.iter (fun aclType values -> App.Global.ResolvedAclLookup.addValues aclType.Name values)
+
+
+let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) msg (model: Model) : Model * Cmd<Msg> =
     printfn "NavUI update: %A"
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
@@ -127,6 +155,17 @@ let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model
         onSave sr
         model, Cmd.none
     | SearchRequest text -> model, Commands.searchAdmin token text
+    | ManagerSelection aclRefId -> model |> MLens.updateManager aclRefId, Cmd.none
+    | BulkAdminResponse(Ok v) ->
+        v.Resolved |> MLens.onManagerResolves aclTypes
+
+        model, Cmd.none
+    | SearchAdminResponse(Ok v) ->
+        // we have to match up displays with their acl types
+        // since this is not a pure result and can contain multiples
+        v.Results |> MLens.onManagerResolves aclTypes
+
+        { model with SearchIsInFlight = false }, Cmd.none
 
 
 module RenderHelpers =
@@ -162,7 +201,7 @@ module RenderHelpers =
         let rapRStore: IReadOnlyStore<Map<AclRefId, AclDisplay>> =
             let aclTypes =
                 aclTypes
-                |> Array.filter (fun v -> v.Name = AclName "Allow-By-Group" || v.Name = AclName "Allow-By-User")
+                |> Array.filter (fun v -> App.Global.isGroup v.Name || App.Global.isUser v.Name)
 
             App.Global.makeTypesUnsafeRStore aclTypes
 
@@ -273,7 +312,8 @@ let view token (props: NavUIProps) =
     printfn "NavUI: type: %A, isCreate:%b, hasParent:%b" item.Type isCreate hasParent
 
     let store, dispatch =
-        () |> Store.makeElmish (init item) (update token props.Saved) ignore
+        ()
+        |> Store.makeElmish (init token item) (update token props.AclTypes props.Saved) ignore
 
     let unsubscribe = store.Subscribe(fun v -> App.Global.selectedItem <- Some v.Item)
 
