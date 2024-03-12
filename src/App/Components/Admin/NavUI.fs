@@ -21,8 +21,10 @@ type SaveResult = SaveType * NavItem
 type Model = {
     // NavItem: NavItem
 
+    ManagerSearchResults: AclDisplay list
     // a copy of the item from props used for saving
     Item: NavItem
+    SearchIsInFlight: bool
     // Acls: (AclData * AclType) list
     SaveStatus: RemoteData<SaveResult>
 }
@@ -51,6 +53,10 @@ module Style =
 type Msg =
     | SaveRequest
     | SaveResponse of Result<SaveResult, ErrorType>
+    | SearchAdminResponse of Result<AclSearchResult, ErrorType>
+    | SearchRequest of string
+    | ManagerSelection of AclRefId
+
 
 module Commands =
 
@@ -76,16 +82,33 @@ module Commands =
         Cmd.OfAsync.either f navItem id (fun ex -> Choice2Of2 ex |> Error)
         |> Cmd.map Msg.SaveResponse
 
+    let searchAdmin token text =
+        let f = App.Adapters.Api.Shared.searchAdmin token
+
+        Cmd.OfAsync.either f text id Error
+        |> Cmd.map (Result.mapError Choice2Of2 >> Msg.SearchAdminResponse)
+
+
 
 // does this need to fire off resolves for ACLs?
 let init item () =
-    {
+    let model = {
         Item = item
+        SearchIsInFlight = false
         // Acls = List.empty
         SaveStatus = NotRequested
+        ManagerSearchResults = List.empty
     // Focus = FocusType.Creator NameFocus
-    },
-    Cmd.none
+    }
+
+    let cmd =
+        if Set.isEmpty item.Managers |> not then
+            // TODO: fire off a resolve
+            Cmd.none
+        else
+            Cmd.none
+
+    model, cmd
 
 module MLens =
     let updateItem f model = { model with Item = f model.Item }
@@ -103,6 +126,8 @@ let private update token (onSave: SaveResult -> unit) msg (model: Model) : Model
     | SaveResponse(Ok sr) ->
         onSave sr
         model, Cmd.none
+    | SearchRequest text -> model, Commands.searchAdmin token text
+
 
 module RenderHelpers =
 
@@ -125,6 +150,83 @@ module RenderHelpers =
             | None -> ""
             | Some v -> v)
 
+    let renderManagerEditor (aclTypes: AclType[]) store (dispatch: Msg -> unit) =
+        let mgrSearchResultsRStore =
+            store |> Store.mapRStore (fun model -> model.ManagerSearchResults)
+
+        let sStore = "" |> Store.make
+
+        let mStore: IReadOnlyStore<Set<AclRefId>> =
+            store |> Store.mapRStore (fun v -> v.Item.Managers)
+
+        let rapRStore: IReadOnlyStore<Map<AclRefId, AclDisplay>> =
+            let aclTypes =
+                aclTypes
+                |> Array.filter (fun v -> v.Name = AclName "Allow-By-Group" || v.Name = AclName "Allow-By-User")
+
+            App.Global.makeTypesUnsafeRStore aclTypes
+
+        AclTypeEditor.Renderers.renderReferenceParams {
+            OnSearch = Msg.SearchRequest >> dispatch
+            OnClick = Msg.ManagerSelection >> dispatch
+            SearchStore = sStore // IStore<string>
+            ResolveStore = rapRStore
+            SearchResults = mgrSearchResultsRStore //  IReadOnlyStore<AclDisplay list>
+            SearchInFlight = store |> Store.map (fun v -> v.SearchIsInFlight) // System.IObservable<bool>
+            CurrentParamsStore = mStore
+        }
+        // collapsibleCard (Some(Choice2Of2 true)) (text "Managers") [
+
+        //     CardContentType.Content [
+        //         Html.divc "fill" [
+        //             columns2 [] [
+        //                 Html.h2 [ text "Has" ]
+        //                 // selected items
+        //                 Bind.el (
+        //                     mStore,
+        //                     fun p ->
+
+        //                         // Set.count p |> printfn "Render Has with: %i"
+
+        //                         Html.ul [
+        //                             // TODO: this needs to be sorted by observable results
+        //                             for aclRefId in p do
+        //                                 Html.li [
+        //                                     AclTypeEditor.renderAclParams
+        //                                         (p, rapRStore)
+        //                                         (Choice1Of2 aclRefId)
+        //                                         onAclClick
+        //                                 ]
+        //                         ]
+        //                 )
+
+        //             ] [
+        //                 Html.h2 [ text "Available" ]
+        //                 // HACK: this is looking at all search results, not just current search results
+        //                 // unselected items - based on the lookup of this acl name, or based on the search results? uh oh
+        //                 Bind.el2 mStore mgrSearchResultsRStore (fun (currentParams, searchResults) ->
+        //                     let cp = currentParams
+        //                     let lookupMap = rapRStore
+
+        //                     Html.ul [
+        //                         for ad in
+        //                             searchResults |> List.filter (fun ad -> cp |> Set.contains ad.Reference |> not) do
+        //                             Html.li [
+        //                                 AclTypeEditor.renderAclParams
+        //                                     (currentParams, lookupMap)
+        //                                     (Choice2Of2 ad)
+        //                                     onAclClick
+        //                             ]
+        //                     ])
+
+        //             ]
+
+
+        //         ]
+        //     ]
+        // ]
+        |> fun x -> x
+
 // None,None => Create new root folder
 // Some _, None -> Create new child - Link
 // None, Some => Edit folder
@@ -141,6 +243,7 @@ type NavUIProps = {
     AclTypes: AclType[]
     Saved: SaveType * NavItem -> unit
     Delete: unit -> unit
+    UserCanManage: bool
 }
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
@@ -181,14 +284,9 @@ let view token (props: NavUIProps) =
 
     let vStore =
         store
-        |> Store.mapRStore
-            {
-                UseEquality = true
-                DebugTitle = None
-            }
-            (fun model ->
-                let vResult = ValidNavItem.ValidateNavItem model.Item
-                vResult |> Option.ofResult)
+        |> Store.mapRStore (fun model ->
+            let vResult = ValidNavItem.ValidateNavItem model.Item
+            vResult |> Option.ofResult)
 
     let renderErrors nameOpt =
         match nameOpt with
@@ -370,8 +468,14 @@ let view token (props: NavUIProps) =
                     NavId = item.Id
                     ResolvedAclStoreOpt = None
                 }
-
             ]
+            if props.UserCanManage then
+                CardContentType.Content [
+
+                    let element = RenderHelpers.renderManagerEditor props.AclTypes store dispatch
+                    element
+                ]
+
         ]
 
         // TODO: maybe enable LS flag to make this visible to user instead of always

@@ -38,6 +38,7 @@ type AclDisplay = {
     DisplayName: string
     // group or user
     Type: AclReferenceType
+    AdditionalInfo: obj option
 }
 
 type SaveType =

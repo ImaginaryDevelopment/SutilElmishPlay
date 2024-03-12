@@ -1099,6 +1099,8 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                                     Item = navItem
                                     EditType = editType
                                     AclTypes = store.Value.AclTypes
+                                    // TODO: set this based on current user
+                                    UserCanManage = true
                                     // if it has an icon already allow editing, otherwise allow icons if they aren't an area we don't want icons
                                     AllowIcon =
                                         navItem.Icon |> String.isValueString

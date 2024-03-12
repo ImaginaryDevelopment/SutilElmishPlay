@@ -47,7 +47,7 @@ let dummyData: NavItem[] =
             Url = "url"
             HasUrlKey = false
             AclRefs = Map.empty
-            Managers = Array.empty
+            Managers = Set.empty
         }
     ]
 

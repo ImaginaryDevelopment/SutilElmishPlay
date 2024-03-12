@@ -55,7 +55,7 @@ type NavItem = {
     Enabled: bool
     Url: string
     HasUrlKey: bool
-    Managers: string[]
+    Managers: Set<AclRefId>
     Hash: string
     // this is poorly named if not all Acls are reference types
     // can't use Map<AclName, AclRefId>, could be param, or ref param
@@ -124,7 +124,7 @@ type NavItem = {
         Hash = null
         Weight = 0
         Enabled = false
-        Managers = Array.empty
+        Managers = Set.empty
     }
 
     static member GetName(navItem: NavItem) =

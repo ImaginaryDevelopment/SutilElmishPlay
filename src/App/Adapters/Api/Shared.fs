@@ -145,16 +145,19 @@ let getNavAclResolve
         |> Ok
     | _ -> Error "Type is not a reference type"
 
-let getAdmins token (AclRefId aclRefId) =
+let searchAdmin token text =
     // TODO: this does not properly encode the url params
-    let url = $"/api/Navigation/AdminPicker?Search={aclRefId}"
+    let url = $"/api/Navigation/AdminPicker"
 
-    fetchJson<unit>
+    fetchJson<AclSearchResult>
         "adminPicker"
         {
             Token = token
             RelPath = url
-            Arg = None
+            Arg =
+                Some {
+                    QueryValues = Some(Map["Search", text])
+                }
         }
         List.empty
 
@@ -171,20 +174,6 @@ let getFolderAdmins token (NavId navId) =
         }
         List.empty
 
-let setFolderAdmins token (NavId navId, aclRefs) =
-    let url = $"/api/Navigation/AdminPicker?Folder={navId}"
-
-    fetchJson<unit> "setFolderAdmins" {
-        Token = token
-        RelPath = url
-        Arg =
-            Some {
-                QueryValues =
-                    Some
-                    // TODO: get proper param name, and proper separator
-                    <| Map [ "AclRefs", aclRefs |> Seq.map AclRefId.getText |> String.concat "," ]
-            }
-    }
 
 type AclRefLookup = {
     AclName: AclName

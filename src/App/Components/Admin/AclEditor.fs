@@ -129,6 +129,7 @@ module Commands =
             :: commands)
         |> Cmd.batch
 
+
 type AclEditorProps = {
     Token: string
     NavId: NavId
@@ -182,6 +183,21 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
         focusedAclTypeOpt
         |> Option.map (fun aclType -> handleUnresolvedParamsIfFound props.Token props.NavId aclType props.ItemAcls)
         |> Option.defaultValue Cmd.none
+
+    // let tempCommands =
+    //     props.AclTypes
+    //     |> Seq.choose (fun v ->
+    //         match v.AclParamType with
+    //         | AclParameterType.Reference _ -> Some v.Name
+    //         | _ -> None)
+    //     |> Seq.choose (fun aclName ->
+    //         props.ItemAcls.Value
+    //         |> Map.tryFind aclName
+    //         |> Option.bind (fun p -> if Set.isEmpty p then None else Some(aclName, p)))
+    //     |> Seq.tryHead
+    //     |> Option.map (fun (aclName, p) -> Commands.getAdmins token)
+
+    //     Commands.resolveAdmin token props
 
     let model = {
         ResolvedAclStore =
@@ -363,7 +379,7 @@ let render (props: AclEditorProps) =
 
 
     // toggle the acl itself, not a param
-    let renderToggleButton aclType store dispatch =
+    let renderToggleButton aclType store =
         let iaStore = makeIAStore aclType
         let addText = "Add New Acl"
         let removeText = "Remove"
@@ -414,14 +430,7 @@ let render (props: AclEditorProps) =
                             | { Name = AclName n } -> n
                         OptionChildren = fun child -> []
                         SelectType =
-                            let rStore =
-                                store
-                                |> Store.mapRStore
-                                    {
-                                        UseEquality = true
-                                        DebugTitle = None
-                                    }
-                                    (MLens.getFocusedAclType)
+                            let rStore = store |> Store.mapRStore MLens.getFocusedAclType
 
                             ObservedSelect(
                                 rStore,
@@ -439,7 +448,7 @@ let render (props: AclEditorProps) =
                     fun aclTypeOpt ->
                         match aclTypeOpt with
                         | None -> Html.div []
-                        | Some aclType -> renderToggleButton aclType store dispatch
+                        | Some aclType -> renderToggleButton aclType store
                 )
             ] []
 

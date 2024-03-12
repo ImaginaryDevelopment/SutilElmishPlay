@@ -4,9 +4,41 @@ module App.Global
 open Sutil
 open App.Adapters.Schema
 open App.Adapters.Api.Schema
+open App.Adapters.Html
 
 let resolvedAclLookup: IStore<ResolvedAclLookup> = Store.make Map.empty
-// let aclSearchResult: IStore<
+
+let makeTypeRStore (aclType: AclType) =
+    resolvedAclLookup
+    |> Store.mapRStore (fun v ->
+        let next = v |> Map.tryFind aclType.Name |> Option.defaultValue Map.empty
+        // printfn "rapRStore update %i - %A: %i" v.Count props.AclType.Name next.Count
+        next)
+
+// unused
+let makeTypesRStore aclTypes =
+    resolvedAclLookup
+    |> Store.mapRStore (fun v ->
+        (Map.empty, aclTypes)
+        ||> Seq.fold (fun m (aclType: AclType) ->
+            match v |> Map.tryFind aclType.Name with
+            | None -> m
+            | Some values -> m |> Map.add aclType values))
+
+// managers listens to 2 acl types so far, group and user
+// aclRefId could match between a user and a group - unsafe
+let makeTypesUnsafeRStore aclTypes : IReadOnlyStore<Map<AclRefId, AclDisplay>> =
+    resolvedAclLookup
+    |> Store.mapRStore (fun v ->
+        (Map.empty, aclTypes)
+        ||> Seq.fold (fun m (aclType: AclType) ->
+            match v |> Map.tryFind aclType.Name with
+            | None -> m
+            | Some values ->
+                // add values map to m
+                (m, values)
+                ||> Seq.fold (fun m (KeyValue(aclRefId, aclDisplay)) -> m |> Map.add aclRefId aclDisplay)))
+
 let mutable selectedItem: NavItem option = None
 
 module ResolvedAclLookup =

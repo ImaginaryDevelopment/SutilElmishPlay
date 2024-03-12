@@ -83,7 +83,7 @@ module NavItemAdapters =
                 Enabled = x.Enabled |> Option.defaultValue false
                 Url = x.Url
                 HasUrlKey = x.HasUrlKey
-                Managers = x.Managers
+                Managers = x.Managers |> Seq.map AclRefId |> Set.ofSeq
                 Hash = null
                 AclRefs =
                     x.Acls
@@ -118,7 +118,7 @@ module NavItemAdapters =
             Weight = item.Weight
             Enabled = item.Enabled |> Some
             Url = item.Url
-            Managers = item.Managers
+            Managers = item.Managers |> Set.toSeq |> Seq.map AclRefId.getText |> Array.ofSeq
             HasUrlKey = item.HasUrlKey
         }
 
