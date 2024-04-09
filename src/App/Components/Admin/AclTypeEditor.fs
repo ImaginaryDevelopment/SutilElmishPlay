@@ -115,15 +115,6 @@ module Renderers =
 
         let isSelected = currentParams |> Set.contains aclRefId
 
-
-
-
-        // let aclDisplayOpt =
-        //     lookupMap |> Map.tryFind aclRefId |> Option.map (fun v -> v.DisplayName)
-
-        // let aclDisplay =
-        //     aclDisplayOpt |> Option.defaultWith (fun () -> AclRefId.getText aclRefId)
-
         Html.a [
             Attr.title <| AclRefId.getText aclRefId
 

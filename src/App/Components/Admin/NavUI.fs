@@ -164,7 +164,12 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
         // since this is not a pure result and can contain multiples
         v.Results |> MLens.onManagerResolves aclTypes
 
-        { model with SearchIsInFlight = false }, Cmd.none
+        {
+            model with
+                SearchIsInFlight = false
+                ManagerSearchResults = v.Results |> List.ofArray
+        },
+        Cmd.none
 
 
 module RenderHelpers =
@@ -188,7 +193,7 @@ module RenderHelpers =
             | None -> ""
             | Some v -> v)
 
-    let renderManagerEditor (aclTypes: AclType[]) store (dispatch: Msg -> unit) =
+    let renderManagerEditor (aclTypes: AclType[]) (store: IStore<Model>) (dispatch: Msg -> unit) =
         let mgrSearchResultsRStore =
             store |> Store.mapRStore (fun model -> model.ManagerSearchResults)
 
@@ -361,7 +366,6 @@ let view token (props: NavUIProps) =
                     DebounceOverride = None
                 }
                 []
-
         ]
         <| renderErrors "Name"
 
