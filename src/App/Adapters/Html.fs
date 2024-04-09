@@ -326,7 +326,13 @@ module Store =
         }
 
     let mapRStore getter store =
-        mapRStore' {UseEquality = true; DebugTitle = None} getter store
+        mapRStore'
+            {
+                UseEquality = true
+                DebugTitle = None
+            }
+            getter
+            store
 
     // should this be updated to distinct until changed
     let mapStore title useEquality (propertyPair: PropertyPair<'t, 't2>) (store: IStore<'t>) =

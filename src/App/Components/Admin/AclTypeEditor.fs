@@ -161,6 +161,12 @@ module Renderers =
     // all reference params at least at this time, are searchable
     let renderReferenceParams (props: ReferenceParamsProps) =
         // props.CurrentParamsStore.Value |> Set.count |> printfn "Render ref p with %i"
+        let onClickDebounced =
+            Handlers.debounceDefault
+            |> debounce (fun _ ->
+                match props.SearchStore.Value with
+                | ValueString v -> props.OnSearch(String.trim v)
+                | v -> eprintfn "Search attempt with no value: '%s'" v)
 
         Html.div [
             Html.form [
@@ -173,7 +179,11 @@ module Renderers =
                                 {
                                     Titling = "Search"
                                     Value = props.SearchStore
-                                    OnChange = (fun v -> props.SearchStore.Update(fun _ -> v))
+                                    OnChange =
+                                        (fun v ->
+                                            props.SearchStore.Update(fun _ ->
+                                                printfn "Updating search to %s" v
+                                                v))
                                     DebounceOverride = None
                                 }
                                 [
@@ -186,12 +196,7 @@ module Renderers =
                                 if isInFlight then
                                     Attr.disabled true
                                 else
-                                    onClick
-                                        (fun _ ->
-                                            match props.SearchStore.Value with
-                                            | ValueString v -> props.OnSearch(String.trim v)
-                                            | _ -> eprintfn "Search attempt with no value")
-                                        [ EventModifier.PreventDefault ]
+                                    onClick onClickDebounced [ EventModifier.PreventDefault ]
                             ]
                         ] []
                 )
