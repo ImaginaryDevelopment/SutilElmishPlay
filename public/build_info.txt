@@ -1,8 +1,8 @@
 // cspell: disable
-2024.04.09 02:49:04 -04:00
+2024.04.11 01:59:57 -04:00
 Git:
 master
-f596b2b fix for text box debounced when enter key is not
+b1a6050 fix path being root/null if the path isn't set for a new item
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
