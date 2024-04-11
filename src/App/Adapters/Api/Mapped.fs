@@ -65,6 +65,19 @@ module NavItemAdapters =
         elif path |> startsWithI "/" then $"/root{path}"
         else $"/root/{path}"
 
+    let combineSegments (segment1: string, segment2: string) =
+        if isNull segment1 then
+            failwith "segment 1 was null"
+
+        if isNull segment2 then
+            failwith "segment 2 was null"
+
+        match segment1 |> String.endsWith "/", segment2 |> String.startsWith "/" with
+        | true, false
+        | false, true -> segment1 + segment2
+        | false, false -> $"{segment1}/{segment2}"
+        | true, true -> $"{segment1}{segment2[1..]}"
+
     let ofApiNavItem (x: ApiNavItem) : NavItem =
 
         let mapped: NavItem =
@@ -105,14 +118,17 @@ module NavItemAdapters =
             })
             |> Array.ofSeq
 
+        let name = item.Name |> Option.ofValueString |> Option.defaultValue item.DisplayName
+        let parent = item.Parent |> ensureStartsWithRoot
+
         {
             Acls = acls
             Description = item.Description
             Id = navId
-            Path = item.Path |> ensureStartsWithRoot
+            Path = combineSegments (parent, name)
             Parent = item.Parent
             Type = string item.Type
-            Name = item.Name |> Option.ofValueString |> Option.defaultValue item.DisplayName
+            Name = name
             DisplayName = item.DisplayName |> Option.ofValueString
             Icon = item.Icon
             Weight = item.Weight

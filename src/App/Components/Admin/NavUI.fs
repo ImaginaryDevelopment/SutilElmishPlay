@@ -61,10 +61,23 @@ type Msg =
 
 module Commands =
 
-    let save token navItem : Cmd<Msg> =
-        let f x =
+    // the api is designed
+    let save token (upsertNavItem: Choice<NavItem, ValidNavItem>) : Cmd<Msg> =
+        let f () =
             async {
-                let! resp = App.Adapters.Api.Mapped.NavItems.save token x
+                let! resp =
+                    match upsertNavItem with
+                    // strongly typed validation requirement hacked out, in favor of making it work now
+                    // | Choice1Of2 navItem when navItem.Id <> NavId "" ->
+                    //     eprintfn "Attempt to use save without a valid nav item"
+                    //     failwith "bad navItem"
+                    | Choice1Of2 navItem -> App.Adapters.Api.Mapped.NavItems.save token navItem
+                    | Choice2Of2 vni -> App.Adapters.Api.Mapped.NavItems.create token vni
+
+                let navItem =
+                    match upsertNavItem with
+                    | Choice1Of2 ni -> ni
+                    | Choice2Of2 vni -> vni.ValidNavItem
 
                 match resp with
                 | Ok v ->
@@ -80,7 +93,7 @@ module Commands =
                     return Error x
             }
 
-        Cmd.OfAsync.either f navItem id (fun ex -> Choice2Of2 ex |> Error)
+        Cmd.OfAsync.either f () id (fun ex -> Choice2Of2 ex |> Error)
         |> Cmd.map Msg.SaveResponse
 
     let searchAdmin token text =
@@ -146,7 +159,9 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
     <| BReusable.String.truncateDisplay false 200 (string msg)
 
     match msg with
-    | SaveRequest -> { model with SaveStatus = InFlight }, Commands.save token model.Item
+    | SaveRequest ->
+        // this is only working for updates, and is NOT ensuring a valid item before sending the update
+        { model with SaveStatus = InFlight }, Commands.save token (Choice1Of2 model.Item)
     | SaveResponse(Error e) ->
         eprintfn "Failed save: %A" e
         model, Cmd.none
@@ -286,18 +301,16 @@ let view token (props: NavUIProps) =
             let vResult = ValidNavItem.ValidateNavItem model.Item
             vResult |> Option.ofResult)
 
-    let renderErrors nameOpt =
-        match nameOpt with
-        | ValueString name -> [
+    let renderErrors nameOpt = [
 
-            Bind.el (
-                vStore |> Store.map (fun (_, vErrors) -> vErrors),
-                fun v -> fragment <| RenderHelpers.getError v (Some name)
-            )
-          ]
-        | _ ->
-            let elems = RenderHelpers.getError (snd vStore.Value) None
-            elems
+        Bind.el (
+            vStore |> Store.map (fun (_, vErrors) -> vErrors),
+            fun v ->
+                match nameOpt with
+                | ValueString name -> fragment <| RenderHelpers.getError v (Some name)
+                | _ -> fragment <| RenderHelpers.getError (snd vStore.Value) None
+        )
+    ]
 
     let getItemTitling (model: Model) =
         match NavItem.GetName model.Item with

@@ -18,6 +18,34 @@ module String =
         && isValueString value
         && x.Equals(value, System.StringComparison.InvariantCultureIgnoreCase)
 
+    let failIfNullOrEmpty (delimiter: string) =
+        if System.String.IsNullOrEmpty delimiter then
+            failwith "Delimiter was null or empty"
+
+    // let replace delimiter (replacement: string) (value: string) =
+    //     failIfNullOrEmpty delimiter
+
+    //     if System.String.IsNullOrEmpty delimiter then
+    //         value
+    //     else
+    //         value.Replace(delimiter, replacement)
+
+    let startsWith (delimiter: string) (value: string) =
+        failIfNullOrEmpty delimiter
+
+        if System.String.IsNullOrEmpty value then
+            false
+        else
+            value.StartsWith delimiter
+
+    let endsWith (delimiter: string) (value: string) =
+        failIfNullOrEmpty delimiter
+
+        if System.String.IsNullOrEmpty value then
+            false
+        else
+            value.EndsWith delimiter
+
     let equalsIStr (item: 't) (x: string) =
         isValueString x
         && x.Equals(string (box item), System.StringComparison.InvariantCultureIgnoreCase)
@@ -153,6 +181,7 @@ let startsWithI (delimiter: string) (value: string) =
     |> function
         | Some value -> value.StartsWith(delimiter, System.StringComparison.CurrentCultureIgnoreCase)
         | None -> false
+
 
 let (|EqualsIStr|_|) (x: 't) = equalsIStr x
 

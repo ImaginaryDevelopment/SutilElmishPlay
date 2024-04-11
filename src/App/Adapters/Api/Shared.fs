@@ -45,8 +45,12 @@ let fetch fetchArgs requestProps f =
             |> Option.map (addQueryValues fetchArgs.RelPath)
             |> Option.defaultValue fetchArgs.RelPath
 
+        let fullUrl = App.Adapters.Config.authConfig.ApiBase + relUrl // |> String.replace "+" "%2b"
+
+        printfn "Fetching url: '%s'" relUrl
+
         let! response =
-            fetch (App.Adapters.Config.authConfig.ApiBase + relUrl) [
+            fetch fullUrl [
                 yield! requestProps
                 requestHeaders [ HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}" ]
             ]

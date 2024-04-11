@@ -9,6 +9,9 @@ let log x = Browser.Dom.console.log (x)
 let warn x = Browser.Dom.console.warn (x)
 let promptConfirm (x: string) = Browser.Dom.window.confirm (x)
 
+let encodeUri = Browser.Dom.window.encodeURI
+let encodeUriComponent = Browser.Dom.window.encodeURIComponent
+
 let logGroup nameOpt =
     match nameOpt with
     | None -> Browser.Dom.console.group ()
