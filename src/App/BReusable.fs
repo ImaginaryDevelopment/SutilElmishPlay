@@ -169,12 +169,9 @@ module Option =
         | [] -> None
         | x -> Some x
 
+let equalsIStr (item: 't) = String.equalsIStr item
 let (|EqualsI|_|) y = Option.ofBool (String.equalsIStr y)
 
-let equalsIStr (item: 't) (x: string) =
-    match x with
-    | EqualsI(string (box item)) -> Some item
-    | _ -> None
 
 let startsWithI (delimiter: string) (value: string) =
     Option.ofValueString value
@@ -183,7 +180,7 @@ let startsWithI (delimiter: string) (value: string) =
         | None -> false
 
 
-let (|EqualsIStr|_|) (x: 't) = equalsIStr x
+let (|EqualsIStr|_|) (x: 't) v = if equalsIStr x v then Some v else None
 
 let (|After|_|) delimiter x = String.tryAfter delimiter x
 

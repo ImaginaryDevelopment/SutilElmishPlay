@@ -60,10 +60,15 @@ module NavItemAdapters =
 
     // make sure that the path starts with "/root/"
     let ensureStartsWithRoot path =
-        if path |> startsWithI "root/" then $"/{path}"
-        elif path |> startsWithI "/root/" then path
-        elif path |> startsWithI "/" then $"/root{path}"
-        else $"/root/{path}"
+        let result =
+            if path |> startsWithI "root/" then $"/{path}"
+            elif path |> startsWithI "/root/" then path
+            elif path |> equalsIStr "/root" then $"{path}/"
+            elif path |> startsWithI "/" then $"/root{path}"
+            else $"/root/{path}"
+
+        // printfn "Path: '%s'-> '%s'" path result
+        result
 
     let combineSegments (segment1: string, segment2: string) =
         if isNull segment1 then

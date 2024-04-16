@@ -71,7 +71,11 @@ module Commands =
                     // | Choice1Of2 navItem when navItem.Id <> NavId "" ->
                     //     eprintfn "Attempt to use save without a valid nav item"
                     //     failwith "bad navItem"
-                    | Choice1Of2 navItem -> App.Adapters.Api.Mapped.NavItems.save token navItem
+                    | Choice1Of2 navItem ->
+                        if navItem.Id = NavId "" then
+                            App.Adapters.Api.Mapped.NavItems.create token navItem
+                        else
+                            App.Adapters.Api.Mapped.NavItems.save token navItem
                     | Choice2Of2 vni -> App.Adapters.Api.Mapped.NavItems.create token vni
 
                 let navItem =
