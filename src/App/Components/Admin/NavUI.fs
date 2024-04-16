@@ -20,7 +20,6 @@ type SaveResult = SaveType * NavItem
 
 type Model = {
     // NavItem: NavItem
-
     ManagerSearchResults: AclDisplay list
     // a copy of the item from props used for saving
     Item: NavItem
@@ -62,36 +61,23 @@ type Msg =
 module Commands =
 
     // the api is designed
-    let save token (upsertNavItem: Choice<NavItem, ValidNavItem>) : Cmd<Msg> =
+    let upsert token (vni: ValidNavItem) : Cmd<Msg> =
         let f () =
             async {
-                let! resp =
-                    match upsertNavItem with
-                    // strongly typed validation requirement hacked out, in favor of making it work now
-                    // | Choice1Of2 navItem when navItem.Id <> NavId "" ->
-                    //     eprintfn "Attempt to use save without a valid nav item"
-                    //     failwith "bad navItem"
-                    | Choice1Of2 navItem ->
-                        if navItem.Id = NavId "" then
-                            App.Adapters.Api.Mapped.NavItems.create token navItem
-                        else
-                            App.Adapters.Api.Mapped.NavItems.save token navItem
-                    | Choice2Of2 vni -> App.Adapters.Api.Mapped.NavItems.create token vni
+                let st =
+                    if NavItem.IsNew vni.ValidNavItem then
+                        SaveType.Create
+                    else
+                        SaveType.Update
 
-                let navItem =
-                    match upsertNavItem with
-                    | Choice1Of2 ni -> ni
-                    | Choice2Of2 vni -> vni.ValidNavItem
+                let! resp =
+                    if st = SaveType.Create then
+                        App.Adapters.Api.Mapped.NavItems.create token vni
+                    else
+                        App.Adapters.Api.Mapped.NavItems.save token vni
 
                 match resp with
-                | Ok v ->
-                    let st =
-                        if navItem.Id = NavId "" then
-                            SaveType.Create
-                        else
-                            SaveType.Update
-
-                    return Ok(st, v)
+                | Ok v -> return Ok(st, v)
                 | Error e ->
                     let x: ErrorType = Choice2Of2 e
                     return Error x
@@ -165,7 +151,13 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
     match msg with
     | SaveRequest ->
         // this is only working for updates, and is NOT ensuring a valid item before sending the update
-        { model with SaveStatus = InFlight }, Commands.save token (Choice1Of2 model.Item)
+        let vResult = ValidNavItem.ValidateNavItem model.Item
+
+        match vResult with
+        | Ok vni -> { model with SaveStatus = InFlight }, Commands.upsert token vni
+        // assumes the error was already added to the model
+        | Error e -> model, Cmd.none
+
     | SaveResponse(Error e) ->
         eprintfn "Failed save: %A" e
         model, Cmd.none
@@ -264,15 +256,9 @@ type NavUIProps = {
 
 let (|CreateRootFolder|CreateChild|EditFolder|EditChild|) = // InvalidAttempt|) =
     function
-    | {
-          EditType = Parent
-          Item = { Id = NavId "" } as ni
-      } -> CreateRootFolder ni
+    | { EditType = Parent; Item = ni } when NavItem.IsNew ni -> CreateRootFolder ni
     | { EditType = Parent; Item = ni } -> EditFolder ni
-    | {
-          EditType = Child pni
-          Item = { Id = NavId "" } as ni
-      } -> CreateChild(pni, ni)
+    | { EditType = Child pni; Item = ni } when NavItem.IsNew ni -> CreateChild(pni, ni)
     | { EditType = Child pni; Item = ni } -> EditChild(pni, ni)
 
 let view token (props: NavUIProps) =

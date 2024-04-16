@@ -17,7 +17,7 @@ and ValidNavItem = {
 } with
 
     static member ValidateNavItem(({ Id = NavId itemId } as item): NavItem) : NavValidation =
-
+        Core.log ("validating", item)
         let isCreating = not <| String.isValueString itemId
         let isNested = String.isValueString item.Parent && item.Parent <> "/Root"
 
@@ -188,16 +188,19 @@ module NavItems =
     let createV token (cni: NavItem) =
         ValidNavItem.ValidateNavItem cni |> Result.map (create token)
 
-    let save token (item: NavItem) =
+    let save token (item: ValidNavItem) =
 
-        let sItem = Core.serialize item
+        let sItem = Core.serialize item.ValidNavItem
+
+
+        let apiNavItem = NavItemAdapters.toApiNavItem item.ValidNavItem
 
         using (Core.logGroup (Some "SaveItem"))
         <| fun _ ->
             Core.log sItem
             Core.log item
+            Core.log apiNavItem
 
-        let apiNavItem = NavItemAdapters.toApiNavItem item
 
         ApiNavInternals.save token apiNavItem
         |> Async.map (Result.map NavItemAdapters.ofApiNavItem)

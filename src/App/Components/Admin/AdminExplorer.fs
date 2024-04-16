@@ -1108,14 +1108,13 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                                     Saved = (fun nextItem -> Msg.Saved nextItem |> dispatch)
                                     Delete =
                                         (fun () ->
-                                            // can't delete a new item
-                                            if navItem.Id <> NavId "" then
-                                                item |> Msg.DeleteRequested |> dispatch
                                             // empty item, just deselect
+                                            if NavItem.IsNew navItem then
+                                                selectedItemStore.Update(fun _ -> None)
+                                            // can't delete a new item
                                             else
-                                                selectedItemStore.Update(fun _ -> None))
+                                                item |> Msg.DeleteRequested |> dispatch)
                                 }
-
                             ]
                         ]
 

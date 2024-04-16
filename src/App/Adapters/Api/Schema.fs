@@ -63,6 +63,8 @@ type NavItem = {
     AclRefs: NavItemAclRefsMap
 } with
 
+    static member IsNew(x: NavItem) = isNull (box x.Id) || x.Id = NavId ""
+
     static member CalcHash(x: NavItem) =
         let text = Core.serialize { x with Hash = null }
         let result = text.GetHashCode() |> string
@@ -134,7 +136,7 @@ type NavItem = {
         |> Option.defaultValue ""
 
     static member SetName value (navItem: NavItem) =
-        if navItem.Id = NavId "" then
+        if NavItem.IsNew navItem then
             { navItem with Name = value }
         else
             { navItem with DisplayName = value }
