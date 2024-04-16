@@ -1,8 +1,8 @@
 // cspell: disable
-2024.04.11 01:59:57 -04:00
+2024.04.16 01:37:57 -04:00
 Git:
 master
-b1a6050 fix path being root/null if the path isn't set for a new item
+3322d40 fix validation not being used, new items using display name
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="
