@@ -1,4 +1,4 @@
-module App.Adapters.Schema
+module App.Schema
 
 open Fable.Core
 

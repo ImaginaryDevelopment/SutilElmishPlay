@@ -2,7 +2,6 @@ module App.Adapters.Api.Shared
 
 
 
-open Fetch
 open Fetch.Types
 
 open Fable.Core
@@ -11,7 +10,7 @@ open Fable.Core.JsInterop
 open Browser
 
 open BReusable
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Api.Schema
 
 
@@ -36,7 +35,44 @@ let addQueryParam n v (url: string) =
 let addQueryValues url m =
     (url, m) ||> Map.fold (fun url k v -> url |> addQueryParam k v)
 
+let mapUnsafeResponse f (response: Response) =
+    let makeError = Array.singleton >> Choice1Of2 >> Error
+
+    async {
+        if response.Ok then
+            return! f response
+        else
+            try
+                let! e = response.text () |> Async.AwaitPromise
+                let v: CoreApiError option = Core.deserialize e
+
+                match v with
+                | None -> return makeError "Api Error, Unable to read api error"
+                | Some v ->
+                    // sometimes status message is undefined
+                    let serverEMessage =
+                        [ v.StatusMessage; v.Message; v.ExceptionMessage; response.StatusText ]
+                        |> List.choose Option.ofValueString
+                        |> List.tryHead
+
+                    let sc = v.StatusCode |> Option.defaultValue response.Status
+
+                    match serverEMessage with
+                    | Some(ValueString sm) ->
+                        let msg = sprintf "%i:%s" sc sm
+                        return makeError msg
+                    | _ ->
+                        let msg = sprintf "%i: %s" sc response.StatusText
+                        return makeError msg
+            with ex ->
+                Core.warn ex.Message
+                return makeError "Api Error, Failed to read api error"
+    }
+
+
 // does not prevent conflicting props against fetchArgs
+// does not properly interpret server error responses
+// or maybe just doesn't read the response in error conditions that provide more info
 let fetch fetchArgs requestProps f =
     async {
         let relUrl =
@@ -50,24 +86,30 @@ let fetch fetchArgs requestProps f =
         printfn "Fetching url: '%s'" relUrl
 
         let! response =
-            fetch fullUrl [
+            Fetch.fetchUnsafe fullUrl [
                 yield! requestProps
-                requestHeaders [ HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}" ]
+                Fetch.requestHeaders [ HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}" ]
             ]
             |> Async.AwaitPromise
 
-        return! f response
+        return! mapUnsafeResponse f response
     }
     |> Async.catch
+    |> Async.map (function
+        | Ok(Ok v) -> Ok v
+        | Ok(Error t) -> Error t
+        | Error e -> Error(Choice2Of2 e))
 
 // handle get/post + query params and/or json body
 
-let fetchText fetchArgs rp : Async<Result<_, exn>> =
-    fetch fetchArgs rp (fun v -> v.text () |> Async.AwaitPromise)
+let fetchText fetchArgs rp : Async<Result<_, ErrorType>> =
+    fetch fetchArgs rp (fun v ->
+        let result = v.text () |> Async.AwaitPromise
+        result |> Async.map Ok)
 
-let fetchJson<'t> tName fetchArgs rp : Async<Result<'t, exn>> =
+let fetchJson<'t> tName fetchArgs rp : Async<Result<'t, ErrorType>> =
     async {
-        let! json = fetch fetchArgs rp (fun v -> v.json () |> Async.AwaitPromise) //fetchText fetchArgs rp
+        let! json = fetch fetchArgs rp (fun v -> v.json () |> Async.AwaitPromise |> Async.map Ok) //fetchText fetchArgs rp
 
         match json with
         | Ok json ->
@@ -77,7 +119,7 @@ let fetchJson<'t> tName fetchArgs rp : Async<Result<'t, exn>> =
         | Error e -> return Error e
     }
 
-let getMyInfo token : Async<Result<App.Adapters.Api.Schema.MyInfoResponse, exn>> =
+let getMyInfo token : Async<Result<App.Adapters.Api.Schema.MyInfoResponse, ErrorType>> =
     fetchJson<_>
         "MyInfoResponse"
         {
@@ -202,7 +244,7 @@ let getAclReferenceDisplay
         AclType = aclType
         AclRefId = AclRefId aclRefId
     }
-    : Async<Result<_, Choice<string[], exn>>> =
+    : Async<Result<_, ErrorType>> =
 
     match aclType with
     | AclParameterType.Reference _ ->
@@ -215,8 +257,7 @@ let getAclReferenceDisplay
             }
             List.empty
         |> Async.map (
-            Result.mapError (fun x -> Choice2Of2 x)
-            >> Result.bind (fun narResp ->
+            Result.bind (fun narResp ->
                 // account for one or both properties being empty
                 let resolved, errors =
                     narResp.Resolved, narResp.Errors |> Option.defaultValue Array.empty |> List.ofArray

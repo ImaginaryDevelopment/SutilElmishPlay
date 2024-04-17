@@ -2,7 +2,7 @@ module App.Adapters.Api.Mapped
 
 open BReusable
 
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Schema.Raw
 open App.Adapters.Api.Shared
@@ -17,7 +17,7 @@ and ValidNavItem = {
 } with
 
     static member ValidateNavItem(({ Id = NavId itemId } as item): NavItem) : NavValidation =
-        Core.log ("validating", item)
+        // Core.log ("validating", item)
         let isCreating = not <| String.isValueString itemId
         let isNested = String.isValueString item.Parent && item.Parent <> "/Root"
 
@@ -61,7 +61,8 @@ module NavItemAdapters =
     // make sure that the path starts with "/root/"
     let ensureStartsWithRoot path =
         let result =
-            if path |> startsWithI "root/" then $"/{path}"
+            if path = null then "/root/"
+            elif path |> startsWithI "root/" then $"/{path}"
             elif path |> startsWithI "/root/" then path
             elif path |> equalsIStr "/root" then $"{path}/"
             elif path |> startsWithI "/" then $"/root{path}"
@@ -126,11 +127,19 @@ module NavItemAdapters =
         let name = item.Name |> Option.ofValueString |> Option.defaultValue item.DisplayName
         let parent = item.Parent |> ensureStartsWithRoot
 
+        let path =
+            // if item.Type = NavItemType.Folder &&  then
+            //     combineSegments (parent, name)
+            // else
+            parent
+
+        printfn "ToApiNavItem: '%s'" path
+
         {
             Acls = acls
             Description = item.Description
             Id = navId
-            Path = combineSegments (parent, name)
+            Path = path
             Parent = item.Parent
             Type = string item.Type
             Name = name

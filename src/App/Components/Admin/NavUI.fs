@@ -6,7 +6,7 @@ open Sutil
 open Sutil.Core
 open Sutil.CoreElements
 
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
@@ -59,8 +59,6 @@ type Msg =
 
 
 module Commands =
-
-    // the api is designed
     let upsert token (vni: ValidNavItem) : Cmd<Msg> =
         let f () =
             async {
@@ -78,9 +76,7 @@ module Commands =
 
                 match resp with
                 | Ok v -> return Ok(st, v)
-                | Error e ->
-                    let x: ErrorType = Choice2Of2 e
-                    return Error x
+                | Error e -> return Error e
             }
 
         Cmd.OfAsync.either f () id (fun ex -> Choice2Of2 ex |> Error)
@@ -89,14 +85,14 @@ module Commands =
     let searchAdmin token text =
         let f = App.Adapters.Api.Shared.searchAdmin token
 
-        Cmd.OfAsync.either f text id Error
-        |> Cmd.map (Result.mapError Choice2Of2 >> Msg.SearchAdminResponse)
+        Cmd.OfAsync.either f text id (Choice2Of2 >> Error)
+        |> Cmd.map Msg.SearchAdminResponse
 
     let bulkResolveAdmin token navId =
         let f = App.Adapters.Api.Shared.getFolderAdmins token
 
-        Cmd.OfAsync.either f navId id Error
-        |> Cmd.map (Result.mapError Choice2Of2 >> Msg.BulkAdminResponse)
+        Cmd.OfAsync.either f navId id (Choice2Of2 >> Error)
+        |> Cmd.map Msg.BulkAdminResponse
 
 let init token item () =
     let model = {
@@ -159,8 +155,16 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
         | Error e -> model, Cmd.none
 
     | SaveResponse(Error e) ->
-        eprintfn "Failed save: %A" e
-        model, Cmd.none
+        match e with
+        | Choice1Of2 x -> eprintfn "Failed save: %A" x
+        | Choice2Of2 x -> eprintfn "Failed save2: %A" x
+
+        {
+            model with
+                SaveStatus = RemoteData.Responded(Error e)
+        },
+        Cmd.none
+
     | SaveResponse(Ok sr) ->
         onSave sr
         model, Cmd.none
@@ -290,15 +294,34 @@ let view token (props: NavUIProps) =
         |> Store.mapRStore (fun model ->
             let vResult = ValidNavItem.ValidateNavItem model.Item
             vResult |> Option.ofResult)
+    // merge sources model remote data and navItem validation errors
+    let errorStore =
+        Store.zip
+            (vStore |> Store.map snd)
+            (store
+             |> Store.map (fun m -> m.SaveStatus)
+             |> Observable.map (function
+                 | Responded(Ok v) -> None
+                 | Responded(Error e) -> Some e
+                 | _ -> None))
+
 
     let renderErrors nameOpt = [
 
         Bind.el (
-            vStore |> Store.map (fun (_, vErrors) -> vErrors),
-            fun v ->
+            errorStore,
+            fun (validationErrors, apiResponseErrors) ->
                 match nameOpt with
-                | ValueString name -> fragment <| RenderHelpers.getError v (Some name)
-                | _ -> fragment <| RenderHelpers.getError (snd vStore.Value) None
+                | ValueString name -> fragment <| RenderHelpers.getError validationErrors (Some name)
+                | _ ->
+                    fragment [
+                        match apiResponseErrors with
+                        | None -> ()
+                        | Some(Choice1Of2 errors) -> yield! RenderHelpers.renderErrors "Save Errors" errors
+                        | Some(Choice2Of2 ex) -> yield! RenderHelpers.renderErrors "Save Error" [ ex.Message ]
+                        yield! RenderHelpers.getError (snd vStore.Value) None
+
+                    ]
         )
     ]
 
@@ -354,6 +377,8 @@ let view token (props: NavUIProps) =
                 ]
             ] []
         ]
+
+        yield! renderErrors null
 
         formField [ text "Name" ] [
             textInput

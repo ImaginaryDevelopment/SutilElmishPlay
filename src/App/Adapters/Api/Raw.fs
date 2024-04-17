@@ -13,6 +13,9 @@ open Fetch.Types
 open Fable.Core
 open Fable.Core.JsInterop
 
+open App.Schema
+
+
 let genNavUrl pathOpt =
     let b = "/api/navigation"
 
@@ -36,7 +39,7 @@ let genNavUrl pathOpt =
         invalidArg "pathOpt" txt
     | None -> b
 
-let deleteItem token (App.Adapters.Schema.NavId id) : Async<Result<ApiNavItem, exn>> =
+let deleteItem token (App.Schema.NavId id) : Async<Result<ApiNavItem, ErrorType>> =
     let qv = Map [ "id", id ]
 
     fetchJson<ApiNavItem>
@@ -54,7 +57,7 @@ module ApiNavInternals =
 
     type ApiNavPathResponse = { Path: string; Items: ApiNavItem[] }
     // api/navigation/root
-    let getNavRoot token () : Async<Result<ApiNavItem[], exn>> =
+    let getNavRoot token () : Async<Result<ApiNavItem[], ErrorType>> =
 
         fetchJson<ApiNavItem[]>
             "NavItem[]"
@@ -66,7 +69,7 @@ module ApiNavInternals =
             List.empty
     // |> Async.map (Result.map (Array.map (NavItem.OfApiNavItem)))
 
-    let getNavPath token (path: string) : Async<Result<ApiNavPathResponse, exn>> =
+    let getNavPath token (path: string) : Async<Result<ApiNavPathResponse, ErrorType>> =
         let path = genNavUrl (Some path)
 
         fetchJson<ApiNavItem[]>
@@ -124,20 +127,6 @@ module ApiNavInternals =
     let create token (item: ApiNavItem) =
         async {
             let url = genNavUrl (Option.ofValueString item.Path)
-            // let item: ApiNavItem = {
-            //     Acls = item.AclRefs
-            //     Description = item.Description
-            //     Enabled = Some item.Enabled
-            //     HasUrlKey = false
-            //     Icon = item.Icon
-            //     Id = null
-            //     Name = item.Name
-            //     Parent = null
-            //     Path = null
-            //     Type = itemType
-            //     Weight = item.Weight
-            //     Url = item.Url
-            // }
 
             // once we know the type make it fetch json
             let! (result: Result<ApiNavItem, _>) =
@@ -161,7 +150,7 @@ module ApiNavInternals =
 
 module ApiAcls =
 
-    let getAclTypes token () : Async<Result<ApiAcl[], exn>> =
+    let getAclTypes token () : Async<Result<ApiAcl[], ErrorType>> =
         fetchJson<_>
             "Acl[]"
             {

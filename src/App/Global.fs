@@ -2,7 +2,7 @@
 module App.Global
 
 open Sutil
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Api.Schema
 open App.Adapters.Html
 

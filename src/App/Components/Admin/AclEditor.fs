@@ -6,7 +6,7 @@ open Sutil
 open Sutil.CoreElements
 
 open App.Adapters
-open App.Adapters.Schema
+open App.Schema
 
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Shared
@@ -108,10 +108,8 @@ module Commands =
         // TODO: return command none if the aclType is not a searchable reference
         match Api.Shared.getNavAclResolve token req with
         | Ok t ->
-            Cmd.OfAsync.either (fun () -> t) () id Error
-            |> Cmd.map (fun v ->
-                let mapped = v |> Result.mapError (fun v -> Choice2Of2 v)
-                Msg.AclBulkResolveResponse(req.AclName, mapped))
+            Cmd.OfAsync.either (fun () -> t) () id (Choice2Of2 >> Error)
+            |> Cmd.map (fun v -> Msg.AclBulkResolveResponse(req.AclName, v))
         | Error e ->
             eprintfn "%A" e
 

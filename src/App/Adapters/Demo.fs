@@ -1,6 +1,6 @@
 module App.Adapters.Demo
 
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Api.Schema
 
 let aclTypes: AclType[] = [|

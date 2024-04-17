@@ -5,16 +5,17 @@ open Sutil.CoreElements
 
 open BReusable
 
+open App.Schema
+
 open App.Adapters.Config
 open App.Adapters.Html
 open App.Adapters.Api
-
-open App.Components.Gen
 open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Shared
-open App.Adapters.Schema
+
+open App.Components.Gen
 
 
 type RemoteStates = {
@@ -99,7 +100,8 @@ module Commands =
         let f () =
             async {
                 let! resp = getMyInfo token
-                let resp = resp |> Result.mapError Choice2Of2
+
+                let resp = resp
                 return Msg.MyInfo(Response resp)
             }
 
@@ -121,9 +123,7 @@ let updateNavRoot, viewNavRoot =
             GetArgs = fun model -> model.AppMode
             Fetch =
                 function
-                | ConfigType.Auth token ->
-                    App.Adapters.Api.Mapped.NavItems.getNavRoot token ()
-                    |> Async.map (Result.mapError Choice2Of2)
+                | ConfigType.Auth token -> App.Adapters.Api.Mapped.NavItems.getNavRoot token ()
                 | ConfigType.Demo -> Async.ofValue (Ok dummyData)
         }
 
@@ -152,9 +152,7 @@ let updateAcl, viewAcls =
             Fetch =
                 function
                 | Demo -> Async.ofValue (Ok Array.empty)
-                | Auth token ->
-                    App.Adapters.Api.Mapped.getAclTypes token ()
-                    |> Async.map (Result.mapError Choice2Of2) // 'tFetchArg -> Async<Result<'t,ErrorType>>
+                | Auth token -> App.Adapters.Api.Mapped.getAclTypes token ()
         }
 
     let view =
@@ -187,7 +185,7 @@ let updateAclSearch, viewAclSearch =
             Fetch =
                 function
                 // TODO: validate search params?
-                | Auth token, si -> searchAclRefValues token si |> Async.map (Result.mapError Choice2Of2)
+                | Auth token, si -> searchAclRefValues token si
                 | Demo, _ -> Async.ofValue (Error <| Choice2Of2(System.Exception("Not Implemented")))
         }
 

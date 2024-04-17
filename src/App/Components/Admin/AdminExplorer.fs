@@ -9,7 +9,7 @@ open Sutil
 open Sutil.Core
 open Sutil.CoreElements
 
-open App.Adapters.Schema
+open App.Schema
 open App.Adapters.Icons
 open App.Adapters.Bulma
 open App.Adapters.Html
@@ -430,7 +430,7 @@ module Cmd =
 
                 match resp with
                 | Ok v -> return Msg.RootResponse(Ok v)
-                | Error e -> return Msg.RootResponse(Error(Choice2Of2 e))
+                | Error e -> return Msg.RootResponse(Error e)
             }
 
         Cmd.OfAsync.either f () id (fun ex -> Msg.RootResponse(Error(Choice2Of2 ex)))
@@ -448,7 +448,7 @@ module Cmd =
 
                     match resp with
                     | Ok v -> return Msg.PathResponse(lni, Ok(v.Items))
-                    | Error e -> return Msg.PathResponse(lni, Error(Choice2Of2 e))
+                    | Error e -> return Msg.PathResponse(lni, Error e)
                 }
 
             Cmd.OfAsync.either f lni.NavItem.Path id (fun ex -> Msg.PathResponse(lni, Error(Choice2Of2 ex)))
@@ -459,8 +459,7 @@ module Cmd =
         let f x =
             App.Adapters.Api.Mapped.getAclTypes token x
 
-        Cmd.OfAsync.either f () (Result.mapError Choice2Of2) (Choice2Of2 >> Error)
-        |> Cmd.map Msg.AclTypeResponse
+        Cmd.OfAsync.either f () id (Choice2Of2 >> Error) |> Cmd.map Msg.AclTypeResponse
 
     let deleteItem token (item: NavItem) : Cmd<Msg> =
         let deleteErr ex =
@@ -473,10 +472,7 @@ module Cmd =
             let f x : Async<Msg> =
                 async {
                     let! resp = App.Adapters.Api.Mapped.NavItems.delete token x
-
-                    match resp with
-                    | Ok(ni: NavItem) -> return Msg.DeleteResponse(Ok ni)
-                    | Error e -> return deleteErr e
+                    return Msg.DeleteResponse resp
                 }
 
             Cmd.OfAsync.either f item.Id id deleteErr

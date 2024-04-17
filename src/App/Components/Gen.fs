@@ -4,7 +4,7 @@ open Sutil
 open Sutil.Core
 open Sutil.CoreElements
 
-open App.Adapters.Schema
+open App.Schema
 
 module CssRules =
     open Sutil.Styling

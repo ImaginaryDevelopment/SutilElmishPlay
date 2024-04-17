@@ -6,7 +6,7 @@ open Sutil
 open Sutil.CoreElements
 
 open App.Adapters
-open App.Adapters.Schema
+open App.Schema
 
 open App.Adapters.Api.Schema
 open App.Adapters.Api.Shared
@@ -42,13 +42,10 @@ module private Commands =
         let f x =
             async {
                 let! resp = Api.Shared.searchAclRefValues token x
-
-                match resp with
-                | Ok v -> return Ok v
-                | Error e -> return Error(Choice2Of2 e)
+                return resp
             }
 
-        Cmd.OfAsync.either f req id (fun ex -> Choice2Of2 ex |> Error)
+        Cmd.OfAsync.either f req id (Choice2Of2 >> Error)
         |> Cmd.map Msg.AclSearchResponse
 
 let private update token (aclParams: IStore<Set<AclRefId> option>) msg (model: Model) : Model * Cmd<Msg> =

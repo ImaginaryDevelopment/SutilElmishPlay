@@ -6,7 +6,7 @@ open BReusable
 
 open Fable.Core
 
-open App.Adapters.Schema
+open App.Schema
 
 [<StringEnum>]
 type NavItemType =
@@ -170,7 +170,7 @@ type AclSearchResult = {
 }
 
 // based on CoreLib.Exceptions.CoreApiError
-type NavAclResolveSubError = {
+type CoreApiError = {
     Message: string
     StatusCode: int option
     StatusMessage: string
@@ -182,7 +182,7 @@ type NavAclResolveErrorResponse = {
     Reference: string
     DisplayName: string
     AdditionalInfo: obj
-    Error: NavAclResolveSubError
+    Error: CoreApiError
 }
 
 
