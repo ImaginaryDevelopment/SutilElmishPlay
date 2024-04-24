@@ -86,6 +86,7 @@ let fetch fetchArgs requestProps f =
         printfn "Fetching url: '%s'" relUrl
 
         let! response =
+            // https://github.com/fable-compiler/fable-fetch/blob/master/src/Fetch.fs
             Fetch.fetchUnsafe fullUrl [
                 yield! requestProps
                 Fetch.requestHeaders [ HttpRequestHeaders.Authorization $"Bearer %s{fetchArgs.Token}" ]

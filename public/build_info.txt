@@ -1,8 +1,8 @@
 // cspell: disable
-2024.04.16 01:37:57 -04:00
+2024.04.24 12:19:32 -04:00
 Git:
 master
-3322d40 fix validation not being used, new items using display name
+38c5322 fix error surfacing, fix root item creation
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"I44VnjUFrYK44QNlgat9hA=="

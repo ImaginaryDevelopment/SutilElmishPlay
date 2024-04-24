@@ -182,20 +182,6 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
         |> Option.map (fun aclType -> handleUnresolvedParamsIfFound props.Token props.NavId aclType props.ItemAcls)
         |> Option.defaultValue Cmd.none
 
-    // let tempCommands =
-    //     props.AclTypes
-    //     |> Seq.choose (fun v ->
-    //         match v.AclParamType with
-    //         | AclParameterType.Reference _ -> Some v.Name
-    //         | _ -> None)
-    //     |> Seq.choose (fun aclName ->
-    //         props.ItemAcls.Value
-    //         |> Map.tryFind aclName
-    //         |> Option.bind (fun p -> if Set.isEmpty p then None else Some(aclName, p)))
-    //     |> Seq.tryHead
-    //     |> Option.map (fun (aclName, p) -> Commands.getAdmins token)
-
-    //     Commands.resolveAdmin token props
 
     let model = {
         ResolvedAclStore =
@@ -207,7 +193,6 @@ let init (props: AclEditorProps) : Model * Cmd<Msg> =
     }
 
     model, cmd
-
 
 let private update token (itemAcls: IStore<Map<AclName, Set<AclRefId>>>) msg model : Model * Cmd<Msg> =
     printfn "AclEditor update: %A"
