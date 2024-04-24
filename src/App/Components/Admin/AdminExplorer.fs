@@ -18,7 +18,6 @@ open App.Adapters.Api.Schema
 open App.Components.Gen
 open Core
 
-
 type AdminErrorType = string * System.DateTime
 
 let translateErrorType: ErrorType -> AdminErrorType =
