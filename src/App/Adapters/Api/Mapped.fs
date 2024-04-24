@@ -128,10 +128,10 @@ module NavItemAdapters =
         let parent = item.Parent |> ensureStartsWithRoot
 
         let path =
-            // if item.Type = NavItemType.Folder &&  then
-            //     combineSegments (parent, name)
-            // else
-            parent
+            if NavItem.IsNew item then
+                parent
+            else
+                combineSegments (parent, name)
 
         printfn "ToApiNavItem: '%s'" path
 
