@@ -19,7 +19,9 @@ and ValidNavItem = {
     static member ValidateNavItem(({ Id = NavId itemId } as item): NavItem) : NavValidation =
         // Core.log ("validating", item)
         let isCreating = not <| String.isValueString itemId
-        let isNested = String.isValueString item.Parent && item.Parent <> "/Root"
+
+        let isNested =
+            String.isValueString item.Parent && not <| equalsIStr "/Root" item.Parent
 
         let eMap =
             let e =
@@ -40,6 +42,8 @@ and ValidNavItem = {
         if Map.isEmpty eMap then
             Ok { ValidNavItem = item }
         else
+            printfn "Validation failed"
+            Core.log (Core.serialize item)
             Error eMap
 
 type NavPathResponse = { Path: string; Items: NavItem[] }

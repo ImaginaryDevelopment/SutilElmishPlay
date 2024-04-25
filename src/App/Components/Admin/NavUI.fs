@@ -152,7 +152,20 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
         match vResult with
         | Ok vni -> { model with SaveStatus = InFlight }, Commands.upsert token vni
         // assumes the error was already added to the model
-        | Error e -> model, Cmd.none
+        | Error e ->
+            eprintfn "Save is not valid"
+
+            e
+            |> Map.iter (fun k errors ->
+                match k with
+                | None ->
+                    use _ = Core.logGroup (Some "Save General Errors")
+                    errors |> List.iter Core.log
+                | Some fieldName ->
+                    use _ = Core.logGroup (Some(string fieldName))
+                    errors |> List.iter Core.log)
+
+            model, Cmd.none
 
     | SaveResponse(Error e) ->
         match e with
