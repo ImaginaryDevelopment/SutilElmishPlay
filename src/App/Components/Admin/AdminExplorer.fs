@@ -927,10 +927,6 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
     let dispose =
         selectedItemStore.Subscribe(fun value -> printfn "SelectedItemChanged to: %A" (getValueDisplay value))
 
-    // selectedItemStore.Update(fun _ -> selectedItemStore.Value)
-    // let breadCrumbStore =
-    //     let getter model = model.Item
-    //     let setter
     let itemObs =
         store
         |> Store.map (fun model ->
@@ -1042,9 +1038,7 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                                                                 Item = Choice2Of2 v
                                                             }
                                                         ])
-
                                             ]
-
                                 )
 
                             ]
