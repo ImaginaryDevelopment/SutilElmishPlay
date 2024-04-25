@@ -44,6 +44,7 @@ module Style =
             // rule ".save-button" [ Css.displayInlineBlock; Css.paddingLeft (px 10) ]
             rule ".field.has-addons" [ Css.displayInlineFlex ]
             rule $"#{mainRenderContainer}>h1>span" [ Css.marginRight (px 10) ]
+            rule $".help.is-danger" [ Css.fontSize (em 1.5); Css.backgroundColor "white" ]
         // rule ".full-overlay" [
         ]
 
@@ -165,7 +166,20 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
                     use _ = Core.logGroup (Some(string fieldName))
                     errors |> List.iter Core.log)
 
-            model, Cmd.none
+            let errorsForDisplay =
+                e
+                |> Map.toSeq
+                |> Seq.collect (fun (k, errors) ->
+                    match k with
+                    | Some(ValueString fieldName) -> errors |> Seq.map (fun error -> $"{fieldName}-{error}")
+                    | _ -> errors)
+                |> Array.ofSeq
+
+            {
+                model with
+                    SaveStatus = Responded(Error(Choice1Of2 errorsForDisplay))
+            },
+            Cmd.none
 
     | SaveResponse(Error e) ->
         match e with
@@ -391,7 +405,7 @@ let view token (props: NavUIProps) =
             ] []
         ]
 
-        yield! renderErrors null
+        Html.divc "is-danger" [ yield! renderErrors null ]
 
         formField [ text "Name" ] [
             textInput
