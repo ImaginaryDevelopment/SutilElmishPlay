@@ -113,10 +113,11 @@ module Renderers =
         let isSelected = currentParams |> Set.contains aclRefId
 
         Html.a [
-            Attr.title <| AclRefId.getText aclRefId
 
             match aclRefIdentifier with
-            | Choice2Of2 ad -> text ad.DisplayName
+            | Choice2Of2 ad ->
+                text ad.DisplayName
+                Attr.title <| AclRefId.getText aclRefId
             | Choice1Of2 ari ->
                 // printfn "Creating deferred display for %A" ari
 
@@ -128,13 +129,19 @@ module Renderers =
                         let next =
                             lm
                             |> Map.tryFind ari
-                            |> Option.map (fun v -> v.DisplayName)
-                            |> Option.defaultValue (AclRefId.getText ari)
+                            |> Option.map (fun v ->
+                                v.DisplayName,
+                                v.AdditionalInfo
+                                |> Option.bind (fun v -> v.UserName)
+                                |> Option.bind Option.ofValueString)
+                            |> Option.defaultValue (AclRefId.getText ari, None)
 
                         //    printfn "Value changed: %A - %s" ari next
                         next)
 
-                Bind.fragment textObs text
+                let textProp = textObs |> Store.map (fst)
+                Bind.fragment textProp text
+                Bind.attr ("title", textObs |> Store.map snd)
 
             Attr.className (if isSelected then "is-active" else "has-text-danger")
 

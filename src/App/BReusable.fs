@@ -146,6 +146,16 @@ module Option =
         | Ok v -> Some v, None
         | Error e -> None, Some e
 
+    let toResult noneError =
+        function
+        | Some v -> Ok v
+        | None -> Error noneError
+
+    let toResultF fError =
+        function
+        | Some v -> Ok v
+        | None -> fError () |> Error
+
     // f could also be an option
     let mapMaybe fOpt =
         function
@@ -187,10 +197,26 @@ let (|After|_|) delimiter x = String.tryAfter delimiter x
 let (|Before|_|) delimiter x = String.tryBefore delimiter x
 
 module Result =
+    let swallow =
+        function
+        | Ok v -> Some v
+        | Error e -> None
+
     let ofChoice =
         function
         | Choice1Of2 x -> Ok x
         | Choice2Of2 e -> Error e
+
+    let unify fOk fError =
+        function
+        | Ok v -> fOk v
+        | Error e -> fError e
+
+    // fable doesn't support Result.defaultValue currently
+    let dfv v =
+        function
+        | Ok x -> x
+        | Error _ -> v
 
 module Tuple2 =
     let replicate x = (x, x)
@@ -200,6 +226,18 @@ module Tuple2 =
     let rotate (a, b) = b, a
     let combine f (a, b) = f a b
     let fromCurry x y = (x, y)
+
+    let ofOptionF f x =
+        match f x with
+        | None -> None
+        | Some y -> Some(x, y)
+
+    let ofResultF f x =
+        match f x with
+        | Ok v -> Ok(x, v)
+        | Error e -> Error e
+
+    let flattenRight (x, (y, z)) = (x, y, z)
 
 module Async =
     let map f x =
@@ -251,6 +289,9 @@ module Array =
         |> function
             | None -> Error "Could not find item"
             | Some x -> items |> Array.mapi (fun i item -> if i <> x then item else fUpdate item) |> Ok
+
+    let appendItem item items =
+        item |> Array.singleton |> Array.append items
 
 module Set =
     let toggle value set =

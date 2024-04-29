@@ -25,9 +25,11 @@ let translateErrorType: ErrorType -> AdminErrorType =
     | Choice1Of2 e -> e |> String.concat ",", System.DateTime.Now
     | Choice2Of2 e -> string e, System.DateTime.Now
 
+type ChildState = { Children: NavItem[]; Expanded: bool }
+
 type LazyNavItem = {
     NavItem: NavItem
-    ChildStore: IStore<RemoteData<NavItem[] * bool>>
+    ChildStore: IStore<RemoteData<ChildState>>
 }
 
 type FolderSelectionType =
@@ -395,15 +397,91 @@ module MLens =
                 Item = unselectItemState v
           }
 
-    let hasChildId childId (lni: LazyNavItem) =
+    let tryGetNavItems model =
+        match model.Items with
+        | None -> Error "Items not initialized"
+        | Some(Ok items) -> Ok items
+        | Some(Error(text, _)) -> Error text
+
+    let tryFindParent f items =
+        items |> Seq.indexed |> Seq.tryFind (snd >> f)
+
+    let isParent (child: NavItem) (parent: LazyNavItem) =
+        String.equalsI parent.NavItem.Path child.Parent
+
+    let tryGetChildState (parent: LazyNavItem) =
+        match parent.ChildStore.Value with
+        | RemoteData.Responded(Ok childState) -> Ok childState
+        | RemoteData.Responded _ -> Error "Bad Response"
+        | _ -> Error "Bad Parent State"
+
+    let updateParentWithChildState (parent: LazyNavItem) (childState: ChildState) =
+        parent.ChildStore.Update(fun _ -> childState |> Ok |> Responded)
+
+    // let tryFindParentWith childId (lni:LazyNavItem) =
+    //     lni.ChildStore.Value
+    //     |> RemoteData.TryGet
+    //     |> Option.bind(Tuple2.ofOptionF (fun c -> c.Children |> Array.tryFindIndex(fun ni -> ni.Id = childId)))
+
+    let tryFindChildIndex childId (lni: LazyNavItem) =
         lni.ChildStore.Value
         |> RemoteData.TryGet
-        |> Option.map (fst >> Array.exists (fun ni -> ni.Id = childId))
-        |> Option.defaultValue false
+        |> Option.bind (Tuple2.ofOptionF (fun c -> c.Children |> Array.tryFindIndex (fun ni -> ni.Id = childId)))
+
+    let hasChildId childId lni =
+        tryFindChildIndex childId lni |> Option.isSome
+
+    let changeChild (parent: LazyNavItem, childState: ChildState) childIdOpt next =
+        let tryFindChildI childId =
+            childState.Children |> Array.tryFindIndex (fun child -> child.Id = childId)
+
+        match childIdOpt, next with
+        | Some(NavId ""), None
+        | None, None -> Error "No id, nor a next child"
+
+        // delete child
+        | Some childId, None ->
+            match tryFindChildI childId with
+            | None ->
+                let msg = "Could not find child to delete"
+                eprintfn "%s" msg
+                Error msg
+            | Some i ->
+                Ok {
+                    childState with
+                        Children = childState.Children |> Array.removeAt i
+                }
+        // simple update
+        | Some childId, Some next ->
+            match tryFindChildI childId with
+            | None ->
+                let msg = "Could not find child to update"
+                eprintfn "%s" msg
+                Error msg
+            | Some i ->
+                Ok {
+                    childState with
+                        Children = childState.Children |> Array.updateAt i next
+                }
+        // create
+        | None, Some next ->
+            // sort after, or insert at X?
+            match childState.Children |> Array.tryFindIndex (fun v -> v.Weight > next.Weight) with
+            | None ->
+                Ok {
+                    childState with
+                        Children = childState.Children |> Array.appendItem next
+                }
+            | Some i ->
+                Ok {
+                    childState with
+                        Children = childState.Children |> Array.insertAt i next
+                }
+        |> Result.map (updateParentWithChildState parent)
 
 
-    let updateChildStore (childStore: IStore<RemoteData<NavItem[] * bool>>) (nextItems, x) =
-        childStore.Update(fun _ -> Responded(Ok(nextItems, x)))
+// let updateChildStore (childStore: IStore<RemoteData<NavItem[] * bool>>) (nextItems, x) =
+//     childStore.Update(fun _ -> Responded(Ok(nextItems, x)))
 
 type Msg =
     | RootResponse of Result<NavItem[], ErrorType>
@@ -493,38 +571,37 @@ let justModel m = m, Cmd.none
 
 let (|CreateFolder|CreateItem|UpdateFolder|UpdateItem|InvalidSave|): NavItem * SaveType * ItemsState option -> _ =
     function
+    // create folder
     | { Type = Folder }, SaveType.Create, Some(Ok items) -> CreateFolder items
 
-    | { Type = Link; Parent = parentPath }, SaveType.Create, Some(Ok items) ->
+    // create child
+    | { Type = Link } as child, SaveType.Create, Some(Ok items) ->
         // find parent by... item.Parent?
         items
-        |> Array.tryFindIndex (fun lni -> String.equalsI lni.NavItem.Path parentPath)
+        |> Array.tryFindIndex (MLens.isParent child)
+        // |> Array.tryFindIndex (fun lni -> String.equalsI lni.NavItem.Path parentPath)
         |> function
-            | Some i -> CreateItem(i, items)
+            | Some parentIndex -> CreateItem(items, parentIndex)
             | None -> InvalidSave "Could not find parent"
 
+    // update folder, not a child
     | { Type = Folder; Id = navId }, SaveType.Update, Some(Ok items) ->
         items
         |> Seq.tryFindIndex (fun lni -> lni.NavItem.Id = navId)
         |> function
-            | Some i -> UpdateFolder(i, items)
+            | Some i -> UpdateFolder(items, i)
             | None -> InvalidSave "Could not find target item to update"
 
+    // update item
     | { Type = Link; Id = navId }, SaveType.Update, Some(Ok items) ->
         // ignores possibility there is a duplicate id in two parents
         items
-        |> Seq.choose (fun lni ->
-            lni.ChildStore.Value
-            |> function
-                | RemoteData.Responded(Ok(children, expanded)) ->
-                    children
-                    |> Array.tryFindIndex (fun child -> child.Id = navId)
-                    |> Option.map (fun i -> lni.ChildStore, (children, expanded), i)
-                | _ -> None)
+        |> Seq.choose (Tuple2.ofOptionF (MLens.tryFindChildIndex navId))
+        |> Seq.map Tuple2.flattenRight
         |> Seq.tryHead
         |> function
             | None -> InvalidSave "Could not find target child to update"
-            | Some(childStore, childThing, i) -> UpdateItem(childStore, childThing, i)
+            | Some x -> UpdateItem x
 
     | _, _, Some(Error _) -> InvalidSave "Batman Error: Parents invalid"
     | _, _, None -> InvalidSave "Batman Error: No Parents found"
@@ -542,8 +619,36 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         model, Cmd.none
 
     | Msg.DeleteResponse(Ok v) ->
-        // reload root?
-        model, Cmd.getRootItems model.Token
+        let onNoParent () =
+            let msg = sprintf "Could not find a parent with Path = '%s'" v.Parent
+            eprintfn "%s" msg
+            msg
+
+        match v.Type with
+        | NavItemType.Link ->
+            // take in model, try to find the parent of v
+            MLens.tryGetNavItems model
+            |> Result.bind (
+                Seq.choose (Tuple2.ofOptionF (MLens.tryFindChildIndex v.Id))
+                >> Seq.tryHead
+                >> Option.toResult "Parent not found"
+            )
+            |> Result.map Tuple2.flattenRight
+
+            |> Result.map (fun (parent, childState, i) ->
+                MLens.changeChild (parent, childState) (Some v.Id) None
+                |> function
+                    | Ok() -> model, Cmd.none
+                    | Error e ->
+                        eprintfn "Delete fail:%A" e
+                        model, Cmd.none)
+            |> Result.unify id (fun e ->
+                eprintfn "Error deleting item:%A" e
+                model, Cmd.getRootItems model.Token)
+
+        | NavItemType.Folder ->
+            // reload root
+            model, Cmd.getRootItems model.Token
 
     | Msg.Saved(st: SaveType, nextItem) ->
         // assume folders are root, and links are children
@@ -551,11 +656,12 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         printfn "Save complete, attempting explorer update"
 
         match nextItem, st, model.Items with
-        | UpdateFolder(x, items) ->
+        | UpdateFolder(items, i) ->
+
             printfn "Folder saved, updating"
 
             items
-            |> Array.updateI x (fun item ->
+            |> Array.updateI i (fun item ->
                 printfn "Updating folder by index: %s" <| NavItem.GetName item.NavItem
                 { item with NavItem = nextItem })
             |> function
@@ -579,33 +685,40 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
 
             MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
 
-        // oops this is bad code, it should be creating something in a parent store
-        | CreateItem(x, items) ->
-            items
-            |> Array.updateI x (fun oldItem -> { oldItem with NavItem = nextItem })
-            |> function
-                | Ok nextItems -> MLens.updateItems nextItems model |> MLens.unselectItem, Cmd.none
-                | Error e -> model |> MLens.addError e, Cmd.none
+        | CreateItem(items, parentIndex) ->
+            printfn "New Item saved, updating %A" nextItem.Id
 
-        | UpdateItem(childStore, (children, expanded), i) ->
-            printfn "AdminExplorer updateItem: %i(%i) %A-%s" i children.Length nextItem.Id nextItem.Icon
-            // update children, use them to update parent store directly (no model change needed)
-            children
-            |> Array.updateI i (fun oldValue ->
-                printfn "UpdateItem: %i from %A-%s to %A-%s" i oldValue.Id oldValue.Icon nextItem.Id nextItem.Icon
-                nextItem)
+            items
+            |> Array.updateI parentIndex (fun oldItem -> { oldItem with NavItem = nextItem })
             |> function
                 | Ok nextItems ->
-                    // this isn't updating the explorer somehow, try updating the model below
-                    MLens.updateChildStore childStore (nextItems, expanded)
+                    let count = items.Length
+                    let next = MLens.updateItems nextItems model |> MLens.unselectItem
 
-                    // {model with ItemAcls = model.ItemAcls |> Array.updateI }
-                    model |> MLens.unselectItem, Cmd.none
+                    let nextCount =
+                        next.Items
+                        |> Option.defaultValue (Result.Ok Array.empty)
+                        |> Result.dfv Array.empty
+                        |> Array.length
+
+                    printfn "Create Item save took items from %i to %i" count nextCount
+                    next, Cmd.none
+                | Error e -> model |> MLens.addError e, Cmd.none
+
+        | UpdateItem(parent, childState, i) ->
+            MLens.changeChild (parent, childState) None (Some nextItem)
+            |> function
+                | Ok() ->
+                    printfn "Update kinda done?"
+                    justModel model
                 | Error e ->
-                    eprintfn "Error updating item in explorer: %A" e
+                    printfn "Update kinda error"
                     model |> MLens.addError e, Cmd.none
 
-        | InvalidSave e -> model |> MLens.addError e, Cmd.none
+        | InvalidSave e ->
+            eprintfn "Invalid save"
+            Core.log e
+            model |> MLens.addError e, Cmd.none
 
     | Msg.StartNewRequested(Some parent) ->
         // (LazyNavItem * NavItem option) option
@@ -658,7 +771,7 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
         Cmd.none
 
     | Msg.PathResponse(lni, Ok children) ->
-        lni.ChildStore.Update(fun _ -> Responded(Ok(children, true)))
+        lni.ChildStore.Update(fun _ -> Responded(Ok { Children = children; Expanded = true }))
         model, Cmd.none
 
     | Msg.PathResponse(lni, Error e) ->
@@ -1021,7 +1134,7 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
                                     | InFlight -> Html.div [ text "Loading..." ]
                                     | NotRequested -> Html.divc "is-error" [ text "Not requested" ]
                                     | Responded(Error e) -> Html.divc "is-error" [ text <| string e ]
-                                    | Responded(Ok(values, _)) ->
+                                    | Responded(Ok({ Children = values })) ->
                                         if Array.isEmpty values then
                                             Html.div [ text "No items found." ]
                                         else

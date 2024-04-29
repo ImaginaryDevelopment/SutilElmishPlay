@@ -33,12 +33,14 @@ type AclReferenceType =
     | [<CompiledName("Group")>] Group
     | [<CompiledName("User")>] User
 
+type AclAddInfo = { UserName: string option }
+
 type AclDisplay = {
     Reference: AclRefId
     DisplayName: string
     // group or user
     Type: AclReferenceType
-    AdditionalInfo: obj option
+    AdditionalInfo: AclAddInfo option
 }
 
 type SaveType =

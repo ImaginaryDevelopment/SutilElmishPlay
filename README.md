@@ -28,3 +28,13 @@ npm run build
 which will dump into public\bundle.js
 
 `publish.fsx` is for deploying as a static file into another project
+
+### Powershell additions
+
+Some powershell commands may use
+
+```shell
+Install-PackageProvider -Name NuGet
+```
+
+[NugetProvider](https://stackoverflow.com/questions/51406685/powershell-how-do-i-install-the-nuget-provider-for-powershell-on-a-unconnected)
