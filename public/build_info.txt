@@ -1,13 +1,13 @@
 // cspell: disable
-2024.04.24 02:08:35 -04:00
+2024.04.29 01:20:04 -04:00
 Git:
 master
-ccabbab fix path creation logic
+424e750 make username visible in available acls
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
-	README.md:"I44VnjUFrYK44QNlgat9hA=="
+	README.md:"vHM2UN7CEq9Lhx+oxGIu9A=="
 	package.json:"ejMYRf5OcgrfBr2axICVbA=="
 	package-lock.json:"iFbR93TI1imngJzWBf2h/w=="
 	ReleaseHistory.md:"hwxBoShBgAzDaLmcyOGIXw=="
 	public\index.html:"EAnqf74ZiKHSrgyQ4aPcCg=="
-	publish.fsx:"v3+0kSFqWDayQ7ikXpqW3w=="
+	publish.fsx:"Dh1wYL8VRH+8SpIWx5Yjgg=="

@@ -96,7 +96,7 @@ if File.Exists buildInfoPath then
     File.Delete buildInfoPath
 
 module Process =
-    let runProcess cmd args =
+    let runProcess cmd (args: string) =
         let psi =
             Diagnostics.ProcessStartInfo(cmd, arguments = args, UseShellExecute = true)
 
@@ -104,7 +104,7 @@ module Process =
         p.WaitForExit()
         if p.ExitCode <> 0 then Error p.ExitCode else Ok()
 
-    let runCaptured cmd args =
+    let runCaptured cmd (args: string) =
         let psi =
             Diagnostics.ProcessStartInfo(
                 cmd,

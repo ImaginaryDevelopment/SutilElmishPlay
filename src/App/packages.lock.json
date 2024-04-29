@@ -46,12 +46,6 @@
           "Fable.Promise": "2.2.2"
         }
       },
-      "FSharp.Core": {
-        "type": "Direct",
-        "requested": "[8.0.200, )",
-        "resolved": "8.0.200",
-        "contentHash": "qnxoF3Fu0HzfOeYdrwmQOsLP1v+OtOMSIYkNVUwf6nGqWzL03Hh4r6VFCvCb54jlsgtt3WADVYkKkrgdeY5kiQ=="
-      },
       "NETStandard.Library": {
         "type": "Direct",
         "requested": "[2.0.3, )",
@@ -194,6 +188,11 @@
           "Fable.Browser.Dom": "2.2.0",
           "Feliz.Engine": "1.0.0-beta-004"
         }
+      },
+      "FSharp.Core": {
+        "type": "Transitive",
+        "resolved": "6.0.7",
+        "contentHash": "e6wGrq5smV3Yk2fBE/Y0nBG5oFyF59k5Je0a0QDydUpg6liyaafGjD3xvutciKepCP2knspZ/sWViC/F1OyyQQ=="
       },
       "Microsoft.NETCore.Platforms": {
         "type": "Transitive",
