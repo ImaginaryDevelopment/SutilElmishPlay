@@ -113,28 +113,34 @@ module Renderers =
         let isSelected = currentParams |> Set.contains aclRefId
 
         Html.a [
+            let rawRefId = AclRefId.getText aclRefId
+
+            let makeTitle (ad: AclDisplay option) =
+                match ad with
+                | Some {
+                           AdditionalInfo = Some { UserName = Some(ValueString un) }
+                       } -> un + "\r\n" + rawRefId
+                | _ -> rawRefId
+
 
             match aclRefIdentifier with
-            | Choice2Of2 ad ->
+            | Choice2Of2 ad -> // already a display
+                let title = makeTitle (Some ad)
                 text ad.DisplayName
-                Attr.title <| AclRefId.getText aclRefId
+                Attr.title title
             | Choice1Of2 ari ->
                 // printfn "Creating deferred display for %A" ari
 
                 let textObs =
                     lookupMap
                     |> Store.map (fun lm ->
-                        //    printfn "textObs: %i" lm.Count
+                        printfn "textObs: %i" lm.Count
 
                         let next =
                             lm
                             |> Map.tryFind ari
-                            |> Option.map (fun v ->
-                                v.DisplayName,
-                                v.AdditionalInfo
-                                |> Option.bind (fun v -> v.UserName)
-                                |> Option.bind Option.ofValueString)
-                            |> Option.defaultValue (AclRefId.getText ari, None)
+                            |> (fun v ->
+                                v |> Option.map (fun v -> v.DisplayName) |> Option.defaultValue rawRefId, makeTitle v)
 
                         //    printfn "Value changed: %A - %s" ari next
                         next)
