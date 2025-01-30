@@ -1024,7 +1024,7 @@ let view token (ai: App.Adapters.Msal.AuthenticationResult) =
             $"FolderSelected(lni:%A{NavItem.GetName lni.NavItem}, %A{editing})"
         | Some(FolderSelected(NewFolder ni)) -> $"FolderSelected(ni:%A{NavItem.GetName ni})"
         | Some(ChildSelected(lni, ni)) ->
-            $"ChildSelected(lni:%s{NavItem.GetName lni.NavItem}, ni:%s{NavItem.GetName ni})"
+            $"ChildSelected(lni:%s{NavItem.GetName lni.NavItem}(%s{NavItem.GetId lni.NavItem}), ni:%s{NavItem.GetName ni}(%s{NavItem.GetId ni}))"
 
     let selectedItemStore =
         let getter (model: Model) = model.Item

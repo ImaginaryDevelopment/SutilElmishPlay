@@ -42,6 +42,7 @@ let dummyData: NavItem[] =
             DisplayName = "NewName"
             Description = "Description"
             Enabled = false
+            Pinned = false
             Icon = "user"
             Weight = 0
             Hash = "hello hash"

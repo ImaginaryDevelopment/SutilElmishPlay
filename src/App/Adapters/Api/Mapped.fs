@@ -104,6 +104,7 @@ module NavItemAdapters =
                 Icon = x.Icon
                 Weight = x.Weight
                 Enabled = x.Enabled |> Option.defaultValue false
+                Pinned = x.Pinned |> Option.defaultValue false
                 Url = x.Url
                 HasUrlKey = x.HasUrlKey
                 Managers = x.Managers |> Seq.map AclRefId |> Set.ofSeq
@@ -151,6 +152,7 @@ module NavItemAdapters =
             Icon = item.Icon
             Weight = item.Weight
             Enabled = item.Enabled |> Some
+            Pinned = item.Pinned |> Some
             Url = item.Url
             Managers = item.Managers |> Set.toSeq |> Seq.map AclRefId.getText |> Array.ofSeq
             // |> Array.append [|

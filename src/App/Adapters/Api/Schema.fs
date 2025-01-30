@@ -53,6 +53,7 @@ type NavItem = {
     Icon: string
     Weight: int
     Enabled: bool
+    Pinned: bool
     Url: string
     HasUrlKey: bool
     Managers: Set<AclRefId>
@@ -111,21 +112,24 @@ type NavItem = {
 
     // parent field may be ignore, but might be useful on our side for building path as name changes
     static member CreateEmpty parent = {
+
         Id = NavId null
-        Parent = parent |> Option.defaultValue null
-        Type = NavItemType.Folder
-        Description = null
-        Path = null
-        Name = ""
-        DisplayName = ""
-        Url = ""
-        HasUrlKey = false
+
         AclRefs = Map.empty
-        Icon = "City"
-        Hash = null
-        Weight = 0
+        Description = null
+        DisplayName = ""
         Enabled = false
+        HasUrlKey = false
+        Hash = null
+        Icon = "City"
         Managers = Set.empty
+        Name = ""
+        Parent = parent |> Option.defaultValue null
+        Path = null
+        Pinned = false
+        Type = NavItemType.Folder
+        Url = ""
+        Weight = 0
     }
 
     static member GetName(navItem: NavItem) =
@@ -134,6 +138,15 @@ type NavItem = {
         |> Option.ofValueString
         |> Option.orElseWith (fun _ -> Option.ofValueString navItem.Name)
         |> Option.defaultValue ""
+
+    static member GetId(navItem: NavItem) =
+        Option.ofUnsafe navItem
+        |> Option.bind (fun navItem ->
+            navItem.Id
+            |> function
+                | NavId nid -> nid |> Option.ofValueString)
+        |> Option.defaultValue ""
+
 
     static member SetName value (navItem: NavItem) =
         if NavItem.IsNew navItem then
@@ -251,6 +264,7 @@ module Raw =
         Icon: string
         Weight: int
         Enabled: bool option
+        Pinned: bool option
         Url: string
         HasUrlKey: bool
         // [<CompiledName("Acls")>]

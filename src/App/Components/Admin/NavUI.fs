@@ -147,6 +147,7 @@ let private update token (aclTypes: AclType seq) (onSave: SaveResult -> unit) ms
 
     match msg with
     | SaveRequest ->
+
         // this is only working for updates, and is NOT ensuring a valid item before sending the update
         let vResult = ValidNavItem.ValidateNavItem model.Item
 
@@ -425,7 +426,7 @@ let view token (props: NavUIProps) =
         <| renderErrors "Name"
 
         let enabledTitle = nameof item.Enabled
-        let urlTitle = nameof item.Url
+
 
         formField [ text enabledTitle ] [
             let eStore = store |> Store.map (fun v -> v.Item.Enabled)
@@ -445,6 +446,29 @@ let view token (props: NavUIProps) =
                     }))
             ]
         ] []
+
+        let pinnedTitle = nameof item.Pinned
+
+        formField [ text pinnedTitle ] [
+            let eStore = store |> Store.map (fun v -> v.Item.Pinned)
+
+            Html.inputc "checkbox" [
+                type' "checkbox"
+                Attr.name pinnedTitle
+                Bind.attr ("checked", value = eStore)
+                Attr.title pinnedTitle
+                Handlers.onValueChange ignore (fun _ ->
+                    store.Update(fun model -> {
+                        model with
+                            Item = {
+                                model.Item with
+                                    Pinned = not model.Item.Pinned
+                            }
+                    }))
+            ]
+        ] []
+
+        let urlTitle = nameof item.Url
 
         if store.Value.Item.Type = NavItemType.Link then
             formField [ text urlTitle ] [
