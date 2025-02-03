@@ -298,15 +298,16 @@ type PropertyPair<'t, 't2> = {
 }
 
 module Store =
+
     let mapRStore' storeOptions (getter: 't -> 't2) (store: IReadOnlyStore<'t>) =
         // let mutable value = getter store.Value
 
         // debugTitleOpt
         // |> Option.iter (fun title -> printfn "%s: Initialized - %A" title value)
-
         { new IReadOnlyStore<'t2> with
             member _.Value = getter store.Value
             member _.Dispose() = store.Dispose()
+            member _.OnDispose(f) = store.OnDispose f
 
             member _.Subscribe x =
                 let f nextParentValue =
@@ -362,6 +363,7 @@ module Store =
 
             member _.Value = propertyPair.Getter store.Value
             member _.Dispose() = store.Dispose()
+            member _.OnDispose(f) = store.OnDispose f
 
         // Update=(fun oldValue -> setter oldValue)
         }

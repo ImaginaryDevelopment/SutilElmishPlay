@@ -431,7 +431,8 @@ module MLens =
     let hasChildId childId lni =
         tryFindChildIndex childId lni |> Option.isSome
 
-    let changeChild (parent: LazyNavItem, childState: ChildState) childIdOpt next =
+    // this method is passed a parent which has a child store it can update. so it is not functional
+    let changeChild (parent: LazyNavItem, childState: ChildState) childIdOpt next : Result<unit, string> =
         let tryFindChildI childId =
             childState.Children |> Array.tryFindIndex (fun child -> child.Id = childId)
 
@@ -453,6 +454,8 @@ module MLens =
                 }
         // simple update
         | Some childId, Some next ->
+            printfn "changeChild: Updating"
+
             match tryFindChildI childId with
             | None ->
                 let msg = "Could not find child to update"
@@ -608,8 +611,8 @@ let (|CreateFolder|CreateItem|UpdateFolder|UpdateItem|InvalidSave|): NavItem * S
 
 
 let private update msg (model: Model) : Model * Cmd<Msg> =
-    printfn "AdminExplorer update: %A"
-    <| BReusable.String.truncateDisplay false 200 (string msg)
+    BReusable.String.truncateDisplay false 200 (string msg)
+    |> printfn "AdminExplorer update: %s"
 
     match msg with
     | Msg.AclTypeResponse(Ok v) -> { model with AclTypes = v }, Cmd.none
@@ -706,11 +709,10 @@ let private update msg (model: Model) : Model * Cmd<Msg> =
                 | Error e -> model |> MLens.addError e, Cmd.none
 
         | UpdateItem(parent, childState, i) ->
+
             MLens.changeChild (parent, childState) None (Some nextItem)
             |> function
-                | Ok() ->
-                    printfn "Update kinda done?"
-                    justModel model
+                | Ok() -> justModel model
                 | Error e ->
                     printfn "Update kinda error"
                     model |> MLens.addError e, Cmd.none
