@@ -1,8 +1,8 @@
 // cspell: disable
-2024.04.29 01:20:04 -04:00
+2025.01.30 02:39:22 -05:00
 Git:
 master
-424e750 make username visible in available acls
+b72674a add the new pinned property for edits
 Hashes:
 	CHANGELOG.md:"jJM89gVXyTh53yPzZ9rcnQ=="
 	README.md:"vHM2UN7CEq9Lhx+oxGIu9A=="
